@@ -257,7 +257,7 @@ if (btn == 'haiDiagnostics') { haiDiagnosticsOn(); return }
 if (btn == 'haiRotateAccess') { haiRotateAccess(); return }
 if (btn == 'haiMigrationAdd') {
 try { addChildApp('gordonthelander', MIGRATION_CHILD_NAME, 'HAI Migration'); state.remove('haiNotice') }
-catch (Exception e) { state.haiNotice = 'HAI Migration is not on this hub. Add its app code under Apps Code, then press Add HAI Migration again.' }
+catch (Exception e) { state.haiNotice = 'HAI Migration is not on this hub. Install it with Hubitat Package Manager (Modify, HAI Engine) or add its app code under Apps Code, then press Turn on HAI Migration again.' }
 return
 }
 if (btn == 'haiDeactivate') {
@@ -311,15 +311,17 @@ section() {
 paragraph "<b style='color:#b00020'>AI Rule Assistant is off: ${esc(haiAi.why as String)}.</b> ${esc(haiAi.act as String)} under AI token and cost management."
 }
 }
+boolean haiNotYet = false
+try { haiNotYet = app.getInstallationState() != 'COMPLETE' } catch (Exception e) { haiNotYet = false }
+if (!state.accessToken) { try { createAccessToken() } catch (Exception e) { /* OAuth off: said below */ } }
 section('The rule editor') {
 if (state.accessToken) {
 href name: 'haiEditorHref', title: 'Open the rule editor', required: false,
 url: "${getFullLocalApiServerUrl()}/editor?access_token=${state.accessToken}&aud=${haiAudienceSecret('editor')}&v=${EDITOR_PAGE_SHA256.take(12)}".toString(),
 description: 'Write, check, simulate and run your rules.'
+if (haiNotYet) paragraph '<small>Press Done at the bottom to finish installing. Until then the editor can write and check rules, but not put them on the hub.</small>'
 } else {
-boolean haiNotYet = false
-try { haiNotYet = app.getInstallationState() != 'COMPLETE' } catch (Exception e) { haiNotYet = false }
-paragraph haiNotYet ? 'Press Done to create the editor link.' : 'Enable OAuth for this app code, then press Done, to create the editor link.'
+paragraph 'Enable OAuth for this app code (Apps Code, HAI Engine, OAuth), then open this page again to create the editor link.'
 }
 if (state.haiNotice) paragraph "<b>${esc(state.haiNotice as String)}</b>"
 paragraph haiHelpLine()
@@ -330,9 +332,11 @@ if (mig != null) {
 href name: 'haiMigrationHref', title: 'Rule Machine Migration Facility', required: false,
 url: "/installedapp/configure/${mig.id}".toString(),
 description: 'Discover, select, assess and controlled migration of RM rules, with rollback option'
+} else if (haiNotYet) {
+paragraph 'HAI Migration copies Rule Machine rules into HAI, one at a time. Press Done to finish installing, then turn it on here.'
 } else {
-paragraph 'Install HAI Migration to migrate Rule Machine rules.'
-input 'haiMigrationAdd', 'button', title: 'Add HAI Migration'
+paragraph 'HAI Migration copies Rule Machine rules into HAI, one at a time. It needs Automation Map, with a scan done.'
+input 'haiMigrationAdd', 'button', title: 'Turn on HAI Migration'
 }
 }
 int haiDeviceCount = ((List) (settings.runtimeAllowDevices ?: [])).size()
@@ -393,7 +397,10 @@ paragraph haiApiTokenHtml(state.haiApiToken as String)
 paragraph '<small>Each request from another app must carry this token, or HAI ignores it and says so once in the log. ' +
 'Paste it into the app that sends the requests. With the HAI Rule API library, that is its <b>HAI API token</b> setting.</small>'
 }
-if (state.accessToken) {
+input 'haiEndpointOn', 'bool', title: 'Let a web address run HAI rules (dashboards, shortcuts, other hubs)', defaultValue: false, submitOnChange: true
+if (settings.haiEndpointOn != true) {
+paragraph '<small>Off: the web address does nothing. Turn it on to show it.</small>'
+} else if (state.accessToken) {
 paragraph "<b>Your private web address</b><br><code>${getFullLocalApiServerUrl()}/endpoint/rules?access_token=${state.accessToken}&aud=${haiAudienceSecret('endpoint')}</code>"
 paragraph "Anyone who has this address can run your rules, so treat it like a password. Don't post it in the community or in screenshots."
 paragraph '<small><b>Technical:</b> open the address as it is to list your rules and their ids. To act on one, put the rule id and an action after <code>/endpoint/rules</code> and before the <code>?</code>: ' +
@@ -522,7 +529,7 @@ Object last = state.runtimeAnnouncedAt
 String when = last == null ? 'not yet' : runtimeClock().call(last as long)
 return "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT}). ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
 }
-@Field static final String ENGINE_APP_VERSION = '0.5.88-dev'
+@Field static final String ENGINE_APP_VERSION = '0.5.89-dev'
 @Field static final int ENGINE_MAX_PROPOSALS = 20
 @Field static final java.util.concurrent.ConcurrentHashMap ENGINE_DRAFT_INV = new java.util.concurrent.ConcurrentHashMap()
 @Field static final int ENGINE_MAX_ATTRIBUTES = 64
@@ -1858,6 +1865,10 @@ return editorJson(status, groovy.json.JsonOutput.toJson(out))
 }
 def editorSendPost() {
 if (!haiAudienceOk('/editor/api/send')) return haiRefuse('/editor/api/send')
+boolean notYet = false
+try { notYet = app.getInstallationState() != 'COMPLETE' } catch (Exception e) { notYet = false }
+if (notYet) return editorJson(409, groovy.json.JsonOutput.toJson([ok: false, error: 'NOT_INSTALLED',
+message: 'HAI Engine is not finished installing. Press Done on the HAI Engine page, then put the rule on the hub.']))
 boolean timeRun = HAI_ENVIRONMENT == 'DEV' && haiDiagnosticsActive()
 long sendStarted = timeRun ? now() : 0L
 long phaseStarted = sendStarted
@@ -1910,13 +1921,20 @@ return editorJson(out.status as int, response)
 }
 def endpointRulesGet() {
 if (!haiAudienceOk('/endpoint/rules')) return haiRefuse('/endpoint/rules')
+if (settings.haiEndpointOn != true) return endpointOff()
 endpointRespond([kind: 'rules']) }
 def endpointRuleGet() {
 if (!haiAudienceOk('/endpoint/rules/:id/:op')) return haiRefuse('/endpoint/rules/:id/:op')
+if (settings.haiEndpointOn != true) return endpointOff()
 endpointRespond([kind: 'rule', id: endpointParam(params?.id), op: params?.op, value: endpointParam(params?.value)]) }
 def endpointVariableGet() {
 if (!haiAudienceOk('/endpoint/variables/:name/:value')) return haiRefuse('/endpoint/variables/:name/:value')
+if (settings.haiEndpointOn != true) return endpointOff()
 endpointRespond([kind: 'variable', id: endpointParam(params?.name), value: endpointParam(params?.value)]) }
+Object endpointOff() {
+return render(status: 403, contentType: 'application/json', headers: ['Cache-Control': 'no-store'],
+data: groovy.json.JsonOutput.toJson([ok: false, error: 'ENDPOINT_OFF', message: 'The rule web address is turned off on the HAI Engine page.']))
+}
 String endpointParam(Object v) {
 if (v == null) return null
 String s = v.toString()

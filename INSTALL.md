@@ -1,4 +1,4 @@
-# Installing the HAI preview, version 0.5.88-dev
+# Installing the HAI preview, version 0.5.89-dev
 
 HAI is a rule engine for Hubitat. This folder holds everything a preview tester needs. You do not need
 Python, a command line or a copy of the source code: only a web browser and your hub's own pages.
@@ -24,6 +24,9 @@ If you have Hubitat Package Manager installed:
 4. Press **Next**. Package Manager installs all three apps, turns on OAuth and puts the five files in File
    Manager. HAI Migration stays off until you turn it on from the HAI Engine page.
 5. Carry on at step 5 below (Add HAI Engine). Updates then come through Package Manager like any other package.
+
+An install or update takes 10 to 15 minutes while the hub compiles the apps. Leave the page open until it finishes;
+your rules keep running.
 
 Without Package Manager, install by hand with steps 1 to 5.
 
@@ -67,15 +70,16 @@ page that needs it will not open.
 
 1. Open **Apps**, then press **Add User App**.
 2. Choose **HAI Engine**.
-3. Look through **Approved devices**: a new install selects every device. Untick any device HAI must not use.
-4. Press **Done**.
-
-HAI Engine now appears under Apps. Open it and press **Open the rule editor** to write your first rule.
+3. **Open the rule editor** is at the top: you can open it straight away.
+4. Look through **Approved devices**: a new install selects every device. Untick any device HAI must not use.
+5. Press **Done** to finish installing. Rules can be put on the hub after that.
 
 ## 6. Optional: moving rules from Rule Machine
 
-1. Install Automation Map 2.4.36 or later, and let it scan your hub.
-2. Open **HAI Engine** and press **Add HAI Migration**.
+1. Install Automation Map 2.4.36 or later, and let it scan your hub. Until that version reaches Automation Map's
+   main channel, install its Dev channel in Hubitat Package Manager: **Install**, **From a URL**,
+   `https://raw.githubusercontent.com/GordonThelander/hubitat-automation-map/dev/packageManifest.json`.
+2. Open **HAI Engine** and press **Turn on HAI Migration**.
 3. Open **Rule Machine Migration Facility** from the HAI Engine page.
 
 ## 7. Optional: the AI Rule Assistant

@@ -64,7 +64,7 @@ The folder holds three pieces of app code in `apps/` and five files in `file-man
 5. **Add HAI Engine.** **Apps → Add User App**, choose **HAI Engine**, look through **Approved devices**
    (below), and press **Done**. It appears under Apps.
 6. **Optional: Rule Machine rules.** Install Automation Map 2.4.36 or later and let it scan, then press
-   **Add HAI Migration** on the HAI Engine page.
+   **Turn on HAI Migration** on the HAI Engine page.
 7. **Optional: the AI Rule Assistant.** Add your Claude API key under **AI token and cost management** on the
    HAI Engine page. Everything else works without it.
 
@@ -95,7 +95,7 @@ The **HAI Engine** page has these sections:
 | Section | What it holds |
 |---|---|
 | **The rule editor** | **Open the rule editor**, where you write, check, simulate and run rules, and a line saying where to get help or report a problem (its links are still to come) |
-| **Rule Machine** | **Rule Machine Migration Facility**, when the optional HAI Migration app is installed: discover, select, assess and controlled migration of RM rules, with rollback option. Without it, the section says so and offers **Add HAI Migration**. See [Moving from Rule Machine](#moving-from-rule-machine) |
+| **Rule Machine** | **Rule Machine Migration Facility**, when the optional HAI Migration app is installed: discover, select, assess and controlled migration of RM rules, with rollback option. Without it, the section says so and offers **Turn on HAI Migration**. See [Moving from Rule Machine](#moving-from-rule-machine) |
 | **Approved devices** | The one permission HAI asks for. Once devices are chosen it is collapsed, with the count in its heading ("Approved devices: (37)"); click the heading to open it |
 | **Mode and approved hub variables** | The heading shows whether rules may change the mode and how many hub variables they may change ("Mode [ON] and approved hub variables (12)"). Inside: **Allow rules to change the mode**, which lists your hub's modes, then **Approved hub variables** |
 | **Stop a rule** | Choose a rule and press **Deactivate**, so a rule can be stopped from the hub even when the editor cannot open. Deactivate also stops anything the rule is part way through: its waits, delays and repeats do not carry on |
@@ -809,7 +809,8 @@ was created, last changed and last ran, and the link **Open this rule in the edi
 ## Rule end points
 
 Like Rule Machine's end points, another system can act on your HAI rules with a web address. The
-**Rule end points** section of the HAI Engine page shows the local address. It carries HAI Engine's access
+**Rule end points** section of the HAI Engine page shows the local address once you switch on **Let a web
+address run HAI rules**; it is off on a new install, and while it is off the address does nothing. It carries HAI Engine's access
 token, which also opens the editor, so keep it private.
 
 | Add to the address | What happens |
@@ -936,7 +937,7 @@ HAI Engine works the same without it; its **Rule Machine** section then says "In
 migrate Rule Machine rules" and nothing else changes.
 
 To install it: add `dist/hai_migration_app.groovy` as a new app code (**Developer tools → Apps code → New
-app**, paste, **Save**), turn on **OAuth** for it, then on the HAI Engine page press **Add HAI Migration**.
+app**, paste, **Save**), turn on **OAuth** for it, then on the HAI Engine page press **Turn on HAI Migration**.
 The HAI Migration app then appears inside HAI Engine; its page has the link to the migration page. HPM
 offers it as an optional app of the package. It uses the same `hai-migration.html` File Manager file.
 
@@ -1134,7 +1135,7 @@ File Manager and keeps the last ten. In the editor, **More > Backups...** lists 
 [Rule backups](#rule-backups).
 
 **10. Move a rule from Rule Machine.** Install Automation Map 2.4.36 or later and let it scan your hub. On
-the HAI Engine page press **Add HAI Migration**, then open **Rule Machine Migration Facility**. For each rule
+the HAI Engine page press **Turn on HAI Migration**, then open **Rule Machine Migration Facility**. For each rule
 it says whether HAI can copy it and what stands in the way. A copy starts stopped; **Switch over** pauses
 the Rule Machine rule and starts the copy, and **Switch back** reverses it. See
 [Moving from Rule Machine](#moving-from-rule-machine) and the step-by-step
