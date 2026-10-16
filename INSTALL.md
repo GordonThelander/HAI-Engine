@@ -1,4 +1,4 @@
-# Installing the HAI preview, version 0.5.89-dev
+# Installing the HAI preview, version 0.5.90-dev
 
 HAI is a rule engine for Hubitat. This folder holds everything a preview tester needs. You do not need
 Python, a command line or a copy of the source code: only a web browser and your hub's own pages.

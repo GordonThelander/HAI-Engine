@@ -257,7 +257,12 @@ if (btn == 'haiDiagnostics') { haiDiagnosticsOn(); return }
 if (btn == 'haiRotateAccess') { haiRotateAccess(); return }
 if (btn == 'haiMigrationAdd') {
 try { addChildApp('gordonthelander', MIGRATION_CHILD_NAME, 'HAI Migration'); state.remove('haiNotice') }
-catch (Exception e) { state.haiNotice = 'HAI Migration is not on this hub. Install it with Hubitat Package Manager (Modify, HAI Engine) or add its app code under Apps Code, then press Turn on HAI Migration again.' }
+catch (Exception e) {
+boolean notYet = false
+try { notYet = app.getInstallationState() != 'COMPLETE' } catch (Exception x) { notYet = false }
+state.haiNotice = notYet ? 'Press Done at the bottom to finish installing HAI Engine, then open it again and press Turn on HAI Migration.'
+: 'HAI Migration is not on this hub. Install it with Hubitat Package Manager (Modify, HAI Engine) or add its app code under Apps Code, then press Turn on HAI Migration again.'
+}
 return
 }
 if (btn == 'haiDeactivate') {
@@ -332,8 +337,6 @@ if (mig != null) {
 href name: 'haiMigrationHref', title: 'Rule Machine Migration Facility', required: false,
 url: "/installedapp/configure/${mig.id}".toString(),
 description: 'Discover, select, assess and controlled migration of RM rules, with rollback option'
-} else if (haiNotYet) {
-paragraph 'HAI Migration copies Rule Machine rules into HAI, one at a time. Press Done to finish installing, then turn it on here.'
 } else {
 paragraph 'HAI Migration copies Rule Machine rules into HAI, one at a time. It needs Automation Map, with a scan done.'
 input 'haiMigrationAdd', 'button', title: 'Turn on HAI Migration'
@@ -529,7 +532,7 @@ Object last = state.runtimeAnnouncedAt
 String when = last == null ? 'not yet' : runtimeClock().call(last as long)
 return "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT}). ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
 }
-@Field static final String ENGINE_APP_VERSION = '0.5.89-dev'
+@Field static final String ENGINE_APP_VERSION = '0.5.90-dev'
 @Field static final int ENGINE_MAX_PROPOSALS = 20
 @Field static final java.util.concurrent.ConcurrentHashMap ENGINE_DRAFT_INV = new java.util.concurrent.ConcurrentHashMap()
 @Field static final int ENGINE_MAX_ATTRIBUTES = 64
