@@ -7,7 +7,7 @@ What is in this folder:
 
 - `apps/` - three pieces of app code: `hai_engine_app.groovy` (HAI Engine), `hai_rule_app.groovy`
   (HAI Rule Container, one per rule, added by HAI itself) and `hai_migration_app.groovy` (HAI Migration,
-  optional, for moving Rule Machine rules).
+  for moving Rule Machine rules; it does nothing until you turn it on from the HAI Engine page).
 - `file-manager/` - five files HAI's pages need, already named as the hub must hold them.
 - `VERSION` - the version these files belong to. Every file here must come from the same version.
 
@@ -21,8 +21,8 @@ If you have Hubitat Package Manager installed:
 2. Under **Add a Custom Repository**, enter
    `https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/repository.json` and press **Save**.
 3. Back on the main page, press **Install**, then **Browse by Tags** or **Search**, and choose **HAI Engine (Preview)**.
-4. Tick **HAI Migration** too if you will move Rule Machine rules. Package Manager installs the apps, turns
-   on OAuth and puts the five files in File Manager.
+4. Press **Next**. Package Manager installs all three apps, turns on OAuth and puts the five files in File
+   Manager. HAI Migration stays off until you turn it on from the HAI Engine page.
 5. Carry on at step 5 below (Add HAI Engine). Updates then come through Package Manager like any other package.
 
 Without Package Manager, install by hand with steps 1 to 5.
@@ -47,8 +47,8 @@ Do this three times, once for each file in `apps/`.
 1. In **Apps Code**, open **HAI Engine**.
 2. Press **OAuth**, then **Enable OAuth in App**, then **Update**. Press **Save** again.
 
-HAI Engine needs this for its editor page. Do the same for **HAI Migration** if you will move Rule Machine
-rules. HAI Rule Container needs no OAuth.
+HAI Engine needs this for its editor page. Do the same for **HAI Migration**. HAI Rule Container needs no
+OAuth.
 
 ## 4. Upload the five files
 

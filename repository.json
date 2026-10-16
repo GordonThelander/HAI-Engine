@@ -7,7 +7,7 @@
       "name": "HAI Engine (Preview)",
       "category": "Automations",
       "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/packageManifest.json",
-      "description": "A rule engine for Hubitat with a browser rule editor, an optional AI Rule Assistant and an optional Rule Machine migration app."
+      "description": "A rule engine for Hubitat with a browser rule editor, an optional AI Rule Assistant and a Rule Machine migration app you turn on when you need it."
     }
   ]
 }
