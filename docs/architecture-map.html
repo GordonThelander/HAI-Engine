@@ -1,0 +1,797 @@
+<!doctype html>
+<!-- Maintained with docs/architecture-current.md: update both together when components, endpoints or flows change. No real hub data; examples are invented. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HAI Architecture Map</title>
+<meta name="description" content="Technical companion to the Hubitat Automation Toolkit page: the components of HAI and Automation Map, the hub boundary, the main data flows, hub cost and trust boundaries.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one reading column. A wide hub diagram with a numbered legend, five flow cards, then reference tables. Same tokens as the toolkit page. */
+:root {
+  --bg: #F5F8F9;
+  --surface: #FFFFFF;
+  --fg: #14232A;
+  --muted: #51656D;
+  --line: #D3DEE2;
+  --accent: #0D6A88;
+  --accent-soft: #E2EFF4;
+  --on-accent: #FFFFFF;
+  --ham: #3D7A5E;
+  --ham-soft: #E5F1EA;
+  --hma: #A35F22;
+  --hma-soft: #F6EBDF;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1619; --surface: #142026; --fg: #E2EBEE; --muted: #9AAEB5; --line: #29393F;
+    --accent: #5DB5D4; --accent-soft: #15333E; --on-accent: #0B1A20;
+    --ham: #7CC3A0; --ham-soft: #16302A; --hma: #E0A267; --hma-soft: #33261A;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1619; --surface: #142026; --fg: #E2EBEE; --muted: #9AAEB5; --line: #29393F;
+  --accent: #5DB5D4; --accent-soft: #15333E; --on-accent: #0B1A20;
+  --ham: #7CC3A0; --ham-soft: #16302A; --hma: #E0A267; --hma-soft: #33261A;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 17px; line-height: 1.6;
+  padding-inline: 16px; padding-block: 0 64px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(2rem, 5vw, 2.9rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: clamp(1.45rem, 3.2vw, 1.95rem); font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 1.08rem; font-weight: 700; }
+p { margin: 0; }
+a { color: var(--accent); }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--accent); font-weight: 500;
+}
+.lede { font-size: 1.12rem; color: var(--muted); max-width: 44em; }
+code { font-family: var(--font-mono); font-size: 0.84em; background: var(--accent-soft); color: var(--fg); padding: 0.08em 0.32em; border-radius: 4px; overflow-wrap: anywhere; }
+
+/* Header */
+.top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding-block: 20px; border-bottom: 1px solid var(--line);
+}
+.brand { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; display: flex; align-items: center; gap: 10px; }
+.brand-dot { width: 14px; height: 14px; border-radius: 4px; background: var(--accent); }
+.nav { display: flex; gap: 6px 18px; flex-wrap: wrap; font-size: 0.95rem; }
+.nav a { color: var(--muted); text-decoration: none; }
+.nav a:hover, .nav a:focus-visible { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+.intro { display: flex; flex-direction: column; gap: 16px; padding-block: 40px 28px; }
+.versions { display: flex; flex-wrap: wrap; gap: 8px 10px; }
+.chip {
+  flex: none; font-family: var(--font-mono); font-size: 0.72rem; font-weight: 500;
+  padding: 2px 9px; border-radius: 999px; letter-spacing: 0.03em; white-space: nowrap;
+}
+.chip.ham { background: var(--ham-soft); color: var(--ham); }
+.chip.hma { background: var(--hma-soft); color: var(--hma); }
+.chip.hai { background: var(--accent-soft); color: var(--accent); }
+.chip.plain { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.chip.pr { white-space: normal; flex: 0 1 auto; max-width: 100%; background: transparent; color: var(--hma); border: 1px dashed var(--hma); }
+
+section.block { padding-block: 48px 8px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 20px; }
+.sec-head { display: flex; flex-direction: column; gap: 10px; max-width: 50em; }
+.sec-head p { color: var(--muted); }
+
+/* Diagram */
+figure { margin: 0; min-width: 0; }
+.diagram-scroll {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.diagram-scroll svg { display: block; width: 100%; height: auto; color: var(--fg); min-width: 0; }
+figcaption { font-size: 0.9rem; color: var(--muted); margin-top: 10px; }
+.scroll-hint { display: none; }
+svg text { font-family: var(--font-body); }
+svg .t-title { font-family: var(--font-display); font-weight: 700; }
+svg .t-mono { font-family: var(--font-mono); }
+svg .halo { fill: none; stroke: var(--bg); stroke-width: 7; stroke-linejoin: round; }
+
+.key { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.9rem; color: var(--muted); }
+.key span { display: inline-flex; align-items: center; gap: 6px; }
+.key i { display: inline-block; width: 22px; height: 0; border-top: 2.5px solid currentColor; }
+.key .k-hai i { color: var(--accent); } .key .k-ham i { color: var(--ham); }
+.key .k-hma i { color: var(--hma); } .key .k-ext i { color: var(--muted); }
+.key .k-dash i { border-top-style: dashed; color: var(--fg); }
+
+/* Numbered legend */
+.legend-list {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 28px;
+  font-size: 0.95rem;
+}
+.legend-list li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; align-items: baseline; padding-block: 4px; border-bottom: 1px solid var(--line); }
+.badge {
+  font-family: var(--font-mono); font-size: 0.72rem; font-weight: 500;
+  width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center;
+  font-variant-numeric: tabular-nums; border: 1.5px solid currentColor; background: var(--surface);
+}
+.b-hai { color: var(--accent); } .b-ham { color: var(--ham); } .b-hma { color: var(--hma); } .b-ext { color: var(--muted); }
+.legend-list b { font-weight: 600; }
+.legend-list .mech { color: var(--muted); }
+
+/* Flows */
+.flows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.flow {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0;
+}
+.flow.wide { grid-column: 1 / -1; }
+.flow-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.flow-letter {
+  font-family: var(--font-mono); font-size: 0.8rem; width: 28px; height: 28px; border-radius: 8px;
+  display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none;
+}
+.flow.ham .flow-letter { background: var(--ham-soft); color: var(--ham); }
+.flow.hma .flow-letter { background: var(--hma-soft); color: var(--hma); }
+.flow ol { margin: 0; padding-left: 1.45em; display: flex; flex-direction: column; gap: 7px; font-size: 0.96rem; }
+.flow ol li::marker { font-family: var(--font-mono); font-size: 0.8em; color: var(--muted); }
+.flow ol li b { font-weight: 600; }
+.flow .note { font-size: 0.88rem; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 10px; }
+.flow.wide ol { columns: 2; column-gap: 32px; display: block; }
+.flow.wide ol li { break-inside: avoid; margin-bottom: 7px; }
+
+/* Tables */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--font-display); font-weight: 700; font-size: 0.9rem; background: var(--accent-soft); }
+tbody tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 600; }
+td .sub { display: block; color: var(--muted); font-weight: 400; font-size: 0.86rem; }
+
+/* Trust */
+.trust { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.trust div {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0;
+}
+.trust p { color: var(--muted); font-size: 0.95rem; }
+.trust .gap { border-style: dashed; border-color: var(--hma); }
+.rule-callout {
+  background: var(--accent); color: var(--on-accent); border-radius: 12px; padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.rule-callout code { background: transparent; color: inherit; border: 1px solid currentColor; }
+
+.diffs { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; font-size: 0.95rem; }
+.diffs li span { color: var(--muted); }
+
+footer {
+  margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.93rem;
+  display: flex; flex-direction: column; gap: 10px;
+}
+footer h2 { font-size: 1.2rem; color: var(--fg); }
+footer ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+
+@media (max-width: 900px) {
+  .flows, .legend-list { grid-template-columns: minmax(0, 1fr); }
+  .flow.wide ol { columns: 1; }
+  .trust { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .diagram-scroll svg { min-width: 860px; }
+  .scroll-hint { display: block; }
+}
+@media (max-width: 600px) {
+  body { font-size: 16px; }
+  .nav { display: none; }
+  .trust { grid-template-columns: minmax(0, 1fr); }
+  .intro { padding-block: 28px 20px; }
+  section.block { padding-block: 36px 4px; }
+  /* Tables become stacked cards */
+  .table-wrap { border: 0; background: transparent; overflow: visible; }
+  .stack table, .stack thead, .stack tbody, .stack tr, .stack td { display: block; width: 100%; }
+  .stack thead { display: none; }
+  .stack tr { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; padding: 6px 0; }
+  .stack td { border: 0; padding: 6px 14px; }
+  .stack td::before {
+    content: attr(data-label); display: block; font-family: var(--font-mono); font-size: 0.68rem;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 500;
+  }
+  .stack td:first-child { font-family: var(--font-display); font-size: 1.05rem; }
+  .stack td:first-child::before { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><span class="brand-dot" aria-hidden="true"></span>HAI and Automation Map: architecture</div>
+    <nav class="nav" aria-label="Sections">
+      <a href="#map">Map</a>
+      <a href="#flows">Flows</a>
+      <a href="#components">Components</a>
+      <a href="#cost">Hub cost</a>
+      <a href="#trust">Trust</a>
+    </nav>
+  </header>
+
+  <section class="intro" aria-labelledby="page-title">
+    <span class="eyebrow">For maintainers · technical companion to the toolkit page</span>
+    <h1 id="page-title">How HAI and Automation Map fit together on the hub</h1>
+    <p class="lede">One page for the components, the hub boundary, the mechanisms between them, and the five flows that matter. The detail lives in <code>docs/architecture-current.md</code>; this page is its map.</p>
+    <div class="versions" aria-label="Versions this page reflects">
+      <span class="chip hai">Applies to HAI Engine 0.5.87</span>
+      <span class="chip hma">MIGRATION_CONTRACT 2</span>
+      <span class="chip plain">decode contract schema 4, vocabulary 2</span>
+    </div>
+  </section>
+
+  <!-- MAIN DIAGRAM -->
+  <section class="block" id="map" aria-labelledby="map-title">
+    <div class="sec-head">
+      <span class="eyebrow">1 · Components and the hub boundary</span>
+      <h2 id="map-title">What runs where, and how the pieces talk</h2>
+      <p>Apps on one hub cannot safely call each other, except a parent calling its own children (two single-threaded apps calling each other can deadlock). So the Engine calls its rule containers directly, and everything else travels as location events, files in File Manager, or loopback HTTP. Each numbered line is explained under the diagram.</p>
+    </div>
+    <div class="key" aria-hidden="true">
+      <span class="k-hai"><i></i>HAI Engine and rules</span>
+      <span class="k-hma"><i></i>HAI Migration</span>
+      <span class="k-ham"><i></i>Automation Map</span>
+      <span class="k-ext"><i></i>Platform and third party</span>
+      <span class="k-dash"><i></i>event or answer back</span>
+    </div>
+    <figure>
+      <div class="diagram-scroll">
+      <svg viewBox="0 0 1200 820" role="img" aria-labelledby="svg-title svg-desc">
+        <title id="svg-title">HAI and Automation Map architecture</title>
+        <desc id="svg-desc">The Hubitat hub holds the HAI Engine parent app, one HAI Rule Container child app per rule, the optional HAI Migration child app, Automation Map, File Manager, the hub platform endpoints, devices, hub variables, Rule Machine and the MCP Rule Server. Outside the hub are the browser pages, MCP clients, other HTTP callers, the Claude API, GitHub and clients of the MCP Rule Server. Numbered arrows are listed below the diagram.</desc>
+        <defs>
+          <marker id="m-hai" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+          <marker id="m-ham" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--ham)"/></marker>
+          <marker id="m-hma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--hma)"/></marker>
+          <marker id="m-ext" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+        </defs>
+
+        <!-- Hub boundary -->
+        <rect x="232" y="24" width="744" height="772" rx="16" fill="var(--bg)" stroke="var(--fg)" stroke-width="1.6"/>
+        <text x="252" y="50" class="t-title" font-size="16" fill="currentColor">Hubitat hub</text>
+        <text x="372" y="50" font-size="11.5" fill="var(--muted)">one JVM, shared Metaspace</text>
+        <text x="16" y="60" class="t-mono" font-size="10" letter-spacing="1.2" fill="var(--muted)">OUTSIDE THE HUB</text>
+        <text x="1184" y="808" text-anchor="end" class="t-mono" font-size="10" letter-spacing="1.2" fill="var(--muted)">OUTSIDE THE HUB</text>
+
+        <!-- ===== Outside left ===== -->
+        <rect x="16" y="84" width="190" height="60" rx="10" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="111" y="108" text-anchor="middle" class="t-title" font-size="14" fill="currentColor">MCP clients</text>
+        <text x="111" y="127" text-anchor="middle" font-size="11.5" fill="var(--muted)">AI tools: draft and check only</text>
+
+        <rect x="16" y="160" width="190" height="56" rx="10" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="111" y="183" text-anchor="middle" class="t-title" font-size="14" fill="currentColor">Other HTTP callers</text>
+        <text x="111" y="202" text-anchor="middle" font-size="11.5" fill="var(--muted)">run, pause, trigger rules</text>
+
+        <rect x="16" y="240" width="190" height="470" rx="12" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="30" y="264" class="t-title" font-size="14" fill="currentColor">Browser</text>
+        <rect x="28" y="276" width="166" height="64" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/>
+        <text x="111" y="300" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Editor page</text>
+        <text x="111" y="318" text-anchor="middle" class="t-mono" font-size="10" fill="var(--muted)">hai-editor.html</text>
+        <text x="111" y="332" text-anchor="middle" font-size="10.5" fill="var(--muted)">AI author lives here</text>
+        <rect x="28" y="360" width="166" height="64" rx="8" fill="var(--hma-soft)" stroke="var(--hma)" stroke-width="1.2" stroke-dasharray="4 3"/>
+        <text x="111" y="386" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Migration page</text>
+        <text x="111" y="404" text-anchor="middle" class="t-mono" font-size="10" fill="var(--muted)">hai-migration.html</text>
+        <rect x="28" y="560" width="166" height="80" rx="8" fill="var(--ham-soft)" stroke="var(--ham)" stroke-width="1.2"/>
+        <text x="111" y="584" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">Map page</text>
+        <text x="111" y="601" text-anchor="middle" font-size="10.5" fill="var(--muted)">Insights, Room Manager</text>
+        <text x="111" y="619" text-anchor="middle" class="t-mono" font-size="9.5" fill="var(--muted)">/automation-map.html</text>
+        <text x="111" y="632" text-anchor="middle" font-size="10" fill="var(--muted)">vis-network, Mermaid (CDN)</text>
+        <text x="30" y="672" font-size="11" fill="var(--muted)">Editor live values: the hub's</text>
+        <text x="30" y="688" font-size="11" fill="var(--muted)">own event socket, see 4</text>
+
+        <!-- ===== Inside hub: left column ===== -->
+        <!-- Engine -->
+        <rect x="262" y="84" width="220" height="206" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.8"/>
+        <text x="372" y="110" text-anchor="middle" class="t-title" font-size="15" fill="currentColor">HAI Engine</text>
+        <text x="372" y="127" text-anchor="middle" font-size="11.5" fill="var(--muted)">parent app</text>
+        <text x="372" y="146" text-anchor="middle" class="t-mono" font-size="9.5" fill="currentColor">engine/app/hai_engine_app.groovy</text>
+        <text x="372" y="168" text-anchor="middle" font-size="11.5" fill="currentColor">runtime parent: registry,</text>
+        <text x="372" y="184" text-anchor="middle" font-size="11.5" fill="currentColor">activation review, watchdog</text>
+        <text x="372" y="202" text-anchor="middle" font-size="11.5" fill="currentColor">editor API, AI author, /mcp</text>
+        <text x="372" y="218" text-anchor="middle" font-size="11.5" fill="currentColor">/endpoint/*, /automation-map</text>
+        <text x="372" y="240" text-anchor="middle" font-size="11" fill="var(--muted)">state: rtRegistry, migPairs,</text>
+        <text x="372" y="255" text-anchor="middle" font-size="11" fill="var(--muted)">summary, keys, paused cache</text>
+        <text x="372" y="274" text-anchor="middle" font-size="11" fill="var(--muted)">filed: drafts, proposals</text>
+
+        <!-- Migration -->
+        <rect x="262" y="340" width="220" height="110" rx="12" fill="var(--hma-soft)" stroke="var(--hma)" stroke-width="1.6" stroke-dasharray="6 4"/>
+        <text x="372" y="362" text-anchor="middle" class="t-title" font-size="15" fill="currentColor">HAI Migration</text>
+        <text x="372" y="378" text-anchor="middle" font-size="11.5" fill="var(--muted)">optional child of the Engine</text>
+        <text x="372" y="396" text-anchor="middle" class="t-mono" font-size="9.5" fill="currentColor">hai_migration_app.groovy</text>
+        <text x="372" y="414" text-anchor="middle" font-size="11" fill="currentColor">hai_ham, hai_rm_map, hai_migration</text>
+        <text x="372" y="436" text-anchor="middle" font-size="11" fill="var(--muted)">state: assess, assessAm, migStep</text>
+
+        <!-- Automation Map -->
+        <rect x="262" y="528" width="220" height="170" rx="12" fill="var(--ham-soft)" stroke="var(--ham)" stroke-width="1.8"/>
+        <text x="372" y="552" text-anchor="middle" class="t-title" font-size="15" fill="currentColor">Automation Map</text>
+        <text x="372" y="569" text-anchor="middle" font-size="11.5" fill="var(--muted)">one app, no children</text>
+        <text x="372" y="588" text-anchor="middle" class="t-mono" font-size="9.5" fill="currentColor">apps/automation_map.groovy</text>
+        <text x="372" y="608" text-anchor="middle" font-size="11.5" fill="currentColor">scan pipeline, decoders,</text>
+        <text x="372" y="624" text-anchor="middle" font-size="11.5" fill="currentColor">buildGraph, Insights,</text>
+        <text x="372" y="640" text-anchor="middle" font-size="11.5" fill="currentColor">Room Manager, /rm-coverage</text>
+        <text x="372" y="662" text-anchor="middle" font-size="11" fill="var(--muted)">state: settings, locks, pointers</text>
+        <text x="372" y="677" text-anchor="middle" font-size="11" fill="var(--muted)">graph lives in the scan file</text>
+
+        <!-- ===== Inside hub: middle column ===== -->
+        <!-- File Manager -->
+        <rect x="552" y="160" width="196" height="242" rx="12" fill="var(--surface)" stroke="var(--line)" stroke-width="1.6"/>
+        <text x="650" y="182" text-anchor="middle" class="t-title" font-size="14" fill="currentColor">File Manager</text>
+        <text x="650" y="198" text-anchor="middle" class="t-mono" font-size="9.5" fill="var(--muted)">/local/&lt;file&gt;</text>
+        <g class="t-mono" font-size="9.6" fill="currentColor">
+          <text x="562" y="220">hai-editor.html</text>
+          <text x="562" y="235">hai-editor-specs.json</text>
+          <text x="562" y="250">hai-author-guide.txt</text>
+          <text x="562" y="265">hai-migration.html</text>
+          <text x="562" y="280">hai-am-capabilities.json</text>
+          <text x="562" y="295">hai-am-state.json</text>
+          <text x="562" y="310">hai-engine-&lt;id&gt;-*.json</text>
+          <text x="562" y="330" fill="var(--ham)">ham-decode(-dev).json</text>
+          <text x="562" y="345" fill="var(--ham)">ham-decode-detail(-dev)</text>
+          <text x="562" y="360" fill="var(--ham)">automation-map-&lt;id&gt;-</text>
+          <text x="572" y="374" fill="var(--ham)">scan.json</text>
+        </g>
+        <text x="650" y="394" text-anchor="middle" font-size="10" fill="var(--muted)">pages served only on SHA-256 match</text>
+
+        <!-- Hub platform -->
+        <rect x="552" y="615" width="196" height="150" rx="12" fill="var(--surface)" stroke="var(--line)" stroke-width="1.6"/>
+        <text x="650" y="637" text-anchor="middle" class="t-title" font-size="14" fill="currentColor">Hub platform</text>
+        <text x="650" y="653" text-anchor="middle" font-size="10.5" fill="var(--muted)">internal endpoints, 127.0.0.1:8080</text>
+        <g class="t-mono" font-size="9.6" fill="currentColor">
+          <text x="562" y="675">/hub2/appsList</text>
+          <text x="562" y="691">/installedapp/statusJson/&lt;id&gt;</text>
+          <text x="562" y="707">/device/fullJson/&lt;id&gt;</text>
+          <text x="562" y="723">/hub2/variables</text>
+          <text x="562" y="739">/eventsocket</text>
+        </g>
+        <circle cx="660" cy="736" r="9" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.5"/>
+        <text x="660" y="739.5" text-anchor="middle" class="t-mono" font-size="9.5" fill="var(--muted)">4</text>
+        <text x="650" y="757" text-anchor="middle" font-size="10" fill="var(--muted)">reports on apps and devices</text>
+
+        <!-- ===== Inside hub: right column ===== -->
+        <!-- Rule containers stack -->
+        <rect x="808" y="88" width="146" height="140" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2" opacity="0.55"/>
+        <rect x="804" y="92" width="146" height="140" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2" opacity="0.8"/>
+        <rect x="800" y="96" width="146" height="140" rx="12" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.8"/>
+        <text x="873" y="119" text-anchor="middle" class="t-title" font-size="13" fill="currentColor">HAI Rule Container</text>
+        <text x="873" y="135" text-anchor="middle" font-size="11" fill="var(--muted)">one child app per rule</text>
+        <text x="873" y="153" text-anchor="middle" class="t-mono" font-size="9.5" fill="currentColor">engine/m5/</text>
+        <text x="873" y="166" text-anchor="middle" class="t-mono" font-size="9.5" fill="currentColor">hai_rule_app.groovy</text>
+        <text x="873" y="186" text-anchor="middle" font-size="11" fill="currentColor">state.rt: one write</text>
+        <text x="873" y="201" text-anchor="middle" font-size="11" fill="currentColor">per execution (rtEnd)</text>
+        <text x="873" y="222" text-anchor="middle" font-size="10.5" fill="var(--muted)">timers: runOnce, haiTimer</text>
+
+        <rect x="800" y="290" width="156" height="70" rx="10" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="878" y="314" text-anchor="middle" class="t-title" font-size="14" fill="currentColor">Devices</text>
+        <text x="878" y="332" text-anchor="middle" font-size="11" fill="var(--muted)">only Approved devices</text>
+        <text x="878" y="348" text-anchor="middle" font-size="11" fill="var(--muted)">e.g. Hall Light</text>
+
+        <rect x="800" y="400" width="156" height="60" rx="10" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="878" y="424" text-anchor="middle" class="t-title" font-size="14" fill="currentColor">Hub variables</text>
+        <text x="878" y="443" text-anchor="middle" class="t-mono" font-size="9.5" fill="var(--muted)">hv:&lt;name&gt;</text>
+
+        <rect x="800" y="520" width="156" height="80" rx="10" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="878" y="545" text-anchor="middle" class="t-title" font-size="14" fill="currentColor">Rule Machine 5.1</text>
+        <text x="878" y="563" text-anchor="middle" font-size="11" fill="var(--muted)">one app per rule</text>
+        <text x="878" y="581" text-anchor="middle" class="t-mono" font-size="9.5" fill="var(--muted)">driven via RMUtils</text>
+
+        <rect x="800" y="648" width="156" height="92" rx="10" fill="var(--surface)" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="4 3"/>
+        <text x="878" y="671" text-anchor="middle" class="t-title" font-size="13.5" fill="currentColor">MCP Rule Server</text>
+        <text x="878" y="688" text-anchor="middle" font-size="10.5" fill="var(--muted)">third-party app on the hub</text>
+        <text x="878" y="706" text-anchor="middle" class="t-mono" font-size="9.5" fill="var(--muted)">/mcp, JSON-RPC</text>
+        <text x="878" y="722" text-anchor="middle" class="t-mono" font-size="9.5" fill="var(--muted)">hub_set_rule</text>
+
+        <!-- ===== Outside right ===== -->
+        <rect x="1004" y="84" width="180" height="80" rx="10" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="1094" y="108" text-anchor="middle" class="t-title" font-size="14" fill="currentColor">Claude API</text>
+        <text x="1094" y="127" text-anchor="middle" class="t-mono" font-size="9.5" fill="var(--muted)">api.anthropic.com</text>
+        <text x="1094" y="141" text-anchor="middle" class="t-mono" font-size="9.5" fill="var(--muted)">/v1/messages</text>
+        <text x="1094" y="156" text-anchor="middle" font-size="10.5" fill="var(--muted)">model claude-opus-5</text>
+
+        <rect x="1004" y="200" width="180" height="222" rx="10" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="1094" y="224" text-anchor="middle" class="t-title" font-size="14" fill="currentColor">GitHub</text>
+        <text x="1016" y="248" font-size="11" font-weight="600" fill="currentColor">HAI (private)</text>
+        <text x="1016" y="264" class="t-mono" font-size="9.5" fill="var(--muted)">dist/ (three apps, HPM)</text>
+        <text x="1016" y="278" class="t-mono" font-size="9.5" fill="var(--muted)">FEED_LOCK.json</text>
+        <text x="1016" y="302" font-size="11" font-weight="600" fill="currentColor">Automation Map (public)</text>
+        <text x="1016" y="318" class="t-mono" font-size="9.5" fill="var(--muted)">packageManifest.json</text>
+        <text x="1016" y="334" class="t-mono" font-size="9.5" fill="var(--muted)">public/</text>
+        <text x="1016" y="348" class="t-mono" font-size="9.5" fill="var(--ham)">hai-capabilities.json</text>
+        <text x="1016" y="362" class="t-mono" font-size="9.5" fill="var(--muted)">FEED_LOCK.json</text>
+        <text x="1016" y="388" font-size="10.5" fill="var(--muted)">read by HPM, and by</text>
+        <text x="1016" y="403" font-size="10.5" fill="var(--muted)">AM when no Engine is local</text>
+
+        <rect x="1004" y="650" width="126" height="96" rx="10" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="1067" y="674" text-anchor="middle" class="t-title" font-size="13.5" fill="currentColor">Rule tools</text>
+        <text x="1067" y="692" text-anchor="middle" font-size="10" fill="var(--muted)">build and edit</text>
+        <text x="1067" y="707" text-anchor="middle" font-size="10" fill="var(--muted)">Rule Machine rules</text>
+        <text x="1067" y="722" text-anchor="middle" font-size="10" fill="var(--muted)">via the Rule Server</text>
+
+        <!-- ===== Connectors: halos first so crossings read clearly ===== -->
+
+        <!-- HAI (accent) -->
+        <g fill="none" stroke="var(--accent)" stroke-width="1.7">
+          <path d="M196 284 H258" marker-end="url(#m-hai)"/>                         <!-- 1 -->
+          <path d="M208 114 H258" marker-end="url(#m-hai)"/>                         <!-- 5 -->
+          <path d="M208 188 H258" marker-end="url(#m-hai)"/>                         <!-- 6 -->
+          <path d="M486 220 H548" marker-start="url(#m-hai)" marker-end="url(#m-hai)"/> <!-- 7 -->
+          <path d="M484 104 H796" marker-end="url(#m-hai)"/>                         <!-- 8 -->
+          <path d="M798 128 H486" stroke-dasharray="6 4" marker-end="url(#m-hai)"/>  <!-- 9 -->
+          <path d="M460 82 V64 H1094 V80" marker-end="url(#m-hai)"/>                <!-- 10 -->
+          <path d="M850 238 V286" marker-end="url(#m-hai)"/>                         <!-- 11 -->
+          <path d="M915 288 V240" stroke-dasharray="6 4" marker-end="url(#m-hai)"/>  <!-- 12 -->
+          <path d="M800 220 H786 V430 H796" marker-start="url(#m-hai)" marker-end="url(#m-hai)"/>              <!-- 13 out -->
+          <path d="M800 200 H772 V540 H796" marker-end="url(#m-hai)"/>              <!-- 14 -->
+          <path d="M954 150 C 974 150, 974 190, 958 190" marker-end="url(#m-hai)"/>  <!-- 15 -->
+        </g>
+
+        <!-- Migration (hma) -->
+        <g fill="none" stroke="var(--hma)" stroke-width="1.7">
+          <path d="M196 392 H258" marker-end="url(#m-hma)"/>                         <!-- 2 -->
+          <path d="M372 338 V294" marker-end="url(#m-hma)"/>                         <!-- 16 -->
+          <path d="M484 375 H548" marker-end="url(#m-hma)"/>                         <!-- 17 (read) -->
+          <path d="M300 452 V524" marker-end="url(#m-hma)"/>                         <!-- 18 -->
+        </g>
+
+        <!-- Automation Map (ham) -->
+        <g fill="none" stroke="var(--ham)" stroke-width="1.7">
+          <path d="M196 600 H258" marker-end="url(#m-ham)"/>                         <!-- 3 -->
+          <path d="M444 526 V454" stroke-dasharray="6 4" marker-end="url(#m-ham)"/>  <!-- 19 -->
+          <path d="M484 560 H600 V406" marker-end="url(#m-ham)"/>                    <!-- 21 -->
+          <path d="M700 404 V590 H488" marker-end="url(#m-ham)"/>                    <!-- 22 -->
+          <path d="M484 655 H548" marker-end="url(#m-ham)"/>                         <!-- 23 -->
+          <path d="M1160 424 V784 H372 V702" stroke-dasharray="6 4" marker-end="url(#m-ham)"/> <!-- 24 -->
+        </g>
+
+        <!-- 20 drawn last over a halo, so it bridges lines 21 and 22 -->
+        <path class="halo" d="M486 432 H762 V575 H790"/>
+        <path d="M484 432 H762 V575 H796" fill="none" stroke="var(--hma)" stroke-width="1.7" marker-end="url(#m-hma)"/>
+
+        <!-- External (muted) -->
+        <g fill="none" stroke="var(--muted)" stroke-width="1.6">
+          <path d="M1004 262 H980" marker-end="url(#m-ext)"/>                        <!-- 25 -->
+          <path d="M1004 698 H960" marker-end="url(#m-ext)"/>                        <!-- 26 -->
+          <path d="M878 646 V604" marker-end="url(#m-ext)"/>                         <!-- 27 -->
+        </g>
+
+        <!-- Inline labels where there is room -->
+        <text x="518" y="98" font-size="10.5" fill="var(--accent)">child calls: haiSetup, haiStage, haiOverdue</text>
+        <text x="518" y="144" font-size="10.5" fill="var(--accent)">location event: haiRuleCommitted</text>
+        <text x="540" y="59" font-size="10.5" fill="var(--accent)">POST /v1/messages (async), AI author only</text>
+        <text x="384" y="321" font-size="10.5" fill="var(--hma)">parent calls</text>
+        <text x="314" y="482" font-size="10.5" fill="var(--hma)">haiAssessRequest</text>
+        <text x="314" y="504" font-size="10.5" fill="var(--ham)">haiAssessDone</text>
+        <text x="612" y="426" font-size="10.5" fill="var(--hma)">RMUtils</text>
+        <text x="604" y="548" font-size="10.5" fill="var(--ham)">write decode, scan</text>
+        <text x="604" y="606" font-size="10.5" fill="var(--ham)">read /local/hai-am-*</text>
+        <text x="372" y="778" text-anchor="start" font-size="10.5" fill="var(--ham)" dx="10">public capability list, raw GitHub, only without a local Engine</text>
+
+        <!-- Badges -->
+        <g class="t-mono" font-size="9.5" text-anchor="middle">
+          <!-- accent -->
+          <g fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5">
+            <circle cx="228" cy="284" r="9"/><circle cx="234" cy="114" r="9"/><circle cx="234" cy="188" r="9"/>
+            <circle cx="517" cy="220" r="9"/><circle cx="500" cy="104" r="9"/><circle cx="500" cy="128" r="9"/>
+            <circle cx="500" cy="64" r="9"/><circle cx="850" cy="262" r="9"/><circle cx="915" cy="264" r="9"/>
+            <circle cx="786" cy="330" r="9"/><circle cx="772" cy="480" r="9"/><circle cx="970" cy="170" r="8.5"/>
+          </g>
+          <g fill="var(--accent)">
+            <text x="228" y="287.5">1</text><text x="234" y="117.5">5</text><text x="234" y="191.5">6</text>
+            <text x="517" y="223.5">7</text><text x="500" y="107.5">8</text><text x="500" y="131.5">9</text>
+            <text x="500" y="67.5">10</text><text x="850" y="265.5">11</text><text x="915" y="267.5">12</text>
+            <text x="786" y="333.5">13</text><text x="772" y="483.5">14</text><text x="970" y="173.5">15</text>
+          </g>
+          <!-- hma -->
+          <g fill="var(--surface)" stroke="var(--hma)" stroke-width="1.5">
+            <circle cx="228" cy="392" r="9"/><circle cx="372" cy="316" r="9"/><circle cx="517" cy="375" r="9"/>
+            <circle cx="300" cy="488" r="9"/><circle cx="540" cy="432" r="9"/>
+          </g>
+          <g fill="var(--hma)">
+            <text x="228" y="395.5">2</text><text x="372" y="319.5">16</text><text x="517" y="378.5">17</text>
+            <text x="300" y="491.5">18</text><text x="540" y="435.5">20</text>
+          </g>
+          <!-- ham -->
+          <g fill="var(--surface)" stroke="var(--ham)" stroke-width="1.5">
+            <circle cx="228" cy="600" r="9"/><circle cx="444" cy="490" r="9"/><circle cx="540" cy="560" r="9"/>
+            <circle cx="540" cy="590" r="9"/><circle cx="517" cy="655" r="9"/><circle cx="1160" cy="560" r="9"/>
+          </g>
+          <g fill="var(--ham)">
+            <text x="228" y="603.5">3</text><text x="444" y="493.5">19</text><text x="540" y="563.5">21</text>
+            <text x="540" y="593.5">22</text><text x="517" y="658.5">23</text><text x="1160" y="563.5">24</text>
+          </g>
+          <!-- ext -->
+          <g fill="var(--surface)" stroke="var(--muted)" stroke-width="1.5">
+            <circle cx="992" cy="248" r="9"/><circle cx="982" cy="698" r="9"/><circle cx="878" cy="625" r="9"/>
+          </g>
+          <g fill="var(--muted)">
+            <text x="992" y="251.5">25</text><text x="982" y="701.5">26</text><text x="878" y="628.5">27</text>
+          </g>
+        </g>
+      </svg>
+      </div>
+      <figcaption><span class="scroll-hint">On a narrow screen the diagram scrolls sideways; the numbered list below carries the same information. </span>Dashed boxes are optional or third party. Dashed lines are events or answers coming back.</figcaption>
+    </figure>
+
+    <ol class="legend-list" aria-label="What each numbered line is">
+      <li><span class="badge b-hai">1</span><span><b>Editor page to Engine.</b> <span class="mech"><code>/editor</code>, <code>/editor/api/*</code> with the Engine's OAuth token and the <code>editor</code> audience secret (<code>aud</code>).</span></span></li>
+      <li><span class="badge b-hma">2</span><span><b>Migration page to Migration.</b> <span class="mech"><code>/migration</code>, <code>/migration/api/state</code>, <code>/apply</code>, <code>/assess</code>, with Migration's own token (no audience).</span></span></li>
+      <li><span class="badge b-ham">3</span><span><b>Map page to Automation Map.</b> <span class="mech"><code>/automation-map.html</code>, <code>/rooms</code>, <code>/externals</code>, <code>/icon-overrides</code>, with AM's token.</span></span></li>
+      <li><span class="badge b-ext">4</span><span><b>Editor live values.</b> <span class="mech">The page opens the hub's own <code>ws://&lt;hub&gt;/eventsocket</code>. No HAI code runs per device event for this.</span></span></li>
+      <li><span class="badge b-hai">5</span><span><b>MCP clients to Engine.</b> <span class="mech"><code>POST /mcp</code> (JSON-RPC), audience <code>mcp</code>: <code>hai_describe</code>, <code>hai_propose_rule</code>, <code>hai_render_rule</code>, <code>hai_get_rule</code>. No write, no activation.</span></span></li>
+      <li><span class="badge b-hai">6</span><span><b>HTTP callers to Engine.</b> <span class="mech"><code>/endpoint/rules</code>, <code>/endpoint/rules/:id/:op[/:value]</code>, <code>/endpoint/variables/:name/:value</code>, audience <code>endpoint</code>.</span></span></li>
+      <li><span class="badge b-hai">7</span><span><b>Engine and File Manager.</b> <span class="mech"><code>downloadHubFile</code> serves the editor page, specs and author guide after a SHA-256 check; filed drafts and AI data in <code>hai-engine-&lt;id&gt;-*.json</code>; <code>uploadHubFile</code> writes <code>hai-am-state.json</code> (<code>haiWriteAmStateNow</code>).</span></span></li>
+      <li><span class="badge b-hai">8</span><span><b>Engine to its rule containers.</b> <span class="mech">Direct parent-to-child calls: <code>haiSetup</code>, <code>haiStage</code>, <code>haiLifecycle</code>, <code>haiRuntimeState</code>, and <code>haiOverdue</code> from the watchdog (<code>haiWatchdog</code>, cron <code>17 7/15 * * * ?</code>).</span></span></li>
+      <li><span class="badge b-hai">9</span><span><b>Container back to Engine.</b> <span class="mech">A rule app never calls its parent: it sends the location event <code>haiRuleCommitted</code>, and hands its light mark back in the answer to <code>haiOverdue</code>.</span></span></li>
+      <li><span class="badge b-hai">10</span><span><b>AI author to Claude.</b> <span class="mech"><code>hai_author</code>: async <code>POST https://api.anthropic.com/v1/messages</code>, model <code>claude-opus-5</code>, key in the Engine's settings.</span></span></li>
+      <li><span class="badge b-hai">11</span><span><b>Commands.</b> <span class="mech">Device sends from <code>coreExecute</code> through the port, re-checked by <code>rtChildAllowed</code> and <code>rtDriverCommand</code>, fenced in <code>atomicState</code>.</span></span></li>
+      <li><span class="badge b-hai">12</span><span><b>Device events.</b> <span class="mech"><code>subscribe</code> to what the rule needs; Hubitat calls <code>haiEvent</code>, <code>haiMode</code>, <code>haiLocation</code>.</span></span></li>
+      <li><span class="badge b-hai">13</span><span><b>Hub variables.</b> <span class="mech">Read and set; changes arrive as <code>variable:&lt;name&gt;</code> events at <code>haiVariable</code>; <code>addInUseGlobalVar</code>, <code>renameVariable</code>.</span></span></li>
+      <li><span class="badge b-hai">14</span><span><b>Rules acting on Rule Machine.</b> <span class="mech"><code>RMUtils</code>: run, pause, resume, Private Boolean. Rule-to-HAI-rule calls use location events instead (<code>haiRuleInvoke</code>, <code>haiRuleControl</code>, <code>haiRuleReturn</code>).</span></span></li>
+      <li><span class="badge b-hai">15</span><span><b>Timers.</b> <span class="mech">Deadlines in <code>rt.deadlines</code>, woken by <code>runOnce</code> to <code>haiTimer</code> with a token; <code>haiSelfCheck</code> while a deadline is unfired.</span></span></li>
+      <li><span class="badge b-hma">16</span><span><b>Migration to Engine.</b> <span class="mech">Child-to-parent calls <code>haiMigrationFacts</code>, <code>haiMigrationRecord</code>, <code>haiMigrationCall</code> (<code>haiRuleOp</code>, <code>activateStopped</code>, <code>rmPausedNow</code>, <code>importRule</code>). The Engine never calls Migration.</span></span></li>
+      <li><span class="badge b-hma">17</span><span><b>Migration reads the decode.</b> <span class="mech"><code>downloadHubFile</code> of <code>ham-decode(-dev).json</code> and <code>ham-decode-detail(-dev).json</code>; the newer AM's file wins.</span></span></li>
+      <li><span class="badge b-hma">18</span><span><b>Assess now, request.</b> <span class="mech">Location event <code>haiAssessRequest</code> <code>{requestId, appId, ids}</code> or <code>all: true</code>. No token: hub-local.</span></span></li>
+      <li><span class="badge b-ham">19</span><span><b>Assess now, answer.</b> <span class="mech"><code>haiAssessDone</code> <code>{requestId, ...}</code> once the decode files are rewritten, or <code>busy</code>.</span></span></li>
+      <li><span class="badge b-hma">20</span><span><b>Switch over and back.</b> <span class="mech"><code>RMUtils.sendAction(..., 'pauseRule' | 'resumeRule')</code>, then a read-back of the paused state.</span></span></li>
+      <li><span class="badge b-ham">21</span><span><b>AM writes files.</b> <span class="mech">Decode files (envelope <code>hamDecodeEnvelope</code>) after each scan or Assess now, and the scan file <code>automation-map-&lt;id&gt;-scan.json</code>.</span></span></li>
+      <li><span class="badge b-ham">22</span><span><b>AM reads HAI's feed.</b> <span class="mech">Loopback <code>/local/hai-am-state.json</code>; re-reads <code>/local/hai-am-capabilities.json</code> when its hash moves.</span></span></li>
+      <li><span class="badge b-ham">23</span><span><b>AM scans the hub.</b> <span class="mech">Loopback <code>/hub2/appsList</code>, <code>/installedapp/statusJson/&lt;id&gt;</code>, <code>/device/fullJson/&lt;id&gt;</code>, <code>/hub2/variables</code>; at most 8 async requests in flight.</span></span></li>
+      <li><span class="badge b-ham">24</span><span><b>Public capability list.</b> <span class="mech"><code>HAI_PUBLIC_CAPABILITIES_URL</code>: raw <code>public/hai-capabilities.json</code> (<code>hai.capabilities/1</code>) in Automation Map's public repository, read only when the hub has no Engine of its own.</span></span></li>
+      <li><span class="badge b-ext">25</span><span><b>Install and update.</b> <span class="mech">Hubitat Package Manager: AM from <code>packageManifest.json</code>; HAI's three apps from <code>dist/</code>.</span></span></li>
+      <li><span class="badge b-ext">26</span><span><b>Tools to the MCP Rule Server.</b> <span class="mech"><code>/mcp</code>, JSON-RPC, <code>hub_manage_rule_machine</code>. Builds and edits Rule Machine rules, test rules included.</span></span></li>
+      <li><span class="badge b-ext">27</span><span><b>Rule Server to Rule Machine.</b> <span class="mech"><code>hub_set_rule</code>, <code>hub_call_rule</code>, <code>hub_set_rule_paused</code>. HAI sees the result only after the next AM scan.</span></span></li>
+    </ol>
+  </section>
+
+  <!-- FLOWS -->
+  <section class="block" id="flows" aria-labelledby="flows-title">
+    <div class="sec-head">
+      <span class="eyebrow">2 · Data flows</span>
+      <h2 id="flows-title">Five sequences, step by step</h2>
+      <p>Each step names the file or function that does it.</p>
+    </div>
+    <div class="flows">
+      <article class="flow">
+        <div class="flow-head"><span class="flow-letter">a</span><h3>Author a rule</h3></div>
+        <ol>
+          <li><b>Open.</b> <code>editorPageGet</code> serves <code>hai-editor.html</code> from File Manager after the <code>EDITOR_PAGE_SHA256</code> check. The page fetches <code>/editor/api/fixed</code> (cached per build) and <code>/editor/api/state</code>.</li>
+          <li><b>Edit.</b> Forms come from the field specs; each block shows the hub's own sentence from <code>hai_render</code>. <code>/editor/api/device</code> reads one named device.</li>
+          <li><b>Check.</b> <code>POST /editor/api/check</code>: <code>hai_editor</code> validates (<code>hai_validator</code>), simulates (<code>hai_sim</code>) and renders, reading only that rule's devices. Returns findings and a receipt, an HMAC with <code>haiReceiptKey</code>.</li>
+          <li><b>Save draft.</b> <code>POST /editor/api/save</code> or <code>/draft</code> into the filed store (<code>editorDrafts</code>): 64 KB a draft, 384 KB in all. The running rule is untouched.</li>
+          <li><b>Put on hub.</b> <code>POST /editor/api/send</code>: a valid receipt skips re-checking; <code>editorSubmission</code> signs with <code>haiSigningKey</code>; <code>runtimeSubmitBody</code> hands it to the runtime in the same request.</li>
+          <li><b>Review.</b> <code>rtCheckSubmission</code> (signature, age under two minutes, not one of the last 16), then <code>rtReview</code> (validate, allow-list, driver commands, node count).</li>
+          <li><b>Deploy to the container.</b> <code>haiSetup</code> and <code>haiStage</code> (<code>rtStage</code>), then <code>haiCommit</code> runs <code>rtCommit</code>: hash matches, devices allowed, subscribe, arm schedules. The rule app sends <code>haiRuleCommitted</code>; the registry marks it active. An unconfirmed stage is reconciled 15 s later (<code>haiReconcileSoon</code>).</li>
+        </ol>
+      </article>
+
+      <article class="flow">
+        <div class="flow-head"><span class="flow-letter">b</span><h3>An event fires a rule</h3></div>
+        <ol>
+          <li><b>Delivery.</b> Hubitat calls <code>haiEvent</code>, <code>haiMode</code>, <code>haiVariable</code> or <code>haiTimer</code> in <code>hai_rule_app.groovy</code>, which calls <code>rtOnEvents</code>.</li>
+          <li><b>Begin.</b> <code>rtExecute</code> wraps the execution; <code>rtBegin</code> loads <code>state.rt</code> once, runs <code>rtBoot</code> (restart?) and <code>rtSettleFences</code>.</li>
+          <li><b>Admit.</b> <code>coreAdmit</code>: trigger match, required expression, rerun policy; at most 1024 evaluations per event (<code>RT_MAX_EVALS_PER_EVENT</code>).</li>
+          <li><b>Gate.</b> <code>coreGate</code> reads conditions in three-valued logic (<code>hai_logic</code>); unknown with <code>onUnknown: block</code> stops the run with its reason.</li>
+          <li><b>Actions.</b> <code>coreExecute</code> runs the steps. A send passes the allow-list (<code>rtChildAllowed</code>), the driver check and a fence, then climbs requested, dispatched, confirmed. Waits become rows in <code>rt.deadlines</code> with a <code>runOnce</code> wake-up.</li>
+          <li><b>History.</b> <code>rtEnd</code> compacts the trace (<code>rtCompact</code>), applies the byte budget (<code>rtBudget</code>), decides <code>rtSelfCheckWanted</code>, saves the light mark (<code>rtLight</code>) and writes <code>state.rt</code> once. <code>hai_timeline</code> answers "why did this run".</li>
+          <li><b>Self-check.</b> One <code>runOnce</code> of <code>haiSelfCheck</code> at the earliest unfired <code>dueAt</code>; nothing is scheduled when nothing is pending.</li>
+          <li><b>Watchdog.</b> <code>haiWatchdog</code> every 15 minutes calls each active rule's <code>haiOverdue</code>: fires anything 30 s past due, reports health, returns the light mark. The quiet path (<code>rtOverdueQuiet</code>) writes nothing when all is well.</li>
+        </ol>
+      </article>
+
+      <article class="flow hma wide">
+        <div class="flow-head"><span class="flow-letter">c</span><h3>Migration: scan, decode, assess, clone, test, cutover, rollback</h3><span class="chip hma">optional</span></div>
+        <ol>
+          <li><b>Scan.</b> AM <code>/scan</code> (or the daily <code>scheduledScanHandler</code>, off by default): <code>fetchRegistry</code> reads <code>/hub2/appsList</code>, then <code>statusJson</code> per app, decoders per engine (<code>SUPPORTED_RULE_ENGINE = 'Rule-5.1'</code>), <code>buildGraph</code>, <code>finishScan</code>.</li>
+          <li><b>Decode.</b> <code>finishScan</code> writes <code>ham-decode(-dev).json</code> (<code>ham.decode/1</code>) and <code>ham-decode-detail(-dev).json</code> (<code>ham.decode.detail/1</code>) inside <code>hamDecodeEnvelope</code>: <code>contractSchemaVersion</code> 4, fails closed.</li>
+          <li><b>Read.</b> <code>GET /migration/api/state</code>: Migration reads the decode (<code>hai_ham</code>, refusing a schema not in <code>HAM_SCHEMAS</code>) and asks <code>haiMigrationFacts</code> for HAI's rules and the ledger.</li>
+          <li><b>Assess.</b> Each rule gets <code>ready</code>, <code>needs-decision</code>, <code>partial</code> or <code>blocked</code>, with <code>unmapped</code> constructs and coupling (<code>rmCoupling</code>). Assess now: <code>POST /migration/api/assess</code> sends <code>haiAssessRequest</code>; AM's <code>haiAssessRequestHandler</code> rescans the named rules (a full scan above 40 percent, <code>HAI_ASSESS_FULL_SCAN_SHARE</code>) and answers <code>haiAssessDone</code>.</li>
+          <li><b>Clone, stopped.</b> <code>POST /migration/api/apply</code> <code>op=clone</code>: <code>rmRebuild</code> then <code>rmFaithful</code>; <code>haiMigrationCall('importRule')</code> creates a <b>disabled</b> HAI rule; <code>haiMigrationRecord</code> sets <code>phase: cloned</code> with <code>rmPrint</code>. Bulk copies take up to 6 (<code>MIG_BATCH_MAX</code>) and no upgrades.</li>
+          <li><b>Test.</b> The copy stays disabled while it is tried: a dry run through the Engine's simulator (<code>/migration/api/dryrun</code>), Run now or Run one step in the editor (<code>/editor/api/run-step</code>), and the rule harness, which compares it with the Rule Machine original.</li>
+          <li><b>Cutover.</b> <code>op=switchOver</code>: <code>RMUtils</code> <code>pauseRule</code>, read back three times 250 ms apart, then <code>activateStopped</code> and <code>phase: switched</code>. The Engine announces <code>haiRmSwitched</code> so callers retarget.</li>
+          <li><b>Watch.</b> Each switched copy's last run, a run that went wrong, and "changed since copied" when the Rule Machine fingerprint no longer matches <code>rmPrint</code>.</li>
+          <li><b>Rollback.</b> <code>op=switchBack</code>: <code>haiRuleOp</code> stops the copy, <code>RMUtils</code> <code>resumeRule</code>, read back, <code>phase: reverted</code>. Deleting the HAI copy (<code>deleteClone</code>) is a separate deliberate act; nothing deletes automatically.</li>
+        </ol>
+        <p class="note">Two engines running one rule is the worst outcome, so the pause read-back before activation is never skipped. Rule Machine is never parsed by HAI: AM owns the storage format, HAI owns the translation.</p>
+      </article>
+
+      <article class="flow ham">
+        <div class="flow-head"><span class="flow-letter">d</span><h3>The capability feed into AM's coverage table</h3></div>
+        <ol>
+          <li><b>Source.</b> The parity tracker, generated into <code>engine/app/am/capabilities.json</code> (ids in <code>capability_ids.json</code>).</li>
+          <li><b>On the hub.</b> <code>upload-editor-page.ps1</code> uploads it as <code>hai-am-capabilities.json</code>; the Engine embeds its hash (<code>AM_CAPS_SHA256</code>) and refuses a copy that differs.</li>
+          <li><b>State file.</b> On each announce the Engine's <code>haiWriteAmStateNow</code> writes <code>hai-am-state.json</code> (<code>hai.am/1</code> shape from <code>hai_am</code>: rules as nodes, edges, flows) with <code>capabilitiesHash</code>, not the 50 KB list.</li>
+          <li><b>Local read.</b> AM reads <code>/local/hai-am-state.json</code> over loopback, draws HAI rules on the map, and re-reads <code>/local/hai-am-capabilities.json</code> only when the hash moves.</li>
+          <li><b>No local Engine.</b> AM fetches <code>public/hai-capabilities.json</code> from Automation Map's public repository on GitHub (<code>HAI_PUBLIC_CAPABILITIES_URL</code>), made by the public-list scripts.</li>
+          <li><b>Table.</b> AM renders Table 1 (HAI's Rule Machine coverage). Table 2 (<code>/rm-coverage</code>) is separate: what the user's own rules need.</li>
+          <li><b>Guard.</b> <code>FEED_LOCK.json</code> pins the SHA-256 of every piece, and CI checks the pins on every push. A change to the feed is a deliberate re-pin.</li>
+        </ol>
+      </article>
+
+      <article class="flow">
+        <div class="flow-head"><span class="flow-letter">e</span><h3>MCP propose, human approve</h3></div>
+        <ol>
+          <li><b>Connect.</b> The client calls <code>POST /mcp</code> with the token and the <code>mcp</code> audience secret (MCP protocol 2024-11-05, 2025-03-26, 2025-06-18).</li>
+          <li><b>Learn.</b> <code>hai_describe</code> returns the rule format guide (<code>hai-author-guide.txt</code>, hash-checked), the command catalogue and the inventory.</li>
+          <li><b>Propose.</b> <code>hai_propose_rule</code>: <code>hai_propose</code> checks, reads back and simulates, and stores a proposal (filed <code>proposals</code>). It never activates, commands or deletes.</li>
+          <li><b>Review.</b> A person opens it in the editor and reads the hub's rendering (<code>hai_render</code>), the structural diff and the findings, never the model's own words.</li>
+          <li><b>Approve.</b> The person presses Check, then Put on hub: steps 3 to 7 of flow (a). The in-editor AI author (<code>authorStart</code>, <code>authorOnResponse</code>) ends the same way: always a draft.</li>
+        </ol>
+        <p class="note">The <code>mcp</code> audience is what stops an MCP client calling <code>/editor/api/send</code>; the tool list alone is not a boundary.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- COMPONENT TABLE -->
+  <section class="block" id="components" aria-labelledby="comp-title">
+    <div class="sec-head">
+      <span class="eyebrow">3 · Components</span>
+      <h2 id="comp-title">Where each piece lives</h2>
+      <p>Code paths are relative to the HAI repository root unless marked AM (the Automation Map repository).</p>
+    </div>
+    <div class="table-wrap stack">
+      <table>
+        <thead><tr><th>Component</th><th>File(s)</th><th>Runs where</th><th>State it keeps</th><th>Main entry points</th><th>Doc</th></tr></thead>
+        <tbody>
+          <tr>
+            <td data-label="Component">HAI Engine<span class="sub">parent app</span></td>
+            <td data-label="File(s)"><code>engine/app/hai_engine_app.groovy</code> + <code>engine/lib/*</code> (core, runtime, runtime_admin, editor, author, propose, render, am, ham, ...)</td>
+            <td data-label="Runs where">Hub, Hubitat app with OAuth</td>
+            <td data-label="State it keeps"><code>rtRegistry</code>, candidates and claims, <code>runtimeSummary</code>, <code>migPairs</code>, <code>runtimeRmPaused</code>, audience, signing and receipt keys, replay list. Filed: drafts, proposals, AI session</td>
+            <td data-label="Main entry points"><code>/editor/api/*</code>, <code>/mcp</code>, <code>/endpoint/*</code>, <code>/automation-map</code>; <code>haiWatchdog</code>; events <code>haiRuleApi</code>, <code>haiRuleSubmit</code>, <code>haiRuleCommitted</code></td>
+            <td data-label="Doc"><a href="developer/architecture.md">docs/developer/architecture.md</a></td>
+          </tr>
+          <tr>
+            <td data-label="Component">HAI Rule Container<span class="sub">one child per rule</span></td>
+            <td data-label="File(s)"><code>engine/m5/hai_rule_app.groovy</code> + core, runtime (no validator)</td>
+            <td data-label="Runs where">Hub, child of the Engine</td>
+            <td data-label="State it keeps"><code>state.rt</code>: runs, ledger, deadlines, trace, variables, Private Boolean, subscriptions, staged document, light mark (budgeted)</td>
+            <td data-label="Main entry points"><code>haiEvent</code>, <code>haiMode</code>, <code>haiVariable</code>, <code>haiTimer</code>, <code>haiSelfCheck</code>; parent calls <code>haiSetup</code>, <code>haiStage</code>, <code>haiOverdue</code></td>
+            <td data-label="Doc"><a href="developer/rule-format.md">docs/developer/rule-format.md</a></td>
+          </tr>
+          <tr>
+            <td data-label="Component">HAI Migration<span class="sub">optional child</span></td>
+            <td data-label="File(s)"><code>engine/app/hai_migration_app.groovy</code> + <code>hai_ham</code>, <code>hai_rm_map</code>, <code>hai_migration</code></td>
+            <td data-label="Runs where">Hub, child of the Engine</td>
+            <td data-label="State it keeps"><code>assess</code>, <code>assessAm</code>, <code>migStep</code>. The ledger lives in the Engine.</td>
+            <td data-label="Main entry points"><code>/migration</code>, <code>/migration/api/state</code>, <code>/apply</code>, <code>/assess</code>; <code>haiAssessDone</code></td>
+            <td data-label="Doc"><a href="developer/rm-refusals.md">docs/developer/rm-refusals.md</a>, <a href="developer/rm-semantics.md">rm-semantics.md</a></td>
+          </tr>
+          <tr>
+            <td data-label="Component">Editor page</td>
+            <td data-label="File(s)"><code>engine/app/editor/editor.html</code>, <code>specs.json</code>, <code>contract.js</code></td>
+            <td data-label="Runs where">Browser; file in File Manager as <code>hai-editor.html</code></td>
+            <td data-label="State it keeps">Receipts from Check (not the key)</td>
+            <td data-label="Main entry points"><code>/editor</code>; calls <code>/editor/api/*</code>, <code>/eventsocket</code></td>
+            <td data-label="Doc"><a href="developer/api.md">docs/developer/api.md</a></td>
+          </tr>
+          <tr>
+            <td data-label="Component">Migration page</td>
+            <td data-label="File(s)"><code>engine/app/migration/migration.html</code></td>
+            <td data-label="Runs where">Browser; <code>hai-migration.html</code> in File Manager</td>
+            <td data-label="State it keeps">None</td>
+            <td data-label="Main entry points">Calls <code>/migration/api/state</code>, <code>/apply</code>, <code>/assess</code></td>
+            <td data-label="Doc"><a href="architecture-current.md">docs/architecture-current.md</a> section 7</td>
+          </tr>
+          <tr>
+            <td data-label="Component">AI author and MCP server</td>
+            <td data-label="File(s)"><code>engine/lib/hai_author.groovy</code>, <code>hai_propose.groovy</code>, <code>engine/app/author/author_system.txt</code></td>
+            <td data-label="Runs where">Inside the Engine; calls the Claude API</td>
+            <td data-label="State it keeps">Filed <code>proposals</code>, <code>engineSession</code>, spend per draft; API key in settings</td>
+            <td data-label="Main entry points"><code>authorStart</code>, <code>authorOnResponse</code>; <code>/mcp</code> tools</td>
+            <td data-label="Doc"><a href="developer/api.md">docs/developer/api.md</a> (MCP server)</td>
+          </tr>
+          <tr>
+            <td data-label="Component">Automation Map</td>
+            <td data-label="File(s)">AM <code>apps/automation_map.groovy</code> (one file), <code>packageManifest.json</code></td>
+            <td data-label="Runs where">Hub, one app; map drawn in the browser</td>
+            <td data-label="State it keeps">Settings, scan progress and locks, pointers, app count, <code>haiAssessSubscribed</code>. Files: scan file, decode files</td>
+            <td data-label="Main entry points"><code>/automation-map.html</code>, <code>/scan</code>, <code>/scan-status</code>, <code>/rescan</code>, <code>/rm-coverage</code>, <code>/edges</code>, <code>/rooms</code>, <code>/webcore-*</code>; <code>haiAssessRequestHandler</code></td>
+            <td data-label="Doc"><a href="architecture-current.md">docs/architecture-current.md</a> sections 4.2 and 8</td>
+          </tr>
+          <tr>
+            <td data-label="Component">Capability feed</td>
+            <td data-label="File(s)"><code>engine/app/am/capabilities.json</code>, <code>engine/lib/hai_am.groovy</code>; AM <code>public/hai-capabilities.json</code>; <code>FEED_LOCK.json</code> in both</td>
+            <td data-label="Runs where">File Manager on the hub; GitHub for production</td>
+            <td data-label="State it keeps">Pinned SHA-256 of each piece</td>
+            <td data-label="Main entry points"><code>hai-am-state.json</code>, <code>hai-am-capabilities.json</code>, <code>HAI_PUBLIC_CAPABILITIES_URL</code>, <code>/automation-map</code></td>
+            <td data-label="Doc"><a href="developer/api.md">docs/developer/api.md</a> (Automation Map feed)</td>
+          </tr>
+          <tr>
+            <td data-label="Component">MCP Rule Server<span class="sub">third party</span></td>
+            <td data-label="File(s)">Not in either repository</td>
+            <td data-label="Runs where">Hub, its own app</td>
+            <td data-label="State it keeps">Its own</td>
+            <td data-label="Main entry points"><code>/mcp</code>, <code>hub_manage_rule_machine</code></td>
+            <td data-label="Doc"><a href="mcp-rule-server.md">docs/mcp-rule-server.md</a></td>
+          </tr>
+          <tr>
+            <td data-label="Component">Build and deploy</td>
+            <td data-label="File(s)"><code>engine/assemble.py</code>, <code>make-dist.py</code>, <code>compile_check.groovy</code>, <code>deploy-hub.ps1</code>, <code>upload-editor-page.ps1</code></td>
+            <td data-label="Runs where">Developer machine and CI</td>
+            <td data-label="State it keeps"><code>dist/</code> (the three shrunk apps HPM installs)</td>
+            <td data-label="Main entry points"><code>make-dist.py --check</code>, <code>deploy-hub.ps1</code></td>
+            <td data-label="Doc"><a href="developer/architecture.md">docs/developer/architecture.md</a> (Keeping the hub light)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- HUB COST -->
+  <section class="block" id="cost" aria-labelledby="cost-title">
+    <div class="sec-head">
+      <span class="eyebrow">4 · Hub cost</span>
+      <h2 id="cost-title">Nothing scales with the whole hub unless it must</h2>
+      <p>Every per-event, per-request, per-poll or scheduled path has a stated cost: what it reads and writes, and how that grows. The full table is in <a href="architecture-current.md">docs/architecture-current.md</a> section 10.</p>
+    </div>
+    <div class="table-wrap stack">
+      <table>
+        <thead><tr><th>Path</th><th>When</th><th>Reads</th><th>Writes</th><th>Grows with</th></tr></thead>
+        <tbody>
+          <tr><td data-label="Path">Rule app event</td><td data-label="When">Per subscribed event</td><td data-label="Reads">Its own <code>state.rt</code></td><td data-label="Writes"><code>state.rt</code> once</td><td data-label="Grows with">That rule's size and history (budgeted)</td></tr>
+          <tr><td data-label="Path">Rule app timer</td><td data-label="When">Per deadline</td><td data-label="Reads">Its own state</td><td data-label="Writes">Once</td><td data-label="Grows with">Its deadlines</td></tr>
+          <tr><td data-label="Path">Self-check</td><td data-label="When">Once, at the earliest unfired deadline</td><td data-label="Reads">Its own state</td><td data-label="Writes">Once if anything fired</td><td data-label="Grows with">Its deadlines</td></tr>
+          <tr><td data-label="Path">Watchdog</td><td data-label="When">Every 15 minutes</td><td data-label="Reads">Registry; one call per active rule (quiet path: no write)</td><td data-label="Writes">Watchdog record; summary only if a mark moved</td><td data-label="Grows with">Active rules</td></tr>
+          <tr><td data-label="Path">Rule Machine paused state</td><td data-label="When">Per watchdog pass</td><td data-label="Reads">One <code>/hub2/appsList</code> read</td><td data-label="Writes">Paused cache if changed</td><td data-label="Grows with">One read regardless of rule count</td></tr>
+          <tr><td data-label="Path">Editor open</td><td data-label="When">Per request</td><td data-label="Reads">State; fixed tables cached per build</td><td data-label="Writes">Nothing</td><td data-label="Grows with">Rules (list only)</td></tr>
+          <tr><td data-label="Path">Check</td><td data-label="When">Per request</td><td data-label="Reads">The rule's devices only</td><td data-label="Writes">Receipt</td><td data-label="Grows with">That rule</td></tr>
+          <tr><td data-label="Path">Put on hub</td><td data-label="When">Per request</td><td data-label="Reads">That rule</td><td data-label="Writes">Registry, one child</td><td data-label="Grows with">That rule</td></tr>
+          <tr><td data-label="Path">Migration page</td><td data-label="When">Per request</td><td data-label="Reads">Decode files (cached), Engine facts</td><td data-label="Writes">Nothing</td><td data-label="Grows with">Rule Machine rules</td></tr>
+          <tr><td data-label="Path">Assess now</td><td data-label="When">Per request</td><td data-label="Reads">N <code>statusJson</code> reads, one device read, one graph build</td><td data-label="Writes">Scan file, two decode files</td><td data-label="Grows with">Named rules (full scan above 40 percent)</td></tr>
+          <tr><td data-label="Path">AM full scan</td><td data-label="When">On demand; daily scan off by default</td><td data-label="Reads">Every app and device</td><td data-label="Writes">Scan file, decode files</td><td data-label="Grows with">Whole hub, by design</td></tr>
+          <tr><td data-label="Path">AM map page</td><td data-label="When">Per request</td><td data-label="Reads">Scan file</td><td data-label="Writes">Nothing</td><td data-label="Grows with">Graph size</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="color: var(--muted); font-size: 0.95rem; max-width: 52em;">An app's whole <code>state</code> loads on every execution, so large data read by few paths goes to File Manager.</p>
+  </section>
+
+  <!-- TRUST -->
+  <section class="block" id="trust" aria-labelledby="trust-title">
+    <div class="sec-head">
+      <span class="eyebrow">5 · Trust boundaries</span>
+      <h2 id="trust-title">Tokens, guarded calls, and the human decision</h2>
+    </div>
+    <div class="rule-callout">
+      <h3>A person approves before anything is deployed</h3>
+      <p>The AI author and MCP clients only produce drafts and proposals. Put on hub, pressed by a person in the editor, is the decision, and it goes through the same Check and activation review as any rule. Migration's Copy makes a <b>disabled</b> rule; Switch over is a separate press.</p>
+    </div>
+    <div class="trust">
+      <div><h3>OAuth token per app</h3><p>Engine, Migration and Automation Map each have one access token that reaches all of that app's paths. Migration's token reaches nothing else.</p></div>
+      <div><h3>Route audiences</h3><p>The Engine's <code>HAI_ROUTE_AUDIENCE</code>: <code>feed</code> (open, read-only), <code>mcp</code>, <code>editor</code>, <code>endpoint</code>. A wrong <code>aud</code> gets 403 <code>WRONG_AUDIENCE</code>.</p></div>
+      <div><h3>Approved devices</h3><p>The one permission. <code>rtReview</code> refuses a device or command outside it; <code>rtChildAllowed</code> re-checks before every send.</p></div>
+      <div><h3>Signed submission</h3><p><code>haiSigningKey</code>; <code>rtCheckSubmission</code> checks the signature, age under two minutes and no replay (last 16 kept). <code>haiRuleSubmit</code> events are checked the same way.</p></div>
+      <div><h3>Receipts and claims</h3><p>Check receipts are HMACs with <code>haiReceiptKey</code>, which never leaves the hub. Activation uses single-use claim ids with nonces and expiry.</p></div>
+      <div><h3>Page integrity</h3><p>Each app embeds the SHA-256 of its pages (<code>//#sha256</code> from <code>assemble.py</code>) and refuses to serve a File Manager copy that differs.</p></div>
+      <div><h3>HTTP steps</h3><p>Any host may be reached; a built address may not reach the hub's admin API. A literally written address is allowed.</p></div>
+      <div><h3>Other apps' requests</h3><p><code>haiRuleApi</code> requests must carry the Engine's API token; without it there is no reply. <b>Change HAI's access addresses</b> replaces the OAuth token, audience secrets and API token in one press.</p></div>
+      <div class="gap"><h3>Open: Assess now events</h3><p><code>haiAssessRequest</code> is an unauthenticated hub-local event. The signing and receipt keys are not rotated.</p></div>
+      <div><h3>Hub data</h3><p>Automation Map's repository is public and carries no hub data. Examples use invented names such as Hall Light.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <h2>Keeping this page current</h2>
+    <ul>
+      <li>It is maintained alongside <a href="architecture-current.md">docs/architecture-current.md</a>, its primary source. Update both together when components, endpoints or flows change.</li>
+      <li>It applies to HAI Engine version <b>0.5.87</b>. The source constants are the authority where this page and the code differ.</li>
+      <li>No hub data appears here. Names such as Hall Light are invented.</li>
+    </ul>
+  </footer>
+</div>
+</body>
+</html>

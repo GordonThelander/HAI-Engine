@@ -1,0 +1,13 @@
+{
+  "author": "HAI",
+  "gitHubUrl": "https://github.com/GordonThelander/HAI-Engine",
+  "packages": [
+    {
+      "id": "b6f3c0de-4a1e-4c1a-9a51-6a3f0d7e2c11",
+      "name": "HAI Engine (Preview)",
+      "category": "Automations",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/packageManifest.json",
+      "description": "A rule engine for Hubitat with a browser rule editor, an optional AI Rule Assistant and an optional Rule Machine migration app."
+    }
+  ]
+}

@@ -1,0 +1,400 @@
+<!-- HAI user documentation: the toolkit overview. Maintained with docs/user-guide.md: update it in the same PR when a tool, a step or a user-visible feature it describes changes. Published copy: the private artifact "Your Hubitat Automation Toolkit". No real hub data; examples are invented. -->
+<title>Your Hubitat Automation Toolkit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow reading column; hero pairs intro with a vertical flow; each product is a section with a numbered step strip; the optional migration is a compact list at the end. */
+:root {
+  --bg: #F5F8F9;
+  --surface: #FFFFFF;
+  --fg: #14232A;
+  --muted: #51656D;
+  --line: #D3DEE2;
+  --accent: #0D6A88;
+  --accent-soft: #E2EFF4;
+  --on-accent: #FFFFFF;
+  --ham: #3D7A5E;
+  --ham-soft: #E5F1EA;
+  --hma: #A35F22;
+  --hma-soft: #F6EBDF;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Source Sans 3", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1619; --surface: #142026; --fg: #E2EBEE; --muted: #9AAEB5; --line: #29393F;
+    --accent: #5DB5D4; --accent-soft: #15333E; --on-accent: #0B1A20;
+    --ham: #7CC3A0; --ham-soft: #16302A; --hma: #E0A267; --hma-soft: #33261A;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1619; --surface: #142026; --fg: #E2EBEE; --muted: #9AAEB5; --line: #29393F;
+  --accent: #5DB5D4; --accent-soft: #15333E; --on-accent: #0B1A20;
+  --ham: #7CC3A0; --ham-soft: #16302A; --hma: #E0A267; --hma-soft: #33261A;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 17px; line-height: 1.6;
+  padding-inline: 16px; padding-block: 0 64px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(2rem, 5.2vw, 3.1rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: clamp(1.5rem, 3.4vw, 2.05rem); font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 1.08rem; font-weight: 700; }
+p { margin: 0; }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--accent); font-weight: 500;
+}
+.lede { font-size: 1.15rem; color: var(--muted); max-width: 34em; }
+code { font-family: var(--font-mono); font-size: 0.86em; background: var(--accent-soft); color: var(--fg); padding: 0.1em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }
+
+/* Header */
+.top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding-block: 20px; border-bottom: 1px solid var(--line);
+}
+.brand { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; display: flex; align-items: center; gap: 10px; }
+.brand-dot { width: 14px; height: 14px; border-radius: 4px; background: var(--accent); }
+.nav { display: flex; gap: 6px 18px; flex-wrap: wrap; font-size: 0.95rem; }
+.nav a { color: var(--muted); text-decoration: none; }
+.nav a:hover, .nav a:focus-visible { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* Hero */
+.hero {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  gap: 40px; align-items: center; padding-block: 48px 40px;
+}
+.hero-text { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.legend { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.legend div { display: flex; gap: 12px; align-items: baseline; }
+.legend b { font-family: var(--font-display); }
+.chip {
+  flex: none; font-family: var(--font-mono); font-size: 0.72rem; font-weight: 500;
+  padding: 2px 8px; border-radius: 999px; letter-spacing: 0.04em;
+}
+.chip.ham { background: var(--ham-soft); color: var(--ham); }
+.chip.hma { background: var(--hma-soft); color: var(--hma); }
+.chip.hai { background: var(--accent-soft); color: var(--accent); }
+figure { margin: 0; min-width: 0; }
+figure svg { display: block; width: 100%; height: auto; max-width: 100%; color: var(--fg); }
+figcaption { font-size: 0.9rem; color: var(--muted); margin-top: 10px; }
+
+/* Sections */
+section.product { padding-block: 56px 8px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 22px; }
+.sec-head { display: flex; flex-direction: column; gap: 10px; max-width: 46em; }
+.ham .eyebrow { color: var(--ham); }
+.hma .eyebrow { color: var(--hma); }
+
+.strip {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px;
+}
+.strip li {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 8px; min-width: 0;
+}
+.strip .num {
+  font-family: var(--font-mono); font-size: 0.78rem; font-weight: 500;
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.ham .num { background: var(--ham-soft); color: var(--ham); }
+.hai .num { background: var(--accent-soft); color: var(--accent); }
+@media (min-width: 901px) {
+  .strip.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .strip.five { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .strip.five li { grid-column: span 2; }
+  .strip.five li:nth-child(-n+2) { grid-column: span 3; }
+}
+.strip-head { display: flex; align-items: center; gap: 10px; }
+.strip p { color: var(--muted); font-size: 0.98rem; }
+.strip p + p { margin-top: 2px; }
+
+/* Optional migration: compact */
+section.optional .sec-head { gap: 8px; }
+section.optional .sec-head p { color: var(--muted); }
+.mig-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; counter-reset: m; }
+.mig-steps li {
+  counter-increment: m; font-size: 0.88rem; color: var(--muted);
+  border: 1px dashed var(--line); border-radius: 999px; padding: 3px 12px 3px 8px;
+}
+.mig-steps li::before { content: counter(m) " "; font-family: var(--font-mono); font-size: 0.75rem; color: var(--hma); margin-right: 4px; }
+.legend .opt p { color: var(--muted); }
+
+/* Connect */
+.connect { display: grid; grid-template-columns: minmax(0, 440px) minmax(0, 1fr); gap: 40px; align-items: start; }
+.connect-notes { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.connect-notes div { display: flex; flex-direction: column; gap: 4px; }
+.connect-notes p { color: var(--muted); }
+
+footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+
+@media (max-width: 900px) {
+  .hero, .connect { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .hero figure, .connect figure { max-width: 460px; }
+}
+@media (max-width: 480px) {
+  body { font-size: 16px; }
+  .hero { padding-block: 32px 28px; }
+  section.product { padding-block: 40px 4px; }
+  .nav { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .flow-dash { stroke-dasharray: 5 5; animation: dash 1.6s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset: -20; } }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><span class="brand-dot" aria-hidden="true"></span>Hubitat Automation Toolkit</div>
+    <nav class="nav" aria-label="Sections">
+      <a href="#map">Automation Map</a>
+      <a href="#engine">HAI Engine</a>
+      <a href="#connect">How it fits</a>
+      <a href="#migration">Optional: migration</a>
+    </nav>
+  </header>
+
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-text">
+      <span class="eyebrow">For Hubitat home owners</span>
+      <h1 id="hero-title">See everything your hub does, and write better rules</h1>
+      <p class="lede">Two tools do the everyday work. Automation Map shows you every device, rule and link on your hub. The HAI Engine is where you write new rules and run them, by yourself or with help from AI.</p>
+      <div class="legend">
+        <div><span class="chip ham">HAM</span><p><b>Automation Map.</b> A picture of every device, rule and link on your hub.</p></div>
+        <div><span class="chip hai">HAI</span><p><b>HAI Engine.</b> A rule editor, an AI helper, and the runtime on your hub.</p></div>
+        <div class="opt"><span class="chip hma">Optional</span><p><b>HAI Migration.</b> Only if you also want to move existing Rule Machine rules across.</p></div>
+      </div>
+    </div>
+
+    <figure>
+      <svg viewBox="0 0 380 360" role="img" aria-label="Your hub sits at the top. Automation Map scans it and shows you everything on it. You, with AI if you like, write rules in the HAI Engine, which runs each one on the hub. An optional migration app, drawn dashed, can bring existing Rule Machine rules into HAI.">
+        <defs>
+          <marker id="h-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+          <marker id="h-arrow-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+          </marker>
+        </defs>
+        <!-- hub -->
+        <rect x="16" y="8" width="348" height="52" rx="10" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="190" y="31" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="15" fill="currentColor">Your Hubitat hub</text>
+        <text x="190" y="49" text-anchor="middle" font-size="12" fill="var(--muted)">devices · apps · rules</text>
+
+        <!-- hub to HAM -->
+        <line x1="96" y1="60" x2="96" y2="108" stroke="currentColor" stroke-width="1.5" marker-end="url(#h-arrow)"/>
+        <text x="104" y="89" font-size="12" fill="var(--muted)">scans</text>
+        <!-- HAI to hub -->
+        <line x1="284" y1="110" x2="284" y2="62" stroke="currentColor" stroke-width="1.5" marker-end="url(#h-arrow)"/>
+        <text x="292" y="89" font-size="12" fill="var(--muted)">runs rules</text>
+
+        <!-- HAM -->
+        <rect x="16" y="110" width="160" height="96" rx="10" fill="var(--ham-soft)" stroke="var(--ham)" stroke-width="1.5"/>
+        <text x="96" y="140" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="15" fill="currentColor">See</text>
+        <text x="96" y="160" text-anchor="middle" font-size="13" fill="currentColor">Automation Map</text>
+        <text x="96" y="182" text-anchor="middle" font-size="12" fill="var(--muted)">map · links · insights</text>
+
+        <!-- HAI -->
+        <rect x="204" y="110" width="160" height="96" rx="10" fill="var(--accent)"/>
+        <text x="284" y="140" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="15" fill="var(--on-accent)">Write and run</text>
+        <text x="284" y="160" text-anchor="middle" font-size="13" fill="var(--on-accent)">HAI Engine</text>
+        <text x="284" y="182" text-anchor="middle" font-size="12" fill="var(--on-accent)">editor · AI · runtime</text>
+
+        <!-- you and AI -->
+        <rect x="204" y="250" width="160" height="58" rx="10" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="284" y="275" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="14" fill="currentColor">You, with AI</text>
+        <text x="284" y="294" text-anchor="middle" font-size="12" fill="var(--muted)">new rules</text>
+        <line x1="284" y1="250" x2="284" y2="208" stroke="currentColor" stroke-width="1.5" marker-end="url(#h-arrow)"/>
+
+        <!-- optional migration -->
+        <rect x="16" y="258" width="160" height="44" rx="8" fill="none" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="4 4"/>
+        <text x="96" y="277" text-anchor="middle" font-size="12" fill="var(--muted)">Optional: HAI Migration</text>
+        <text x="96" y="293" text-anchor="middle" font-size="11" fill="var(--muted)">existing Rule Machine rules</text>
+        <path d="M176 270 Q192 270 200 240 L 214 210" fill="none" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="4 4" marker-end="url(#h-arrow-m)"/>
+      </svg>
+      <figcaption>The two solid boxes are the everyday tools. The dashed box is optional, for people who want to bring their Rule Machine rules across.</figcaption>
+    </figure>
+  </section>
+
+  <!-- HAM -->
+  <section class="product ham" id="map" aria-labelledby="map-title">
+    <div class="sec-head">
+      <span class="eyebrow">Part 1 · Automation Map (HAM)</span>
+      <h2 id="map-title">See what you have</h2>
+      <p class="lede">Most hubs grow one rule at a time. After a few years, nobody remembers which rule turns on the Hall Light, or why the Front Door alert fires twice. Automation Map reads the hub and draws it for you.</p>
+    </div>
+    <ol class="strip six">
+      <li>
+        <div class="strip-head"><span class="num">1</span><h3>Scan the hub</h3></div>
+        <p>It looks at your devices and your apps: Rule Machine, webCoRE, HAI, and the other automation apps you have installed.</p>
+      </li>
+      <li>
+        <div class="strip-head"><span class="num">2</span><h3>Decode each app</h3></div>
+        <p>Decoders read each app's settings to learn three things: what starts it, what it checks first, and what it tells devices to do.</p>
+      </li>
+      <li>
+        <div class="strip-head"><span class="num">3</span><h3>Build the map</h3></div>
+        <p>Devices and rules become points on a map, joined by the links between them. Tap the Hall Light and you see every rule that touches it.</p>
+      </li>
+      <li>
+        <div class="strip-head"><span class="num">4</span><h3>Map dependencies</h3></div>
+        <p>It finds rules that control other rules, such as one that pauses another at night. It also shows hub variables that several rules share.</p>
+      </li>
+      <li>
+        <div class="strip-head"><span class="num">5</span><h3>Insights</h3></div>
+        <p>Insights point out things worth a look, like a device no rule uses. Room Manager groups it all by room.</p>
+        <p>A daily scan is optional; "Assess now" runs one whenever you like.</p>
+      </li>
+      <li>
+        <div class="strip-head"><span class="num">6</span><h3>Works on its own</h3></div>
+        <p>You don't need HAI to use the map. It is simply the clearest view of your hub, whichever apps run your rules.</p>
+      </li>
+    </ol>
+  </section>
+
+  <!-- HAI -->
+  <section class="product hai" id="engine" aria-labelledby="eng-title">
+    <div class="sec-head">
+      <span class="eyebrow">Part 2 · HAI Engine</span>
+      <h2 id="eng-title">Write and run rules</h2>
+      <p class="lede">This is where you write new rules and run them. Write a rule yourself, ask AI to draft it, or let an assistant propose it. A person always puts it on the hub.</p>
+    </div>
+    <ol class="strip five">
+      <li>
+        <div class="strip-head"><span class="num">1</span><h3>The rule editor</h3></div>
+        <p>Rules are blocks in plain words: "When Front Door opens, if it is after sunset, turn on Hall Light." Device values show live as you build.</p>
+        <p>Check tests a rule before it goes on the hub, and Run now tries it straight away. Drafts stay separate from what the hub runs. 24 starter patterns help you begin.</p>
+      </li>
+      <li>
+        <div class="strip-head"><span class="num">2</span><h3>The AI author</h3></div>
+        <p>Describe a rule in your own words and Claude drafts it in the editor. You read it, change it, and decide. Nothing goes live until you put it on the hub.</p>
+      </li>
+      <li>
+        <div class="strip-head"><span class="num">3</span><h3>MCP for AI assistants</h3></div>
+        <p>AI assistants and tools can read your hub and propose rules through HAI's MCP tools, such as <code>hai_describe</code> and <code>hai_propose_rule</code>. A person still approves each one.</p>
+      </li>
+      <li>
+        <div class="strip-head"><span class="num">4</span><h3>The runtime</h3></div>
+        <p>Each rule runs as its own small app on the hub. It survives restarts and keeps its own history, so you can see what it did and when. A watchdog checks that it is still running.</p>
+      </li>
+      <li>
+        <div class="strip-head"><span class="num">5</span><h3>Safety</h3></div>
+        <p>HAI checks every rule before it goes on. A disabled device gives a warning, not a block. Calls that change hub settings are guarded.</p>
+        <p>Outside tools need an access key, and a Rotate button replaces it if you are ever unsure.</p>
+      </li>
+    </ol>
+  </section>
+
+  <!-- Connect -->
+  <section class="product" id="connect" aria-labelledby="con-title">
+    <div class="sec-head">
+      <span class="eyebrow">Part 3 · How they connect</span>
+      <h2 id="con-title">See, write, run</h2>
+    </div>
+    <div class="connect">
+      <figure>
+        <svg viewBox="0 0 380 560" role="img" aria-label="Automation Map scans the hub. You and AI write rules in the editor, the AI author or MCP tools, and send drafts you approve to the HAI Engine. The Engine deploys each rule as its own app on the hub, and tells Automation Map what it supports. An optional migration app, drawn dashed, can also hand converted Rule Machine rules to the Engine.">
+          <defs>
+            <marker id="c-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+            <marker id="c-arrow-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/>
+            </marker>
+            <marker id="c-arrow-m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+            </marker>
+          </defs>
+
+          <!-- Hub -->
+          <rect x="16" y="8" width="314" height="52" rx="10" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+          <text x="173" y="31" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="15" fill="currentColor">Your Hubitat hub</text>
+          <text x="173" y="49" text-anchor="middle" font-size="12" fill="var(--muted)">devices · apps · rules</text>
+
+          <line x1="173" y1="60" x2="173" y2="98" stroke="currentColor" stroke-width="1.5" marker-end="url(#c-arrow)"/>
+          <text x="183" y="84" font-size="12" fill="var(--muted)">scan</text>
+
+          <!-- HAM -->
+          <rect x="16" y="100" width="314" height="62" rx="10" fill="var(--ham-soft)" stroke="var(--ham)" stroke-width="1.5"/>
+          <text x="173" y="127" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="15" fill="currentColor">Automation Map</text>
+          <text x="173" y="146" text-anchor="middle" font-size="12" fill="var(--muted)">map · dependencies · insights</text>
+
+          <!-- Authors (main path) -->
+          <rect x="16" y="220" width="170" height="78" rx="10" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="101" y="250" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="14" fill="currentColor">You, with AI</text>
+          <text x="101" y="268" text-anchor="middle" font-size="12" fill="var(--muted)">rule editor · AI author</text>
+          <text x="101" y="284" text-anchor="middle" font-size="12" fill="var(--muted)">MCP tools</text>
+
+          <!-- Optional migration -->
+          <rect x="204" y="230" width="126" height="60" rx="8" fill="none" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="4 4"/>
+          <text x="267" y="255" text-anchor="middle" font-size="12" fill="var(--muted)">Optional:</text>
+          <text x="267" y="272" text-anchor="middle" font-size="12" fill="var(--muted)">HAI Migration</text>
+          <line x1="267" y1="162" x2="267" y2="228" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="4 4" marker-end="url(#c-arrow-m)"/>
+          <text x="259" y="200" text-anchor="end" font-size="11" fill="var(--muted)">decode files</text>
+
+          <line x1="101" y1="298" x2="101" y2="358" stroke="currentColor" stroke-width="1.5" marker-end="url(#c-arrow)"/>
+          <text x="109" y="324" font-size="12" fill="var(--muted)">drafts you</text>
+          <text x="109" y="339" font-size="12" fill="var(--muted)">approve</text>
+          <line x1="267" y1="290" x2="267" y2="358" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="4 4" marker-end="url(#c-arrow-m)"/>
+          <text x="259" y="330" text-anchor="end" font-size="11" fill="var(--muted)">copies</text>
+
+          <!-- Engine -->
+          <rect x="16" y="360" width="314" height="62" rx="10" fill="var(--accent)"/>
+          <text x="173" y="387" text-anchor="middle" font-family="var(--font-display)" font-weight="700" font-size="15" fill="var(--on-accent)">HAI Engine</text>
+          <text x="173" y="406" text-anchor="middle" font-size="12" fill="var(--on-accent)">checks · stores · deploys</text>
+
+          <line x1="173" y1="422" x2="173" y2="458" stroke="currentColor" stroke-width="1.5" marker-end="url(#c-arrow)"/>
+          <text x="183" y="444" font-size="12" fill="var(--muted)">one app per rule</text>
+
+          <!-- Rule apps -->
+          <rect x="16" y="460" width="96" height="44" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="64" y="486" text-anchor="middle" font-size="12" fill="currentColor">Hall Light</text>
+          <rect x="125" y="460" width="96" height="44" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="173" y="486" text-anchor="middle" font-size="12" fill="currentColor">Front Door</text>
+          <rect x="234" y="460" width="96" height="44" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+          <text x="282" y="486" text-anchor="middle" font-size="12" fill="currentColor">Night Mode</text>
+          <text x="173" y="528" text-anchor="middle" font-size="12" fill="var(--muted)">rule apps running on your hub</text>
+          <text x="173" y="545" text-anchor="middle" font-size="12" fill="var(--muted)">own history · watchdog · survive restarts</text>
+
+          <!-- Feed back -->
+          <path class="flow-dash" d="M330 391 H352 V131 H336" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="5 5" marker-end="url(#c-arrow-acc)"/>
+          <text x="366" y="261" text-anchor="middle" font-size="12" fill="var(--accent)" transform="rotate(-90 366 261)">what HAI supports</text>
+        </svg>
+        <figcaption>The main path: see your hub in Automation Map, write rules with the HAI Engine, run them on the hub. The dashed boxes and lines are the optional migration.</figcaption>
+      </figure>
+      <div class="connect-notes">
+        <div><h3>The map shows the whole hub</h3><p>Rules you write in HAI appear on the map beside everything else, so you can see what each one touches and what it depends on.</p></div>
+        <div><h3>Every rule goes through the Engine</h3><p>The Engine checks each rule, keeps the draft apart from the live version, and puts it on the hub as its own small app.</p></div>
+        <div><h3>AI proposes, you decide</h3><p>The AI author and MCP tools can only hand the Engine a draft. Putting it on the hub is always a person's choice.</p></div>
+        <div><h3>The map keeps up with HAI</h3><p>HAI publishes a list of what it can do, and Automation Map reads it to show what HAI supports.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Optional migration -->
+  <section class="product optional" id="migration" aria-labelledby="mig-title">
+    <div class="sec-head">
+      <span class="eyebrow">Optional · HAI Migration (HMA)</span>
+      <h2 id="mig-title">Already have Rule Machine rules?</h2>
+      <p>You don't have to move anything. Your Rule Machine rules keep working alongside HAI. If you do want to bring some across, the optional HAI Migration app copies them using Automation Map's scan. Each copy stays stopped until you have tested it, and one click puts Rule Machine back in charge.</p>
+      <p>What a moved rule gains: it reads in plain words, it is checked before it goes live, an AI helper can explain or change it for you, and it keeps its own history of what it did and when.</p>
+    </div>
+    <ol class="mig-steps" aria-label="The ten migration steps">
+      <li>Scan</li><li>Assess</li><li>Batch</li><li>Report</li><li>Select</li>
+      <li>Prerequisites</li><li>Clone</li><li>Test</li><li>Cutover</li><li>Rollback, any time</li>
+    </ol>
+  </section>
+
+  <footer>Examples on this page, such as Hall Light and Front Door, are made up.</footer>
+</div>

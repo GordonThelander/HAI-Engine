@@ -1,0 +1,66 @@
+{
+  "packageName": "HAI Engine (Preview)",
+  "author": "HAI",
+  "version": "0.5.87",
+  "minimumHEVersion": "2.4.0",
+  "dateReleased": "2026-10-16",
+  "documentationLink": "https://github.com/GordonThelander/HAI-Engine/blob/preview/docs/user-guide.md",
+  "communityLink": "",
+  "releaseNotes": "0.5.87-dev - preview build for invited testers. HAI Migration is optional.",
+  "apps": [
+    {
+      "id": "0d9f4c2a-7e31-4f0b-8c6e-2b5a9d1e3f40",
+      "name": "HAI Engine (DEV)",
+      "namespace": "gordonthelander",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/apps/hai_engine_app.groovy",
+      "required": true,
+      "primary": true,
+      "oauth": true
+    },
+    {
+      "id": "5a2e8b17-c9d4-4e63-a1f0-7c3b6d2e9a51",
+      "name": "HAI Rule Container (DEV)",
+      "namespace": "gordonthelander",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/apps/hai_rule_app.groovy",
+      "required": true,
+      "primary": false,
+      "oauth": false
+    },
+    {
+      "id": "9c71d3e5-2b8f-4a06-b4d9-e1f2a3c5b762",
+      "name": "HAI Migration (DEV)",
+      "namespace": "gordonthelander",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/apps/hai_migration_app.groovy",
+      "required": false,
+      "primary": false,
+      "oauth": true
+    }
+  ],
+  "files": [
+    {
+      "id": "e4b1a7c3-6d20-4f58-9e1b-3a7c2d5f8e01",
+      "name": "hai-editor.html",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/file-manager/hai-editor.html"
+    },
+    {
+      "id": "a3c5e7f9-1b2d-4e6a-8c0e-2f4a6c8e0b12",
+      "name": "hai-migration.html",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/file-manager/hai-migration.html"
+    },
+    {
+      "id": "7f1e3d5c-9b0a-4c2e-a6d8-4b2f0e8c6a23",
+      "name": "hai-author-guide.txt",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/file-manager/hai-author-guide.txt"
+    },
+    {
+      "id": "2c4e6a8b-0d1f-4a3c-9e5b-7d9f1b3d5f34",
+      "name": "hai-editor-specs.json",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/file-manager/hai-editor-specs.json"
+    },
+    {
+      "id": "d8f0b2a4-6c1e-4b3d-8f7a-9e1c3a5e7b45",
+      "name": "hai-am-capabilities.json",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/file-manager/hai-am-capabilities.json"
+    }
+  ]
+}
