@@ -726,6 +726,7 @@ table.vars td { padding: 3px 10px 3px 0; border-top: 1px solid var(--border); }
 .blank-way.ai-way.ai-off .ai-badge { background: var(--faint); }
 .ai-off-why { font-size: 12.5px; font-weight: 600; color: var(--block); }
 .ai-off-why a { color: inherit; }
+.ai-off-why.ai-opt { font-weight: 400; color: var(--muted); }
 #btn-ai { border-color: var(--ai); color: var(--ai); background: var(--ai-weak); font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
 #btn-ai:hover { filter: brightness(0.97); }
 #btn-ai.ai-off { border-color: var(--border-strong); color: var(--faint); background: var(--surface-2); border-style: dashed; cursor: not-allowed; filter: none; }
@@ -5084,9 +5085,48 @@ body.form-open { overflow: hidden; }
   // Only text written into a rule, never fetched by this page. Split so the page still holds no literal web
   // address, which TestEditor checks to keep the page self-contained.
   var PAT_WEB = 'https:' + '//';
-  var STARTER_GROUPS = ['Lights', 'Comfort', 'Security and alerts', 'Presence', 'Buttons', 'Advanced'];
+  var STARTER_GROUPS = ['Showcase', 'Lights', 'Comfort', 'Security and alerts', 'Presence', 'Buttons', 'Advanced'];
 
   var STARTERS = [
+    // --- Showcase: one rule that shows most of what HAI can do, first in the list -----------------
+    { id: 'showcase', group: 'Showcase', name: 'Showcase rule',
+      what: 'Welcome home, using much of what HAI can do: two ways to start, AND, OR and NOT, a counted condition, everyday words, a fresh-reading check, a variable kept between runs, which trigger started it, how a wait ended, and putting a light back exactly as it was.',
+      rule: function () { return patRule('Showcase rule: welcome home', {
+        refs: { door: slot('Your front door contact sensor', ['ContactSensor']),
+                who: slot('Your phone presence (who arrives)', ['PresenceSensor']),
+                hall: slot('Your hall light (dimmable, colour temperature)', ['SwitchLevel', 'ColorTemperature']),
+                motion: slot('Your hall movement sensor', ['MotionSensor']),
+                outside: slot('Your outdoor temperature sensor', ['TemperatureMeasurement']),
+                heating: slot('Your thermostat', ['Thermostat']),
+                phone: slot('Your phone (notifications)', ['Notification']),
+                away: patMode('Away'), evening: patMode('Evening'),
+                arrivals: patVar('arrivals', 'Arrivals', 'number', 0) },
+        // Either trigger starts it (OR). It only goes ahead in the evening OR while the house is Away,
+        // AND NOT while someone is already moving in the hall.
+        triggers: [{ kind: 'deviceAttribute', ref: 'door', attribute: 'contact', value: 'open' },
+                   { kind: 'deviceAttribute', ref: 'who', attribute: 'presence', value: 'present' }],
+        conditions: { type: 'all', of: [
+          { type: 'any', of: [{ type: 'timeWindow', from: 'sunset', to: '23:59' }, { type: 'mode', refs: ['away'] }] },
+          { type: 'not', of: patIs('motion', 'motion', 'active') }] },
+        rerunPolicy: 'restart',
+        actions: [
+          { type: 'setVariable', ref: 'arrivals', op: 'add', args: [1] },
+          { type: 'if', condition: { type: 'mode', refs: ['away'] }, then: [{ type: 'setMode', ref: 'evening' }] },
+          { type: 'capture', refs: ['hall'] },
+          { type: 'command', ref: 'hall', command: 'setColorTemperature', args: [2700, 70] },
+          // At least one of: it is cold outside (everyday words, from a reading no older than an hour), or it is late.
+          { type: 'if', condition: { type: 'count', min: 1, of: [
+              { type: 'deviceAttribute', ref: 'outside', attribute: 'temperature', op: 'atMost', value: 4, everyday: 'cold', freshSeconds: 3600 },
+              { type: 'timeWindow', from: '21:00', to: '23:59' }] },
+            then: [{ type: 'command', ref: 'heating', command: 'setHeatingSetpoint', args: [21] }] },
+          { type: 'if', condition: patBy(1), then: [patTell('phone', 'Welcome home. Arrival number %Arrivals%; the hall light is on.')],
+            otherwise: [patTell('phone', 'The front door opened at %time%.')] },
+          { type: 'wait', waitKind: 'until', staysSeconds: 600,
+            predicate: patIs('motion', 'motion', 'inactive'), timeoutSeconds: 3600, onTimeout: 'continue' },
+          { type: 'if', condition: { type: 'waitOutcome', value: 'event' },
+            then: [{ type: 'command', ref: 'hall', command: 'setLevel', args: [20] }],
+            otherwise: [{ type: 'restore', refs: ['hall'] }] }] }); } },
+
     // --- Lights ---------------------------------------------------------------------------------
     { id: 'motion-timeout', group: 'Lights', name: 'Light on movement, off again after a while',
       what: 'A light comes on when a sensor sees movement, and goes off once the movement stops for a few minutes.',
@@ -5399,8 +5439,8 @@ body.form-open { overflow: hidden; }
     // A box that cannot draft is not a button: it holds a link to the Engine page, and a link inside a button is not allowed.
     ways.appendChild(off
       ? h('div', { class: 'blank-way ai-way ai-off', role: 'group', 'aria-disabled': 'true',
-                   onclick: function (e) { if (!(e.target && e.target.closest && e.target.closest('a'))) toast(aiOffText(off), true); } },
-          aiT, aiD, h('span', { class: 'ai-off-why' }, aiOffNodes(off)))
+                   onclick: function (e) { if (!(e.target && e.target.closest && e.target.closest('a'))) toast(aiOffText(off), off.code !== 'nokey'); } },
+          aiT, aiD, h('span', { class: off.code === 'nokey' ? 'ai-off-why ai-opt' : 'ai-off-why' }, aiOffNodes(off)))
       : h('button', { type: 'button', class: 'blank-way ai-way', onclick: function () { $('btn-ai').click(); } }, aiT, aiD));
 
     var pat = h('button', { type: 'button', class: 'blank-way' },
@@ -12458,13 +12498,17 @@ body.form-open { overflow: hidden; }
   // which: change this rule, or write a new one. Amend with AI stays as the element the rest of the page reads.
   // Whether the AI Rule Assistant can draft, from the opening state's `ai`. Null means it can.
   function aiOff() { var a = S && S.ai; return a && a.available === false ? a : null; }
-  function aiOffText(a) { return 'Not available: ' + a.why + '. ' + a.act + ' in HAI Engine \u2192 AI token and cost management.'; }
+  // No key is a choice, not a fault: it reads as optional, in grey. A stored key that cannot draft says why.
+  function aiOffText(a) {
+    if (a.code === 'nokey') return 'Optional: add a Claude API key in HAI Engine \u2192 AI token and cost management to use it.';
+    return 'Not available: ' + a.why + '. ' + a.act + ' in HAI Engine \u2192 AI token and cost management.';
+  }
   // The same words, with HAI Engine as a link to its page when the editor knows it.
   function aiOffNodes(a) {
     if (!(S && S.runtimeUrl)) return aiOffText(a);
-    return [document.createTextNode('Not available: ' + a.why + '. ' + a.act + ' in '),
+    return [document.createTextNode(a.code === 'nokey' ? 'Optional: add a Claude API key in ' : 'Not available: ' + a.why + '. ' + a.act + ' in '),
             h('a', { href: S.runtimeUrl, target: '_blank', rel: 'noopener' }, 'HAI Engine'),
-            document.createTextNode(' \u2192 AI token and cost management.')];
+            document.createTextNode(' \u2192 AI token and cost management' + (a.code === 'nokey' ? ' to use it.' : '.'))];
   }
   // Greyed with its reason, not hidden: the button stays where people look for it and says why it does nothing.
   function paintAi() {
@@ -12477,7 +12521,7 @@ body.form-open { overflow: hidden; }
   }
   if ($('btn-ai')) $('btn-ai').addEventListener('click', function () {
     var off = aiOff();
-    if (off) { toast(aiOffText(off), true); return; }
+    if (off) { toast(aiOffText(off), off.code !== 'nokey'); return; }
     if (!amendable()) { aiAsk(); return; }
     var b = $('btn-ai');
     openPop(b, 'AI Rule Assistant', function (body) {
@@ -12690,6 +12734,17 @@ body.form-open { overflow: hidden; }
       // Live device values from the hub's event socket, where it can open (see sockOpen).
       sockOpen();
       if (wanted) openItem(decodeURIComponent(wanted[1]));
+      // How to edit opens by itself the first time the editor is used in this browser, and again after each
+      // upgrade, so new controls are seen. Remembered per browser; where storage is blocked it simply shows.
+      (function () {
+        var seenKey = 'hai.editor.helpSeen', ver = String(st.app || '');
+        var seen = null;
+        try { seen = localStorage.getItem(seenKey); } catch (e) { /* blocked: show it */ }
+        var hb = $('btn-edit-help');
+        if (seen === ver || !hb || !hb.offsetParent) return;
+        try { localStorage.setItem(seenKey, ver); } catch (e) { /* a convenience only */ }
+        setTimeout(function () { if (!document.querySelector('.pop')) hb.click(); }, 400);
+      })();
       // From a rule's app page on the hub: open the draft that holds that rule.
       if (wantedRule) {
         var rid = decodeURIComponent(wantedRule[1]);
@@ -12703,7 +12758,7 @@ body.form-open { overflow: hidden; }
       $('loading').textContent = '';
       $('loading').setAttribute('role', 'alert');
       append($('loading'), [h('h1', { style: 'font-size:20px;margin:0 0 8px' }, 'The editor could not load'), h('p', {}, err.message),
-        h('p', { class: 'muted' }, 'Open the editor from the link on the HAI Engine (Dev) settings page, which carries the access token.')]);
+        h('p', { class: 'muted' }, 'Open the editor from the link on the HAI Engine settings page, which carries the access token.')]);
     });
   }
   start();

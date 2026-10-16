@@ -197,6 +197,8 @@ every subscriber hears every reply, so match on `id`.
 
 ## MCP server
 
+Off by default: until **Let an AI assistant connect (MCP)** is switched on in HAI Engine, both methods answer 403 `MCP_OFF`.
+
 Endpoint: `/apps/api/<engine app id>/mcp`, over JSON-RPC (MCP protocol versions 2024-11-05, 2025-03-26
 and 2025-06-18).
 

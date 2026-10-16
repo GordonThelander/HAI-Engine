@@ -1,12 +1,12 @@
 {
   "packageName": "HAI Engine (Preview)",
   "author": "HAI",
-  "version": "0.5.87",
+  "version": "0.5.88",
   "minimumHEVersion": "2.4.0",
   "dateReleased": "2026-10-16",
   "documentationLink": "https://github.com/GordonThelander/HAI-Engine/blob/preview/docs/user-guide.md",
   "communityLink": "",
-  "releaseNotes": "0.5.87-dev - preview build for invited testers. HAI Migration is installed and stays off until turned on in HAI Engine.",
+  "releaseNotes": "0.5.88-dev - preview build for invited testers. HAI Migration is installed and stays off until turned on in HAI Engine.",
   "apps": [
     {
       "id": "0d9f4c2a-7e31-4f0b-8c6e-2b5a9d1e3f40",

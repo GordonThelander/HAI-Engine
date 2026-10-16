@@ -55,7 +55,7 @@ path('/endpoint/variables/:name/:value') { action: [GET: 'endpointVariableGet'] 
 }
 @Field static final String HAI_ENVIRONMENT = 'PREVIEW'
 @Field static final String HAI_COMMUNITY_URL = ''
-@Field static final String HAI_ISSUES_URL = ''
+@Field static final String HAI_ISSUES_URL = 'https://github.com/GordonThelander/HAI-Engine/issues/new/choose'
 @Field static final String CLAUDE_KEYS_URL = 'https://platform.claude.com/settings/keys'
 @Field static final Map HAI_ROUTE_AUDIENCE = [
 '/automation-map'                  : 'feed',
@@ -245,9 +245,9 @@ return EVERYDAY_DEFAULTS.containsKey(level) ? EVERYDAY_DEFAULTS.get(level) : EVE
 }
 String haiVersion() { return ENGINE_APP_VERSION.replace('-dev', '') }
 String haiHelpLine() {
-String thread = HAI_COMMUNITY_URL ? "<a href='${HAI_COMMUNITY_URL}' target='_blank'>HAI community thread</a>" : 'HAI community thread (link to come)'
-String issue = HAI_ISSUES_URL ? "<a href='${HAI_ISSUES_URL}' target='_blank'>Issue</a>" : 'Issue (link to come)'
-return "<small>Need help or found a problem? Visit the ${thread} for community discussion or raise an ${issue} on GitHub.</small>".toString()
+String report = "<a href='${HAI_ISSUES_URL}' target='_blank'>report it or give feedback on GitHub</a>"
+String thread = HAI_COMMUNITY_URL ? ", or ask in the <a href='${HAI_COMMUNITY_URL}' target='_blank'>HAI community thread</a>" : ''
+return "<small>Need help or found a problem? ${report}${thread}.</small>".toString()
 }
 def appButtonHandler(String btn) {
 if (btn == null) return
@@ -306,7 +306,7 @@ paragraph "<b style='color:#b00020'>HAI Engine is already on this hub (app ${hai
 }
 }
 Map haiAi = haiAiStatus()
-if (haiAi.available != true) {
+if (haiAi.available != true && haiAi.code != 'nokey') {
 section() {
 paragraph "<b style='color:#b00020'>AI Rule Assistant is off: ${esc(haiAi.why as String)}.</b> ${esc(haiAi.act as String)} under AI token and cost management."
 }
@@ -343,7 +343,6 @@ if (haiAllNew && haiAll.count) section() { paragraph "<b>HAI can use all ${haiAl
 section(haiPermissionTitle('Approved devices:', "(${haiDeviceCount})"),
 hideable: true, hidden: haiDeviceCount > 0) {
 if (haiAllNew && haiAll.error) paragraph "<b>HAI could not read this hub's device list (${haiAll.error}), so no device is approved yet.</b> Select the devices your rules may use."
-paragraph "<small style='color:#b00020'>The one permission HAI asks for. A rule may use any device you select here, with any command its driver offers.</small>"
 input 'runtimeAllowDevices', 'capability.*', title: 'Devices', multiple: true, required: false, submitOnChange: true
 input 'haiAutoApproveNew', 'bool', title: 'Approve new devices automatically', defaultValue: true, submitOnChange: true
 paragraph '<small>When this is on, a Z-Wave or Zigbee device you pair with the hub is added to Approved devices as soon as the hub reports it joined. ' +
@@ -366,8 +365,9 @@ input 'haiDeactivateTarget', 'enum', title: 'Rule', options: runtimeRuleOptions(
 if (settings.haiDeactivateTarget) input 'haiDeactivate', 'button', title: 'Deactivate'
 }
 Long aiTestAt = (state.engineKeyTest instanceof Map ? ((Map) state.engineKeyTest).at : null) as Long
-boolean aiOpen = !engineHasKey() || state.engineSpendStop || (aiTestAt != null && now() - aiTestAt < 120000L)
+boolean aiOpen = (haiAi.available != true && haiAi.code != 'nokey') || (aiTestAt != null && now() - aiTestAt < 120000L)
 section('AI token and cost management', hideable: true, hidden: !aiOpen) {
+if (!engineHasKey()) paragraph "<small>Optional. HAI works fully without it. Add your own Claude API key here if you want the AI Rule Assistant to draft rules from plain words.</small>"
 input 'engineApiKey', 'password', required: false,
 title: state.engineKeyTail ? "Claude API key - one ending ...${state.engineKeyTail} is stored. Type a new one to replace it.".toString()
 : 'Claude API key (stored on this hub only)'
@@ -427,7 +427,12 @@ section('MCP endpoint', hideable: true, hidden: true) {
 paragraph 'Connect an AI assistant, such as Claude Desktop, so you can describe a rule in a conversation and have it written for you. ' +
 'The assistant can see your approved devices and your rules, and send HAI a rule to check. HAI checks it, reads it back in plain English, ' +
 "and keeps it as a draft in the editor for you to review. The assistant can't turn a rule on or run one; only you can, in the editor."
-if (state.accessToken) {
+input 'haiMcpOn', 'bool', title: 'Let an AI assistant connect (MCP)', defaultValue: false, submitOnChange: true
+if (settings.haiMcpOn != true) {
+paragraph '<small>Off: nothing can connect. Turn it on to show the address to give your AI assistant.</small>'
+} else if (!state.accessToken) {
+paragraph '<small>Press Done to create the address.</small>'
+} else {
 paragraph "<code>${getFullLocalApiServerUrl()}/mcp?access_token=${state.accessToken}&aud=${haiAudienceSecret('mcp')}</code>"
 paragraph '<small><b>Technical:</b> add this address as an MCP server (Streamable HTTP) in your AI client. It offers <code>hai_describe</code> (the rule format and your devices), ' +
 '<code>hai_propose_rule</code> (check, read back and simulate a draft), <code>hai_get_rule</code> and <code>hai_render_rule</code>. ' +
@@ -440,8 +445,8 @@ paragraph 'Use this if you think someone has a link to HAI they should not have,
 paragraph 'This does not change the AI API key under AI token and cost management. It changes only the links and token used by apps and pages on your home network.'
 paragraph '<b style="color:#c62828">What stops working until you update it:</b> bookmarks and saved links to the HAI editor, editor pages you already have open, ' +
 'and any dashboard, shortcut, AI assistant or other app that controls HAI.'
-paragraph '<span style="color:#1565c0"><b>What you need to do after changing it:</b> open the editor from this page again, ' +
-'and copy the new links and token shown on this page to wherever you use them.</span>'
+paragraph '<b style="color:#1565c0">What you need to do after changing it:</b> open the editor from this page again, ' +
+'and copy the new links and token shown on this page to wherever you use them.'
 paragraph '<b>Technical</b>'
 paragraph '<small>The editor, end point and MCP addresses, the API token for other apps and the Rule Machine Migration address all change at once. ' +
 'After you press it, editor tabs that are open, saved links and bookmarks, dashboard buttons and shortcuts that use the end point address, ' +
@@ -517,7 +522,7 @@ Object last = state.runtimeAnnouncedAt
 String when = last == null ? 'not yet' : runtimeClock().call(last as long)
 return "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT}). ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
 }
-@Field static final String ENGINE_APP_VERSION = '0.5.87-dev'
+@Field static final String ENGINE_APP_VERSION = '0.5.88-dev'
 @Field static final int ENGINE_MAX_PROPOSALS = 20
 @Field static final java.util.concurrent.ConcurrentHashMap ENGINE_DRAFT_INV = new java.util.concurrent.ConcurrentHashMap()
 @Field static final int ENGINE_MAX_ATTRIBUTES = 64
@@ -1128,12 +1133,18 @@ return "${period}: US\$${String.format('%.2f', monthUsd)} (reservations included
 String esc(Object s) {
 return (s == null ? '' : s.toString()).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 }
+Object mcpOff() {
+return render(status: 403, contentType: 'application/json', headers: ['Cache-Control': 'no-store'],
+data: groovy.json.JsonOutput.toJson([ok: false, error: 'MCP_OFF', message: 'The MCP endpoint is turned off on the HAI Engine page.']))
+}
 def mcpGet() {
 if (!haiAudienceOk('/mcp')) return haiRefuse('/mcp')
+if (settings.haiMcpOn != true) return mcpOff()
 render(status: 405, contentType: 'text/plain', data: 'This server does not offer a server-to-client stream.')
 }
 def mcpPost() {
 if (!haiAudienceOk('/mcp')) return haiRefuse('/mcp')
+if (settings.haiMcpOn != true) return mcpOff()
 String raw = null
 try { raw = request.body as String } catch (Exception e) { raw = null }
 if (raw == null) return mcpRender(null, null, mcpError(-32700, 'Parse error', 'the request had no body'))
@@ -11130,7 +11141,7 @@ note: 'the hub may not end a request exactly at its timeout']
 @Field static final String EDITOR_EFFECTS = 'Save draft keeps this rule here, in the editor, and changes nothing on the hub. Put on hub is the one that puts it live, and HAI checks it before it runs. Run now runs it there and then.'
 @Field static final String EDITOR_CHECK_LABEL = 'Checked by the hub in the editor. This is not an AI proposal, and nothing was stored.'
 @Field static final String EDITOR_PAGE_FILE = 'hai-editor.html'
-@Field static final String EDITOR_PAGE_SHA256 = '28ea58490c044f9d7f00ce60805ba4214224014dab0e3612449b67f3630f7813'
+@Field static final String EDITOR_PAGE_SHA256 = '3eb5d11221ce454dbb365fa166634f6330345a0371e70a3c2f9caa77934ace15'
 @Field static final String EDITOR_SPECS_FILE = 'hai-editor-specs.json'
 @Field static final String EDITOR_SPECS_SHA256 = 'bf549b1316d42380482af8aa1a2030936728d6058f8b2a017266f3f552106ba8'
 @Field static final List EDITOR_DEVICE_CLASSES = [
