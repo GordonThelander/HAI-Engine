@@ -134,9 +134,9 @@ Three hub apps, each assembled from one entry file plus libraries:
 
 | App | Entry | Role | Built size (`dist/`) |
 |---|---|---|---|
-| **HAI Engine (DEV)** | `engine/app/hai_engine_app.groovy` | Parent. Settings page with the device picker (Approved devices), the editor and its signed API, the AI author, the MCP server, the rule endpoints, the Automation Map feed, and the runtime parent: registry, activation review, staging, the watchdog, the summary, rule backups. | about 720 KB |
-| **HAI Rule Container (DEV)** | `engine/m5/hai_rule_app.groovy` | One child per rule. Holds the rule's state, subscribes to what it needs, runs it. Compiled once and shared by every rule. | about 265 KB |
-| **HAI Migration (DEV)** | `engine/app/hai_migration_app.groovy` | Optional child of the Engine. Migration page and its API, decode reader, converter, migration steps. | about 220 KB |
+| **HAI Engine (Preview)** | `engine/app/hai_engine_app.groovy` | Parent. Settings page with the device picker (Approved devices), the editor and its signed API, the AI author, the MCP server, the rule endpoints, the Automation Map feed, and the runtime parent: registry, activation review, staging, the watchdog, the summary, rule backups. | about 720 KB |
+| **HAI Rule Container (Preview)** | `engine/m5/hai_rule_app.groovy` | One child per rule. Holds the rule's state, subscribes to what it needs, runs it. Compiled once and shared by every rule. | about 265 KB |
+| **HAI Migration (Preview)** | `engine/app/hai_migration_app.groovy` | Optional child of the Engine. Migration page and its API, decode reader, converter, migration steps. | about 220 KB |
 
 Pages are not in the Groovy. The editor (`engine/app/editor/editor.html`, about 850 KB), its fixed tables
 (`specs.json`, uploaded as `hai-editor-specs.json`), the AI guide (`hai-author-guide.txt`) and the migration

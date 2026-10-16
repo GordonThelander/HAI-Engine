@@ -36,9 +36,10 @@ For a one-page picture of Automation Map, the HAI Engine and the optional migrat
 
 ## Installing HAI
 
-HAI is a preview. Each preview comes as one folder, `HAI-Preview-<version>`, with an `INSTALL.md` that
-gives these same steps. You need a Hubitat hub on firmware 2.4 or later and a web browser; nothing else.
-HAI is not in Hubitat Package Manager, and on a preview build the app names end in "(DEV)". Optional AI
+HAI is a preview, published on the `preview` branch of the HAI-Engine repository on GitHub, with an
+`INSTALL.md` that gives these same steps. You need a Hubitat hub on firmware 2.4 or later and a web browser;
+nothing else. Install through Hubitat Package Manager or by hand; on a preview build the app names end in
+"(Preview)". Optional AI
 drafting sends rule-authoring context to Anthropic, as described under
 [Drafting with AI and privacy](#drafting-with-ai-and-privacy).
 

@@ -12,7 +12,7 @@ import groovy.json.JsonSlurper
 
 @Field static final String HAI_CHANNEL = 'dev'
 definition(
-name: 'HAI Engine (DEV)',
+name: 'HAI Engine (Preview)',
 namespace: 'gordonthelander',
 author: 'HAI',
 description: 'Writes, checks, simulates and runs automation rules. One app; each rule gets its own child.',
@@ -53,7 +53,7 @@ path('/endpoint/rules/:id/:op') { action: [GET: 'endpointRuleGet', POST: 'endpoi
 path('/endpoint/rules/:id/:op/:value') { action: [GET: 'endpointRuleGet', POST: 'endpointRuleGet'] }
 path('/endpoint/variables/:name/:value') { action: [GET: 'endpointVariableGet'] }
 }
-@Field static final String HAI_ENVIRONMENT = 'DEV'
+@Field static final String HAI_ENVIRONMENT = 'PREVIEW'
 @Field static final String HAI_COMMUNITY_URL = ''
 @Field static final String HAI_ISSUES_URL = ''
 @Field static final String CLAUDE_KEYS_URL = 'https://platform.claude.com/settings/keys'
@@ -1334,7 +1334,7 @@ return render(status: 200, contentType: 'text/html', data: page,
 headers: ['Cache-Control': current ? 'private, max-age=31536000, immutable' : 'no-store, must-revalidate'])
 }
 @Field static final String HAI_REPORT_URL = 'https://github.com/GordonThelander/HAI-Engine/issues/new/choose'
-@Field static final String MIGRATION_CHILD_NAME = 'HAI Migration (DEV)'
+@Field static final String MIGRATION_CHILD_NAME = 'HAI Migration (Preview)'
 @Field static final int MIGRATION_CONTRACT = 2
 def haiMigrationChild() {
 return getChildApps()?.find { it.name == MIGRATION_CHILD_NAME }
@@ -2109,7 +2109,7 @@ log.warn "HAI Engine editor: no check receipt (${e.message})"
 return null
 }
 }
-@Field static final String RUNTIME_CHILD_NAME = 'HAI Rule Container (DEV)'
+@Field static final String RUNTIME_CHILD_NAME = 'HAI Rule Container (Preview)'
 def uninstalled() {
 unschedule()
 ENGINE_FILED.each { String n -> try { deleteHubFile(engineFiledFile(n)) } catch (Exception ignored) { } }
@@ -11130,7 +11130,7 @@ note: 'the hub may not end a request exactly at its timeout']
 @Field static final String EDITOR_EFFECTS = 'Save draft keeps this rule here, in the editor, and changes nothing on the hub. Put on hub is the one that puts it live, and HAI checks it before it runs. Run now runs it there and then.'
 @Field static final String EDITOR_CHECK_LABEL = 'Checked by the hub in the editor. This is not an AI proposal, and nothing was stored.'
 @Field static final String EDITOR_PAGE_FILE = 'hai-editor.html'
-@Field static final String EDITOR_PAGE_SHA256 = '9f53d154d7e7ab207b0d82a7c633f42ef230968b37e479e99c63290b8eaa0a4d'
+@Field static final String EDITOR_PAGE_SHA256 = '28ea58490c044f9d7f00ce60805ba4214224014dab0e3612449b67f3630f7813'
 @Field static final String EDITOR_SPECS_FILE = 'hai-editor-specs.json'
 @Field static final String EDITOR_SPECS_SHA256 = 'bf549b1316d42380482af8aa1a2030936728d6058f8b2a017266f3f552106ba8'
 @Field static final List EDITOR_DEVICE_CLASSES = [

@@ -11,7 +11,7 @@ What is in this folder:
 - `file-manager/` - five files HAI's pages need, already named as the hub must hold them.
 - `VERSION` - the version these files belong to. Every file here must come from the same version.
 
-You need a Hubitat hub on firmware 2.4 or later. On a preview build the app names end in "(DEV)".
+You need a Hubitat hub on firmware 2.4 or later. On a preview build the app names end in "(Preview)".
 
 ## The easy way: Hubitat Package Manager
 

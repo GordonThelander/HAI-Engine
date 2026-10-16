@@ -278,7 +278,7 @@ looks wrong, is worth more as a report than as a patch on the consumer's side.
 
 ## Automation Map feed
 
-`GET /apps/api/<HAI Engine app id>/automation-map?access_token=<token>`, served by **HAI Engine (DEV)**
+`GET /apps/api/<HAI Engine app id>/automation-map?access_token=<token>`, served by **HAI Engine (Preview)**
 with its access token. It is read-only: it builds the answer from the registry's rule documents and changes nothing.
 It is the one engine route that needs no audience secret (`aud`), because a sibling app already consumes it
 (`haiAudienceOk`). Automation Map does not call it: it reads the Engine's
@@ -290,7 +290,7 @@ address. An app calling the hub's own LAN IP on port 80 does not get through (th
 call returns 408); the loopback address on port 8080 is the hub's own web server. This applies to every
 endpoint on this page, and to a rule's own `http` step calling back into the same hub.
 
-Each HAI rule is a child app of type **HAI Rule Container (DEV)**, a child of HAI Engine (DEV), so its node id is its installed app id. Contract `hai.am/1`, in
+Each HAI rule is a child app of type **HAI Rule Container (Preview)**, a child of HAI Engine (Preview), so its node id is its installed app id. Contract `hai.am/1`, in
 Automation Map's own graph shape:
 
 ```

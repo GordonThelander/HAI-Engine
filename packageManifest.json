@@ -10,7 +10,7 @@
   "apps": [
     {
       "id": "0d9f4c2a-7e31-4f0b-8c6e-2b5a9d1e3f40",
-      "name": "HAI Engine (DEV)",
+      "name": "HAI Engine (Preview)",
       "namespace": "gordonthelander",
       "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/apps/hai_engine_app.groovy",
       "required": true,
@@ -19,7 +19,7 @@
     },
     {
       "id": "5a2e8b17-c9d4-4e63-a1f0-7c3b6d2e9a51",
-      "name": "HAI Rule Container (DEV)",
+      "name": "HAI Rule Container (Preview)",
       "namespace": "gordonthelander",
       "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/apps/hai_rule_app.groovy",
       "required": true,
@@ -28,7 +28,7 @@
     },
     {
       "id": "9c71d3e5-2b8f-4a06-b4d9-e1f2a3c5b762",
-      "name": "HAI Migration (DEV)",
+      "name": "HAI Migration (Preview)",
       "namespace": "gordonthelander",
       "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/apps/hai_migration_app.groovy",
       "required": false,

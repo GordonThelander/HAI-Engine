@@ -10,12 +10,12 @@ import java.time.ZoneId
 import java.time.Instant
 
 definition(
-name: 'HAI Rule Container (DEV)',
+name: 'HAI Rule Container (Preview)',
 namespace: 'gordonthelander',
 author: 'HAI',
 description: 'Dev only. One HAI rule: it owns its definition, its subscriptions, its schedules and its state.',
 category: 'Automations',
-parent: 'gordonthelander:HAI Engine (DEV)',
+parent: 'gordonthelander:HAI Engine (Preview)',
 iconUrl: '',
 iconX2Url: '',
 singleThreaded: true

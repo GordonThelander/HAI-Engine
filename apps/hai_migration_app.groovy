@@ -9,12 +9,12 @@ import java.time.ZoneId
 import java.time.Instant
 
 definition(
-name: 'HAI Migration (DEV)',
+name: 'HAI Migration (Preview)',
 namespace: 'gordonthelander',
 author: 'HAI',
 description: 'Copies Rule Machine 5.1 rules into HAI Engine, with switch over and switch back. Optional.',
 category: 'Automations',
-parent: 'gordonthelander:HAI Engine (DEV)',
+parent: 'gordonthelander:HAI Engine (Preview)',
 iconUrl: '',
 iconX2Url: '',
 singleThreaded: true,
@@ -155,7 +155,7 @@ return render(status: 200, contentType: 'application/json', data: groovy.json.Js
 }
 def migrationMainPage() {
 migrationInit()
-dynamicPage(name: 'migrationMainPage', title: 'HAI Migration (DEV)', install: true, uninstall: true) {
+dynamicPage(name: 'migrationMainPage', title: 'HAI Migration (Preview)', install: true, uninstall: true) {
 section('Rule Machine') {
 if (state.accessToken) {
 href name: 'haiMigrationHref', title: 'Rule Machine Migration Facility', required: false,
