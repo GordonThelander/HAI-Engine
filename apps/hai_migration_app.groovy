@@ -920,7 +920,7 @@ return "the trigger \"${said}\"".toString()
 @Field static final int MIG_CONFIRM_TRIES = 3
 @Field static final long MIG_CONFIRM_GAP_MS = 250L
 @Field static final String MIGRATION_PAGE_FILE = 'hai-migration.html'
-@Field static final String MIGRATION_PAGE_SHA256 = '99497d81a640e4ff66cf058b72859c150bbca9dcb264af2a815e2184c5067be6'
+@Field static final String MIGRATION_PAGE_SHA256 = 'cea8068a870be1db1955f16f25f91020e40d7f6453d9f1fe7e5fa51d9a1133e4'
 @Field static final String MIG_PROV_OK = 'ok'
 @Field static final String MIG_PROV_PARTIAL = 'partial'
 @Field static final String MIG_PROV_ABSENT = 'absent'
@@ -1341,7 +1341,7 @@ out.switchBack = cloned && row.rmPaused == null
 ? migOp(false, 'The HAI copy this rule was paired with is gone, so there is nothing to switch back from.')
 : migOp(false, 'There is no HAI copy of this rule, so nothing was switched over.')
 out.deleteClone = held
-? migOp(false, 'This copy was never put on the hub, so there is nothing running to delete. Copy again replaces it.')
+? migOp(true, null)
 : cloned && (row.phase == 'switched' || row.live == MIG_LIVE_HAI)
 ? migOp(false, 'The HAI copy is the one doing this rule\'s job. Switch back first, then delete the copy.')
 : cloned
@@ -1395,6 +1395,7 @@ return [ok: false, op: 'clone', code: 'MIGRATION_HUB_POWER', phase: 'rebuild',
 message: 'Not copied: this rule reboots or shuts down your hub. Open its row and tick "Copy it anyway" ' +
 'if you want the HAI copy to do the same, then press Copy.']
 }
+made.doc = migDropNullFields(made.doc)
 Map kept = migCall(plat, 'importRule', [doc: made.doc])
 if (kept?.ok != true) {
 return [ok: false, op: 'clone', code: (kept?.code as String) ?: 'MIGRATION_IMPORT',
@@ -1408,6 +1409,11 @@ String note = skipped.isEmpty() ? '' :
 Map stopped = plat?.containsKey('activateStopped') ? migCall(plat, 'activateStopped', [candidateId: kept.candidateId]) : null
 boolean unconfirmed = stopped != null && stopped.ok != true && stopped.unconfirmed == true
 boolean refused = stopped != null && stopped.ok != true && !unconfirmed
+if (refused) {
+try { migCall(plat, 'haiRuleOp', [ruleId: made.doc?.id, op: 'remove']) } catch (Exception ignored) { }
+return [ok: false, op: 'clone', code: (stopped.code as String) ?: 'MIGRATION_REFUSED', phase: 'activate',
+message: ('Not cloned: ' + ((stopped.message ?: stopped.code ?: 'the hub refused the copy') as String)).toString()]
+}
 String held = refused ?
 (" It is held for review rather than set up on the hub (${stopped.message ?: stopped.code ?: 'no reason given'}); " +
 'Switch over starts it.').toString() : ''
@@ -1457,6 +1463,15 @@ parts << ("${notSelected.size() == 1 ? 'This device is' : 'These devices are'} n
 parts.addAll(other.take(3))
 if (other.size() > 3) parts << "and ${other.size() - 3} more".toString()
 return parts.join('; ')
+}
+Object migDropNullFields(Object v) {
+if (v instanceof Map) {
+Map out = [:]
+((Map) v).each { k, x -> if (x != null) out.put(k, migDropNullFields(x)) }
+return out
+}
+if (v instanceof List) return ((List) v).collect { migDropNullFields(it) }
+return v
 }
 Map migSwitch(Map row, Map plat, boolean toHai) {
 String op = toHai ? 'switchOver' : 'switchBack'

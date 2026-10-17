@@ -541,7 +541,7 @@ Object last = state.runtimeAnnouncedAt
 String when = last == null ? 'not yet' : runtimeClock().call(last as long)
 return "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT}). ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
 }
-@Field static final String ENGINE_APP_VERSION = '0.5.101-dev'
+@Field static final String ENGINE_APP_VERSION = '0.5.103-dev'
 @Field static final int ENGINE_MAX_PROPOSALS = 20
 @Field static final java.util.concurrent.ConcurrentHashMap ENGINE_DRAFT_INV = new java.util.concurrent.ConcurrentHashMap()
 @Field static final int ENGINE_MAX_ATTRIBUTES = 64
@@ -1549,7 +1549,9 @@ if (resp?.status == 200) paused = rtRmPausedFrom(resp.data)
 return paused
 },
 importRule : { Map c ->
-Map kept = rtImportDoc(runtimePlat(), c.doc)
+Map kept
+try { kept = rtImportDoc(runtimePlat(), c.doc) }
+catch (Exception ex) { return [ok: false, code: 'MIGRATION_IMPORT', message: "HAI could not store this copy (${ex.message})".toString()] }
 return kept.ok == true
 ? [ok: true, candidateId: ((Map) kept.candidate)?.id, message: kept.message]
 : [ok: false, code: (kept.code as String) ?: 'MIGRATION_IMPORT', message: kept.message as String]
@@ -12765,6 +12767,17 @@ if (all.size() >= RT_MAX_CANDIDATES) {
 int had = all.size()
 all = rtPruneAged(pp, all)
 freed = freed || all.size() != had
+}
+if (all.size() >= RT_MAX_CANDIDATES) {
+Set busy = ((Map) rtChallenges(pp)).values().findAll { ((Map) it).state in ['open', 'claimed'] }
+.collect { ((Map) it).candidateId as String } as Set
+Object oldest = all.findAll { ((Map) it).held instanceof Map && !busy.contains(((Map) it).id as String) }
+.min { (((Map) it).importedAt ?: 0) as long }
+if (oldest != null) {
+all = all.findAll { !it.is(oldest) }
+freed = true
+rtLog(pp, [what: 'heldCopyGaveWay', ruleId: ((Map) oldest).ruleId])
+}
 }
 if (all.size() >= RT_MAX_CANDIDATES) {
 if (freed) rtpPut(pp, RT_CANDIDATES_KEY, all)

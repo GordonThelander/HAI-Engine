@@ -762,7 +762,8 @@ function renderCut(all) {
   var rows = all.filter(shown);
   var ok = rows.filter(function (r) { return !cutStatus(r); });
   var h = '<div class="sh"><h2 id="hCut">3. Cut over<span class="n">' + plural(all.length, 'copy', 'copies') + ' paused on HAI</span></h2>' +
-    (all.length ? '<button type="button" class="primary" id="cutGo"' + (n && !WORKING ? '' : ' disabled') + '>Cut over ' + n + '</button>' : '') + '</div>';
+    (all.length ? '<button type="button" id="cutDel"' + (n && !WORKING ? '' : ' disabled') + '>Delete ' + n + '</button> ' +
+                  '<button type="button" class="primary" id="cutGo"' + (n && !WORKING ? '' : ' disabled') + '>Cut over ' + n + '</button>' : '') + '</div>';
   if (!all.length) { el.innerHTML = h + '<p class="none">Nothing cloned yet.</p>' + msgHtml('cut'); return; }
   if (!rows.length) { el.innerHTML = h + noMatch() + msgHtml('cut'); return; }
   var allOn = ok.length && ok.every(function (r) { return CUT[r.rmId]; });
@@ -836,6 +837,15 @@ function wire() {
   if (cg) cg.onclick = function () { runAll('clone', ROWS.filter(function (r) { return SEL[r.rmId] && cloneReady(r); }), 'clone'); };
   var cu = document.getElementById('cutGo');
   if (cu) cu.onclick = function () { runAll('switchOver', ROWS.filter(function (r) { return CUT[r.rmId]; }), 'cut'); };
+  // Bulk delete of the ticked copies (17 October). The Rule Machine rules are not touched.
+  var cd = document.getElementById('cutDel');
+  if (cd) cd.onclick = function () {
+    var picked = ROWS.filter(function (r) { return CUT[r.rmId]; });
+    if (picked.length && window.confirm('Delete ' + plural(picked.length, 'HAI copy', 'HAI copies') + '? The Rule Machine rules are not changed.')) {
+      runAll('deleteClone', picked, 'cut');
+      picked.forEach(function (r) { delete CUT[r.rmId]; });
+    }
+  };
   all('[data-back]', function (b) { b.onclick = function () { var k = b.getAttribute('data-back'); runAll('switchBack', ROWS.filter(function (r) { return r.rmId === k; }), 'back'); }; });
   all('[data-backbatch]', function (b) {
     b.onclick = function () {
@@ -869,6 +879,7 @@ function runAll(op, rules, where) {
   }
   var done = 0;
   var failed = [];
+  var started = Date.now();
   var names = {};
   rules.forEach(function (r) { names[r.rmId] = r.rmName; });
   WORKING = true;
@@ -881,8 +892,21 @@ function runAll(op, rules, where) {
     if (!queue.length) {
       WORKING = false;
       var w = WORDS[op];
+      // Grouped by reason, a few names each: one line per reason, not one per rule (17 October: a wall of red
+      // repeating the same reason for 76 rules).
+      var groups = {};
+      var order = [];
+      failed.forEach(function (f) {
+        f.why = String(f.why).replace(/[.!?]+$/, '');
+        if (!groups[f.why]) { groups[f.why] = []; order.push(f.why); }
+        groups[f.why].push(f.name);
+      });
+      var notDone = order.map(function (why) {
+        var n = groups[why];
+        return esc(why) + ': ' + n.slice(0, 5).map(function (x) { return esc(x); }).join(', ') + (n.length > 5 ? ' and ' + (n.length - 5) + ' more' : '');
+      });
       var said = (done ? (done === 1 && rules.length === 1 ? esc(rules[0].rmName || 'The rule') : plural(done, 'rule', 'rules')) + ' ' + w[0] + '.' + (w[1] ? ' Now ' + w[1] + '.' : '') : '') +
-        (failed.length ? ' Not done: ' + failed.map(function (f) { return esc(f); }).join('; ') : '');
+        (failed.length ? ' ' + failed.length + ' not done. ' + notDone.join('. ') + '.' : '');
       bar(failed.length ? 'err' : 'ok', said.trim() || 'Nothing was done.');
       if (op === 'clone') rules.forEach(function (r) { delete SEL[r.rmId]; });
       if (op === 'switchOver') rules.forEach(function (r) { delete CUT[r.rmId]; });
@@ -890,18 +914,28 @@ function runAll(op, rules, where) {
       return;
     }
     var body = queue.shift();
-    if (rules.length > 1) bar('work', (DOING[op] || 'Working on ') + who + '… ' + (done + failed.length) + ' of ' + rules.length + ' done.');
+    // Done and not done counted apart, with what is left: "72 of 132 done" once counted refusals as done.
+    // Time left from this run's own pace, so a person knows how long N rules take on their hub.
+    var left = rules.length - done - failed.length;
+    var spent = (Date.now() - started) / 1000;
+    var each = done + failed.length ? spent / (done + failed.length) : 0;
+    var eta = each ? ' About ' + (left * each < 90 ? Math.max(1, Math.round(left * each)) + ' seconds' : Math.round(left * each / 60) + ' minutes') + ' left.' : '';
+    if (rules.length > 1) bar('work', (DOING[op] || 'Working on ') + who + '… ' + done + ' done, ' + failed.length + ' not done, ' +
+      left + ' to go.' + eta);
     q('/migration/api/apply', body).then(function (out) {
       if (out && out.done instanceof Array) {
         done += out.done.length;
-        (out.failed || []).concat(out.notAttempted || []).forEach(function (f) { failed.push((f.rmName || names[f.rmId] || f.rmId) + ' (' + first(f.message || 'no reason given') + ')'); });
+        (out.failed || []).concat(out.notAttempted || []).forEach(function (f) { failed.push({name: f.rmName || names[f.rmId] || f.rmId, why: first(f.message || 'no reason given')}); });
       } else if (out && out.ok === true) {
         done += 1;
       } else {
-        failed.push((names[body.rmId] || (body.rmIds || []).map(function (k) { return names[k]; }).join(', ')) + ' (' + first((out && out.message) || 'The hub did not say why.') + ')');
+        (body.rmIds || [body.rmId]).forEach(function (k) { failed.push({name: names[k] || k, why: first((out && out.message) || 'The hub did not say why.')}); });
       }
       next();
-    }).catch(function (e) { failed.push(first(e.message)); next(); });
+    }).catch(function (e) {
+      (body.rmIds || [body.rmId]).forEach(function (k) { failed.push({name: names[k] || k, why: first(e.message || 'The hub did not answer.')}); });
+      next();
+    });
   };
   next();
 }
