@@ -189,10 +189,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .checking.error { color: var(--block); }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .checking .spin { animation: none; } .flash { animation: none !important; } }
-.ai-progress { display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: var(--accent-weak); border-bottom: 2px solid var(--accent); color: var(--text); font-weight: 600; }
+.ai-progress { display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: var(--ai-weak); border-bottom: 2px solid var(--ai); color: var(--text); font-weight: 600; }
 .ai-progress[hidden] { display: none; }
-.ai-progress .spin { width: 22px; height: 22px; flex: 0 0 22px; border: 3px solid var(--border-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
-@media (prefers-reduced-motion: reduce) { .ai-progress .spin { animation: none; border-color: var(--accent); } }
+.ai-progress .spin { width: 22px; height: 22px; flex: 0 0 22px; border: 3px solid var(--border-strong); border-top-color: var(--ai); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .ai-progress .spin { animation: none; border-color: var(--ai); } }
 
 .chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px 3px 8px; font-size: 12.5px; font-weight: 600; white-space: nowrap; background: var(--surface-2); color: var(--muted); }
 .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -857,6 +857,7 @@ body.no-hints .choice-hint.essential { display: block; }
 .menu-item.warning { color: var(--warn); }
 
 .toast { display: flex; align-items: center; gap: 14px; border-radius: 12px; padding: 10px 12px 10px 16px; }
+.toast-ai { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--ai); color: var(--ai-text); border-radius: 12px; padding: 14px 22px; font-size: 15px; font-weight: 650; max-width: calc(100vw - 32px); z-index: 51; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25); text-align: center; }
 .toast-act { border: 0; background: transparent; color: var(--accent-weak); font-weight: 700; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
 @media (prefers-color-scheme: dark) { .toast-act { color: var(--accent-text); } }
 .toast-act:hover { text-decoration: underline; }
@@ -1236,6 +1237,7 @@ body.form-open { overflow: hidden; }
         <button id="btn-delete" class="btn ghost danger in-menu" type="button">Delete</button>
         <button id="btn-more" class="btn more-btn" type="button" aria-label="More" aria-haspopup="menu"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><circle cx="3.5" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="12.5" cy="8" r="1.4"/></svg><span class="more-word">More</span></button>
         <button id="btn-edit-help" class="icon-btn help-btn" type="button" aria-label="Help: how to edit a rule" aria-haspopup="dialog" title="Help: how to edit a rule"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.3-2.8 4" fill="none" stroke="var(--surface)" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17.6" r="1.35" fill="var(--surface)"/></svg></button>
+        <button id="btn-close-editor" class="btn" type="button" title="Back to the HAI Engine page">Close editor</button>
       </div>
     </div>
     <div class="safety">
@@ -1475,6 +1477,14 @@ body.form-open { overflow: hidden; }
     document.body.appendChild(t);
     setTimeout(function () { t.remove(); }, isError ? 7000 : 3200);
     $('live').textContent = msg;
+  }
+  // The AI cost message: its own element, so the ordinary message beside it stays, centred and in the AI colour.
+  function toastAi(msg) {
+    var old = document.querySelector('.toast-ai');
+    if (old) old.remove();
+    var t = h('div', { class: 'toast-ai', role: 'status' }, msg);
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 6000);
   }
   var ICON = {
     up: '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 4.5 13 9.5l-1.06 1.06L8 6.62l-3.94 3.94L3 9.5z"/></svg>',
@@ -10001,7 +10011,10 @@ body.form-open { overflow: hidden; }
     // A rule the AI wrote should say what it was asked for. The assessment warnings talk about "the
     // original request" and until now the page never showed it, so there was nothing to check them
     // against. An explicit message still wins: it is about this opening, the request is about the rule.
-    var said = message || (request ? 'Asked for: ' + request : '');
+    // What the AI cost for this draft, kept with it on the hub, said on the same line (17 October).
+    var spent = kind === 'draft' ? aiCostWords(curAiCost) : '';
+    curAiCost = null;
+    var said = message || (request ? 'Asked for: ' + request + spent : '');
     banner.hidden = !said;
     banner.textContent = said;
     setDirty(false);
@@ -10082,6 +10095,16 @@ body.form-open { overflow: hidden; }
     });
   }
 
+  // A draft's AI cost as the end of its "Asked for" line: " · drafted by AI for US$0.04 · amended by AI for US$0.20".
+  var curAiCost = null;
+  function aiUsd(v) { return 'US$' + (v < 0.01 ? v.toFixed(4) : v.toFixed(2)); }
+  function aiCostWords(c) {
+    if (!c) return '';
+    var out = '';
+    if (typeof c.drafted === 'number') out += ' · drafted by AI for ' + aiUsd(c.drafted);
+    if (typeof c.amended === 'number') out += ' · amended by AI for ' + aiUsd(c.amended);
+    return out;
+  }
   function openItem(id) {
     guard(function () {
       // The list is disabled while one is in flight; this is the belt to that braces, for the keyboard
@@ -10092,6 +10115,7 @@ body.form-open { overflow: hidden; }
         opening = null;
         // The rows were disabled by setOpening; they come back even if opening the rule fails part way, or every
         // later click on a draft is silently refused.
+        curAiCost = res.kind === 'draft' ? (res.aiCost || null) : null;
         try { load(res.rule, res.kind, res.kind === 'draft' ? res.id : null, res.name, res.kind === 'proposal' || res.kind === 'held' ? res.message : null, res.assessment, res.request, res.check); }
         catch (e) { renderLists(); throw e; }
         if (res.kind === 'proposal') { cur.from = res.id; setHash(res.id); }
@@ -10134,6 +10158,12 @@ body.form-open { overflow: hidden; }
   // One draft per hub rule: saving the hub's copy writes to the draft that rule already has, not a second one.
   function saveTarget() {
     if (cur.kind === 'draft') return cur.id;
+    // An AI amendment saves into the draft it amended (17 October: it used to add a second draft). An
+    // amended hub rule saves into that rule's draft, if it has one, as the hub copy itself does.
+    if (cur.kind === 'amended' && cur.amendOf) {
+      if (cur.amendOf.kind === 'draft' && cur.amendOf.id && (S.drafts || []).some(function (d) { return d.id === cur.amendOf.id; })) return cur.amendOf.id;
+      if (cur.amendOf.kind === 'installed') { var ad = draftForRule(isObj(doc) ? doc.id : null); return ad ? ad.id : null; }
+    }
     if (cur.kind === 'installed') { var d = draftForRule(isObj(doc) ? doc.id : null); return d ? d.id : null; }
     return null;
   }
@@ -10166,10 +10196,14 @@ body.form-open { overflow: hidden; }
     if (cur && cur.kind === 'proposal' && cur.from) body.proposalId = cur.from;
     Object.defineProperty(body, 'snap', { value: snapNow(), enumerable: false });
     if (id) body.id = id;
+    // The AI amendment's cost goes with the first save of the amended copy only, and is then cleared.
+    var amendUsd = cur && cur.kind === 'amended' && typeof cur.aiAmendUsd === 'number' ? cur.aiAmendUsd : null;
+    // Never more than 4 decimals: the hub refuses a number with more than 6.
+    if (amendUsd !== null) body.aiAmendUsd = Math.round(amendUsd * 10000) / 10000;
     var savedAt = editCount;
     return api('save', { method: 'POST', body: body }).then(function (res) {
       S.drafts = res.drafts;
-      cur = { kind: 'draft', id: res.draft.id, name: res.draft.name, assessment: cur.assessment || null };
+      cur = { kind: 'draft', id: res.draft.id, name: res.draft.name, assessment: cur.assessment || null, request: cur.request || null };
       setHash(cur.id);
       $('banner').hidden = true;
       if (editCount === savedAt) savedSnap = body.snap;
@@ -11855,6 +11889,11 @@ body.form-open { overflow: hidden; }
       body.appendChild(h('button', { type: 'button', class: 'btn primary', onclick: function () { closePop(); } }, 'Got it'));
     }, { help: true, cls: 'help-pop' });
   });
+  // Back to the HAI Engine app page on the hub; unsaved changes are asked about first, as on any other way out.
+  $('btn-close-editor').addEventListener('click', function () {
+    var m = BASE.match(/\/apps\/api\/(\d+)/) || BASE.match(/\/apps\/(\d+)/);
+    guard(function () { location.href = m ? '/installedapp/configure/' + m[1] : '/installedapp/list'; });
+  });
   $('btn-more').addEventListener('click', function () {
     var b = $('btn-more');
     openPop(b, 'Rule', function (body) {
@@ -12232,7 +12271,8 @@ body.form-open { overflow: hidden; }
       closeSheet();
       // The hash the engine computed for what we actually sent. Everything that comes back is checked
       // against this, so a result about a different baseline is caught rather than drawn.
-      amend = { base: snapshot, baseHash: hash, request: text };
+      // Which draft or hub rule is being amended, so saving the amended copy updates that draft rather than adding one.
+      amend = { base: snapshot, baseHash: hash, request: text, from: { kind: cur.kind, id: cur.id } };
       aiStartedAt = Date.now();
       aiMisses = 0;
       $('ai-progress').hidden = false;
@@ -12358,7 +12398,10 @@ body.form-open { overflow: hidden; }
                   : 'The engine did not say which fields changed, so the outline below may not be the whole ' +
                     'difference - compare it against the rule you started from before saving.') +
                ' Save draft keeps it; nothing on the hub has changed.';
+    var from = amend ? amend.from : null;
     load(a.rule, 'amended', null, (a.rule && a.rule.name) || ruleName(), said, null, asked);
+    cur.amendOf = from;
+    cur.aiAmendUsd = typeof res.costUsd === 'number' ? res.costUsd : null;
     amendOutsidePanel(outside, base, a.rule);
     // The amendment is unsaved work. load() clears dirty, and beforeunload and guard() only warn when it
     // is set, so without this a person could reload or navigate away and lose the result in silence.
@@ -12445,6 +12488,9 @@ body.form-open { overflow: hidden; }
         // An amendment never joins the drafts: it is an unsaved copy a person inspects first. A finished
         // amendment with no result, or a failed outcome, stops here too - falling through would run the
         // ordinary new-draft branch, which refreshes the rail and opens something that was never made.
+        // What this draft cost, said in its own AI message in the middle of the screen (17 October).
+        var costUsd = typeof res.costUsd === 'number' ? res.costUsd : null;
+        if (costUsd !== null && res.amendment) toastAi('The AI amendment cost ' + aiUsd(costUsd) + '.');
         if (amend) {
           if (res.amendment) { aiAmendLand(res); return; }
           var ao = res.outcome || {};
@@ -12470,6 +12516,7 @@ body.form-open { overflow: hidden; }
         var said = res.status || out.headline || out.message;
         if (said) toast(said, failed || !res.outcome);
         else if (failed) toast('The draft failed and the hub gave no reason.', true);
+        if (costUsd !== null && !failed && res.outcome) toastAi('This AI draft cost ' + aiUsd(costUsd) + '.');
         // The finished rule now sits in the drafts; refresh them and open it. The finished answer carries the
         // drafts and the spend line, so the whole editor state is not read again for them.
         // The AI's work goes straight into the drafts, so the drafts are what must be

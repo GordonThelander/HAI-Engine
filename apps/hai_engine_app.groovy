@@ -20,6 +20,7 @@ category: 'Automations',
 menu: 'Automations',
 iconUrl: '',
 iconX2Url: '',
+installOnOpen: true,
 singleInstance: true,
 singleThreaded: true,
 oauth: true
@@ -55,6 +56,7 @@ path('/endpoint/variables/:name/:value') { action: [GET: 'endpointVariableGet'] 
 }
 @Field static final String HAI_ENVIRONMENT = 'PREVIEW'
 @Field static final String HAI_COMMUNITY_URL = ''
+@Field static final String AM_REPO_URL = 'https://github.com/GordonThelander/hubitat-automation-map'
 @Field static final String HAI_ISSUES_URL = 'https://github.com/GordonThelander/HAI-Engine/issues/new/choose'
 @Field static final String CLAUDE_KEYS_URL = 'https://platform.claude.com/settings/keys'
 @Field static final Map HAI_ROUTE_AUDIENCE = [
@@ -338,7 +340,9 @@ href name: 'haiMigrationHref', title: 'Rule Machine Migration Facility', require
 url: "/installedapp/configure/${mig.id}".toString(),
 description: 'Discover, select, assess and controlled migration of RM rules, with rollback option'
 } else {
-paragraph 'HAI Migration copies Rule Machine rules into HAI, one at a time. It needs Automation Map, with a scan done.'
+paragraph 'HAI Migration copies Rule Machine rules into HAI, one at a time.'
+paragraph "<b>It needs Automation Map installed, with a scan done.</b> In Hubitat Package Manager, press Install, then Search, and search for <b>Automation Map</b>. " +
+"Or install it from <a href='${AM_REPO_URL}' target='_blank'>${AM_REPO_URL.replace('https://', '')}</a>."
 input 'haiMigrationAdd', 'button', title: 'Turn on HAI Migration'
 }
 }
@@ -371,11 +375,16 @@ paragraph '<small>Here as well as in the editor, so a rule can always be stopped
 input 'haiDeactivateTarget', 'enum', title: 'Rule', options: runtimeRuleOptions(), required: false, submitOnChange: true
 if (settings.haiDeactivateTarget) input 'haiDeactivate', 'button', title: 'Deactivate'
 }
+String typed = (settings.engineApiKey as String)?.trim()
+if (typed) {
+String mark = "${typed.length()}:${typed.length() > 4 ? typed[-4..-1] : ''}".toString()
+if (state.engineKeyTestedMark != mark) { state.engineKeyTestedMark = mark; engineTestApiKey() }
+}
 Long aiTestAt = (state.engineKeyTest instanceof Map ? ((Map) state.engineKeyTest).at : null) as Long
 boolean aiOpen = (haiAi.available != true && haiAi.code != 'nokey') || (aiTestAt != null && now() - aiTestAt < 120000L)
 section('AI token and cost management', hideable: true, hidden: !aiOpen) {
 if (!engineHasKey()) paragraph "<small>Optional. HAI works fully without it. Add your own Claude API key here if you want the AI Rule Assistant to draft rules from plain words.</small>"
-input 'engineApiKey', 'password', required: false,
+input 'engineApiKey', 'password', required: false, submitOnChange: true,
 title: state.engineKeyTail ? "Claude API key - one ending ...${state.engineKeyTail} is stored. Type a new one to replace it.".toString()
 : 'Claude API key (stored on this hub only)'
 paragraph "<small>Your Claude API keys, and new ones, are at <a href='${CLAUDE_KEYS_URL}' target='_blank'>${CLAUDE_KEYS_URL.replace('https://', '')}</a>.</small>"
@@ -532,7 +541,7 @@ Object last = state.runtimeAnnouncedAt
 String when = last == null ? 'not yet' : runtimeClock().call(last as long)
 return "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT}). ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
 }
-@Field static final String ENGINE_APP_VERSION = '0.5.90-dev'
+@Field static final String ENGINE_APP_VERSION = '0.5.101-dev'
 @Field static final int ENGINE_MAX_PROPOSALS = 20
 @Field static final java.util.concurrent.ConcurrentHashMap ENGINE_DRAFT_INV = new java.util.concurrent.ConcurrentHashMap()
 @Field static final int ENGINE_MAX_ATTRIBUTES = 64
@@ -864,8 +873,9 @@ changePaths: changePaths])
 }
 } else if (session.outcome?.proposal) {
 Map proposal = session.outcome.proposal
+Object spent = ((Map) session.budget)?.spentUsd
 state.engineDraftResult = engineRemember(proposal, editorRuleFromHistory(history, proposal.ruleHash as String),
-session.outcome.status == 'failed')
+session.outcome.status == 'failed', spent instanceof Number ? (spent as double) : null)
 }
 log.info "HAI Engine: drafting finished, ${session.outcome.status}, ${session.outcome.attempts} attempt(s)"
 return
@@ -1070,7 +1080,7 @@ filedPut('engineSession', authorBoundSession(session))
 void engineStoreOutcome(Map outcome) {
 filedPut('engineOutcome', authorBoundOutcome(outcome))
 }
-Map engineRemember(Map proposal, Map rule = null, boolean needsFixing = false) {
+Map engineRemember(Map proposal, Map rule = null, boolean needsFixing = false, Double costUsd = null) {
 List kept = (filed('proposals') ?: [])
 kept.removeAll { it.evidenceId == proposal.evidenceId }
 kept.add(0, [evidenceId: proposal.evidenceId, ruleHash: proposal.ruleHash, ready: proposal.ready, at: now(),
@@ -1090,6 +1100,7 @@ Map saved
 try {
 Map body = [name: rule.name ?: 'AI draft', proposalId: proposal.evidenceId, rule: rule]
 if (needsFixing) body.needsFixing = true
+if (costUsd != null) body.aiDraftUsd = Math.round(costUsd * 10000d) / 10000d
 saved = editorSave(groovy.json.JsonOutput.toJson(body), store, now())
 } catch (Exception ex) {
 log.warn "HAI Engine: AI draft could not be saved: ${ex.message}"
@@ -1731,7 +1742,7 @@ Map reg = (rtRegistry(pp).rules ?: [:])
 List live = reg.values().findAll { it instanceof Map && ((Map) it).state in ['active', 'disabled'] }.sort { ((Map) it).ruleId as String }
 List paused = (state.runtimePaused ?: [])
 Map pairs = (state.migPairs ?: [:])
-String stamp = rtBackupStamp(live, paused, [drafts: haiBackupDraftsMark(), pairs: pairs])
+String stamp = rtBackupStamp(live, paused, [drafts: haiBackupDraftsMark() ?: '', pairs: pairs])
 if (!force && stamp == state.haiBackupPrint) return [ok: true, written: false, message: 'No rule or draft on the hub changed since the last backup.']
 List rules = []
 int unread = 0
@@ -2035,6 +2046,8 @@ findings: amendment.findings, changePaths: amendment.changePaths]]
 if (!working) {
 body.drafts = ((List) (filed('editorDrafts') ?: [])).collect { edDraftSummary((Map) it) }
 body.spending = engineMonthSpendText()
+Object spent = ((Map) filed('engineSession'))?.budget?.spentUsd
+if (spent instanceof Number) body.costUsd = Math.round((spent as double) * 10000d) / 10000d
 }
 return editorJson(200, groovy.json.JsonOutput.toJson(body))
 }
@@ -5676,6 +5689,16 @@ if (doc.actions instanceof List) vOverlaps(r, doc.actions, 'actions', [:])
 if (doc.onFailure instanceof List) vOverlaps(r, doc.onFailure, 'onFailure', [:])
 if (doc.onCancel instanceof List) vOverlaps(r, doc.onCancel, 'onCancel', [:])
 }
+String vSwitchEffect(Map a) {
+String c = a.command as String
+if (c == 'off') return 'off'
+if (c == 'on' || c == 'setColor' || c == 'setColorTemperature' || c == 'setHue' || c == 'setSaturation') return 'on'
+if (c == 'setLevel') {
+Object v = a.args instanceof List && !((List) a.args).isEmpty() ? ((List) a.args)[0] : null
+return v instanceof Number && ((Number) v).doubleValue() <= 0 ? 'off' : (v instanceof Number ? 'on' : null)
+}
+return null
+}
 Map vOverlaps(Map r, List actions, String base, Map before) {
 Map writers = new LinkedHashMap(before)
 boolean ended = false
@@ -5723,11 +5746,15 @@ Map op = schemaOperation(a.command as String)
 if (op == null) return
 ((List) op.writes).each { String attr ->
 String slot = "${a.ref}:${attr}".toString()
+String effect = attr == 'switch' ? vSwitchEffect(a) : null
 if (writers.containsKey(slot)) {
+if (effect == null || writers.get("${slot}=".toString()) != effect) {
 vWarn(r, 'BEHAVIOUR_OVERLAPPING_WRITE', path,
 "an earlier step in this rule already sets ${attr} on this device; this later one wins")
+}
 } else {
 writers.put(slot, path)
+if (effect != null) writers.put("${slot}=".toString(), effect)
 }
 }
 }
@@ -9843,6 +9870,7 @@ List proposeClaimablePaths(Map doc) {
 List out = []
 ((List) (doc.triggers instanceof List ? doc.triggers : [])).eachWithIndex { t, i -> out << "triggers.${i}".toString() }
 if (doc.conditions != null) out << 'conditions'
+if (doc.requiredExpression != null) out << 'requiredExpression'
 PROPOSE_RULE_SETTINGS.each { String k ->
 if (doc.containsKey(k) && doc.get(k) != SCHEMA_DEFAULTS.get(k)) out << k
 }
@@ -11162,7 +11190,7 @@ note: 'the hub may not end a request exactly at its timeout']
 @Field static final String EDITOR_EFFECTS = 'Save draft keeps this rule here, in the editor, and changes nothing on the hub. Put on hub is the one that puts it live, and HAI checks it before it runs. Run now runs it there and then.'
 @Field static final String EDITOR_CHECK_LABEL = 'Checked by the hub in the editor. This is not an AI proposal, and nothing was stored.'
 @Field static final String EDITOR_PAGE_FILE = 'hai-editor.html'
-@Field static final String EDITOR_PAGE_SHA256 = '3eb5d11221ce454dbb365fa166634f6330345a0371e70a3c2f9caa77934ace15'
+@Field static final String EDITOR_PAGE_SHA256 = 'd6a1b74af1da48397aecee12af848e57395c319e7c35b1a79c8e7282b1e38b6e'
 @Field static final String EDITOR_SPECS_FILE = 'hai-editor-specs.json'
 @Field static final String EDITOR_SPECS_SHA256 = 'bf549b1316d42380482af8aa1a2030936728d6058f8b2a017266f3f552106ba8'
 @Field static final List EDITOR_DEVICE_CLASSES = [
@@ -11790,6 +11818,10 @@ id = "d_${Long.toString(now, 36)}${Long.toString(next.draftSeq as long, 36)}".to
 Map draft = [id: id, name: name, savedAt: now, ruleHash: ruleHash, bytes: bytes, rule: rule]
 if (assessment != null) draft.assessment = assessment
 if (sourceRequest != null) draft.request = sourceRequest
+Map aiCost = prior?.aiCost instanceof Map ? new LinkedHashMap((Map) prior.aiCost) : [:]
+if (edCostOk(req.aiDraftUsd)) aiCost.drafted = (req.aiDraftUsd as double)
+if (edCostOk(req.aiAmendUsd)) aiCost.amended = (((aiCost.amended ?: 0d) as double) + (req.aiAmendUsd as double))
+if (!aiCost.isEmpty()) draft.aiCost = aiCost
 if (req.needsFixing == true) draft.needsFixing = true
 if (at >= 0) drafts.remove(at)
 drafts.add(0, draft)
@@ -11858,6 +11890,9 @@ out.rule = rule
 out.renamed = renamed
 return [status: res.status, body: out]
 }
+boolean edCostOk(Object v) {
+return v instanceof Number && (v as double) >= 0d && (v as double) <= 1000d
+}
 Map editorRule(Object idIn, Map store) {
 if (!(idIn instanceof String) || ((String) idIn).isEmpty() || ((String) idIn).length() > EDITOR_MAX_ID_CHARS) {
 return edError(400, 'INVALID_ID', 'Say which rule to open.')
@@ -11866,7 +11901,7 @@ String id = (String) idIn
 Map d = ((List) (store?.drafts ?: [])).find { it.id == id }
 if (d != null) {
 return [status: 200, body: [ok: true, kind: 'draft', id: d.id, name: d.name, savedAt: d.savedAt, ruleHash: d.ruleHash, rule: d.rule,
-assessment: d.assessment, request: d.request]]
+assessment: d.assessment, request: d.request, aiCost: d.aiCost]]
 }
 Map k = ((List) (store?.proposalRules ?: [])).find { it.evidenceId == id }
 if (k != null) {

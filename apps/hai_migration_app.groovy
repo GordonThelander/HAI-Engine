@@ -17,6 +17,7 @@ category: 'Automations',
 parent: 'gordonthelander:HAI Engine (Preview)',
 iconUrl: '',
 iconX2Url: '',
+installOnOpen: true,
 singleThreaded: true,
 oauth: true
 )
@@ -692,6 +693,9 @@ return out.sort { a, b -> (a.name as String) <=> (b.name as String) }
 }
 @Field static final Map HUB_VARIABLE_TYPES = [integer: 'number', bigdecimal: 'number', boolean: 'boolean',
 string: 'string', datetime: 'datetime']
+boolean schemaHubMaintenance(Object url) {
+return url instanceof String && (url =~ /(?i)^https?:\/\/[^\/]+\/hub\/[^?#]*(reboot|shutdown|restart|update|restore|reset|backup|delete)/).find()
+}
 @Field static final Map BUTTON_CAPABILITY = [pushed: 'PushableButton', held: 'HoldableButton',
 doubleTapped: 'DoubleTapableButton', released: 'ReleasableButton']
 List coreModeNames(Map doc, Map node) {
@@ -916,7 +920,7 @@ return "the trigger \"${said}\"".toString()
 @Field static final int MIG_CONFIRM_TRIES = 3
 @Field static final long MIG_CONFIRM_GAP_MS = 250L
 @Field static final String MIGRATION_PAGE_FILE = 'hai-migration.html'
-@Field static final String MIGRATION_PAGE_SHA256 = 'e49696a18e11c652427ebdfa678704477115c1958848c0993b8f113b671db40f'
+@Field static final String MIGRATION_PAGE_SHA256 = '99497d81a640e4ff66cf058b72859c150bbca9dcb264af2a815e2184c5067be6'
 @Field static final String MIG_PROV_OK = 'ok'
 @Field static final String MIG_PROV_PARTIAL = 'partial'
 @Field static final String MIG_PROV_ABSENT = 'absent'
@@ -1192,6 +1196,11 @@ rebuild = made.ok == true
 invoked: made.invoked == true, skipped: made.skipped, behaviour: made.behaviour]
 : [ok: false, code: made.code, message: made.message]
 if (made.ok == true && limits != null) warnings.addAll(migPermissionBlocks((Map) made.doc, limits))
+if (made.ok == true && made.hubPower != null) {
+Map line = ((List) (made.behaviour ?: [])).find { ((Map) it).key == 'hubPower' }
+warnings << [kind: 'hubPower', names: ['the hub'], blocking: false,
+message: (line?.text as String) ?: 'This rule reboots or shuts down your hub. Tick "Copy it anyway" on its row to copy it.']
+}
 }
 String verdict = cov.verdict as String
 if (verdict == 'ready' && dRule != null) {
@@ -1205,11 +1214,28 @@ reasons.remove(refusal)
 reasons.add(0, refusal)
 }
 }
+if (verdict == 'needs-decision' && dRule != null && conds?.ok == true && rebuild?.ok == true &&
+!warnings.any { ((Map) it).blocking == true }) {
+verdict = 'ready'
+reasons.removeAll { (it as String)?.startsWith('HAI has no mapping for ') }
+}
 Map partial = dRule == null ? null : rmDecodeFailed(dRule)
 if (partial != null) {
 verdict = 'blocked'
 reasons.remove(partial.message as String)
 reasons.add(0, partial.message as String)
+}
+Map power = warnings.find { ((Map) it).kind == 'hubPower' }
+if (power != null && verdict == 'ready') {
+verdict = 'needs-decision'
+reasons.remove(power.message as String)
+reasons.add(0, power.message as String)
+}
+String emptyWhy = conds?.code == 'RM_RULE_EMPTY' ? (conds.message as String)
+: rebuild?.code == 'RM_RULE_EMPTY' ? (rebuild.message as String) : null
+if (emptyWhy != null) {
+verdict = 'empty'
+reasons = [emptyWhy]
 }
 return [verdict: verdict, verdictReasons: reasons, unmapped: cov.missing, rmPrint: migPrint(dRule),
 conditions: conds, rebuild: rebuild, coupling: coupling, warnings: warnings,
@@ -1296,8 +1322,6 @@ out.switchOver = cloned && row.rmDisabled == true && row.live != MIG_LIVE_HAI
 'rule for a copy that cannot start.').toString())
 : cloned && row.live == MIG_LIVE_HAI
 ? migOp(false, 'The HAI copy is already the one running.')
-: cloned && (row.testedAt == null || row.dryRunAt == null || row.dryRunOk != true)
-? migOp(false, 'Test this copy first: run the dry run and record that you tested it, then switch over.')
 : cloned
 ? migOp(true, null)
 : migOp(false, row.haiMissing == true
@@ -1365,6 +1389,11 @@ if (made?.ok != true) {
 return [ok: false, op: 'clone', code: (made?.code as String) ?: 'MIGRATION_REBUILD',
 message: (made?.message as String) ?: 'HAI could not rebuild this rule just now.',
 phase: 'rebuild']
+}
+if (made.hubPower != null && made.hubPowerChosen != true) {
+return [ok: false, op: 'clone', code: 'MIGRATION_HUB_POWER', phase: 'rebuild',
+message: 'Not copied: this rule reboots or shuts down your hub. Open its row and tick "Copy it anyway" ' +
+'if you want the HAI copy to do the same, then press Copy.']
 }
 Map kept = migCall(plat, 'importRule', [doc: made.doc])
 if (kept?.ok != true) {
@@ -1795,14 +1824,14 @@ untouched: n - copied - switched - reverted]
 }
 Map migPrereqs(List rows, Collection ids) {
 Set want = ids == null ? null : ids.collect { it.toString() } as Set
-Map devices = [:], variables = [:], disabled = [:]
+Map devices = [:], variables = [:]
 List mode = []
 ((rows ?: []) as List).each { Object ro ->
 Map r = ro
 if (want != null && !want.contains(r.rmId as String)) return
 ((List) (r.warnings ?: [])).each { Object wo ->
 Map w = wo
-Map into = w.kind == 'devices' ? devices : w.kind == 'variables' ? variables : w.kind == 'disabled' ? disabled : null
+Map into = w.kind == 'devices' ? devices : w.kind == 'variables' ? variables : null
 if (w.kind == 'mode') { if (!mode.contains(r.rmName)) mode << r.rmName; return }
 if (into == null) return
 ((List) (w.names ?: [])).each { Object n ->
@@ -1814,9 +1843,8 @@ if (!who.contains(r.rmName)) who << r.rmName
 Closure items = { Map m, String fix, String at -> m.keySet().sort().collect { String k -> [name: k, rules: m[k], fix: fix, at: at] } }
 List out = items(devices, 'Select it in HAI Engine\'s devices', 'engine') +
 items(variables, 'Add it to Approved hub variables in HAI Engine', 'engine') +
-(mode ? [[name: 'Allow rules to change the mode', rules: mode, fix: 'Turn on Allow rules to change the mode in HAI Engine', at: 'engine']] : []) +
-items(disabled, 'Enable it in Devices before switching over', 'devices')
-return [items: out, devices: devices.size() + disabled.size(), variables: variables.size(), settings: mode ? 1 : 0,
+(mode ? [[name: 'Allow rules to change the mode', rules: mode, fix: 'Turn on Allow rules to change the mode in HAI Engine', at: 'engine']] : [])
+return [items: out, devices: devices.size(), variables: variables.size(), settings: mode ? 1 : 0,
 blocking: devices.size() + variables.size() + (mode ? 1 : 0)]
 }
 Map migRoundRows(List rows, Object round, String op) {
@@ -2212,7 +2240,12 @@ return rmNo('RM_RULE_TARGET_GONE',
 }
 }
 rmSafeRefKeys(doc)
-return [ok: true, doc: doc, skipped: a.skipped, invoked: t.invoked == true, rmId: rmId, behaviour: behaviour]
+Map out = [ok: true, doc: doc, skipped: a.skipped, invoked: t.invoked == true, rmId: rmId, behaviour: behaviour]
+if (doc.hubPower != null) {
+out.hubPower = doc.remove('hubPower')
+out.hubPowerChosen = ((upgrades ?: []) as List).collect { it as String }.contains('hubPower')
+}
+return out
 }
 void rmSafeRefKeys(Map doc) {
 Map refs = (doc.refs ?: [:])
@@ -2246,7 +2279,8 @@ doc.remove('refs')
 walk(doc)
 doc.refs = out
 }
-@Field static final Set RM_UPGRADES = ['restart', 'changeOnly', 'stopOnUnknown'] as Set
+@Field static final String RM_LOCK_CODE_ATTR = 'lastCodeName'
+@Field static final Set RM_UPGRADES = ['restart', 'changeOnly', 'stopOnUnknown', 'hubPower'] as Set
 List rmFaithful(Map doc, Collection upgrades = null) {
 Set chosen = ((upgrades ?: []) as List).collect { it as String }.findAll { RM_UPGRADES.contains(it) } as Set
 List lines = []
@@ -2257,6 +2291,27 @@ rmEachStep((List) doc.actions) { Map st ->
 if (st.type == 'wait' && st.waitKind == 'delay') delays = true
 if (st.type == 'wait' && st.waitKind in ['forEvents', 'until']) waits = true
 if (st.type == 'if') anyIf = true
+}
+List power = []
+rmEachStep((List) doc.actions) { Map st ->
+if (st.type == 'http' && schemaHubMaintenance(st.url)) power << (st.url as String)
+}
+if (!power.isEmpty()) {
+boolean ok = chosen.contains('hubPower')
+String low = power.join(' ').toLowerCase()
+String does = low.contains('shutdown') ? 'shuts down' : (low.contains('reboot') || low.contains('restart')) ? 'reboots'
+: 'runs a maintenance page on'
+doc.hubPower = power
+lines << [key: 'hubPower', differs: false, warn: !ok,
+text: ok
+? "You chose to copy it: like the Rule Machine rule, this copy ${does} your hub (${power[0]}).".toString()
+: ("Warning: this rule ${does} your hub (it sends ${power[0]}). Tick \"Copy it anyway\" below " +
+'if you want the HAI copy to do the same; without the tick, Copy leaves this rule alone.').toString(),
+upgrade: [key: 'hubPower', chosen: ok,
+label: "Copy it anyway, including the step that ${does} the hub".toString(),
+tip: 'The HAI copy sends this request to your hub whenever the rule reaches that step, exactly as ' +
+'the Rule Machine rule does. A restart or shutdown stops everything on the hub, so only tick ' +
+'this if that is what you want.']]
 }
 if (delays && !waits) {
 if (chosen.contains('restart')) {
@@ -2621,6 +2676,10 @@ t + [condition: t.condition != null ? [type: 'all', of: [t.condition, gate.node]
 }
 out.addAll(made)
 }
+if (out.isEmpty()) {
+return [ok: true, triggers: [[kind: 'ruleInvocation']], count: 0, invoked: true,
+calledByRule: rmIsCalledByAnother(detailRule, allRules)]
+}
 return [ok: true, triggers: out, count: trigs.size()]
 }
 Map rmTriggerCondition(Map trig, Map detailRule) {
@@ -2638,6 +2697,10 @@ if (c == null) {
 return rmNo('RM_TRIG_CONDITION_GONE',
 "This trigger only fires while condition ${idx} holds, and the rule has no condition ${idx}.".toString(),
 trig.index)
+}
+if ((c.capability as String) == 'Mode' && ((List) (((Map) (c.operands ?: [:])).modes ?: [])).isEmpty() &&
+((List) (((Map) (c.operands ?: [:])).ids ?: [])).isEmpty()) {
+return null
 }
 Map t = rmCondition(c)
 if (t.ok != true) return t
@@ -2660,8 +2723,8 @@ boolean empty = ((List) (detailRule.conditions ?: [])).isEmpty() &&
 ((Map) (detailRule.decodeFailures ?: [:])).isEmpty()
 if (empty) {
 return rmNo('RM_RULE_EMPTY',
-('This rule has no actions yet, so there is nothing for a copy to do. It looks like ' +
-'a draft rather than a finished rule.'))
+('Nothing to copy: this rule has no actions in Rule Machine, so a copy would do nothing (it looks like a draft). ' +
+'Finish it in Rule Machine and scan again, or delete it there if it is not needed.'))
 }
 return rmNo('RM_RULE_UNDECODED',
 'Automation Map read this rule but could not work out what it does, so there is nothing to rebuild from.')
@@ -2796,20 +2859,13 @@ if (!BUTTON_ACTIONS.contains(action)) {
 return rmNo('RM_TRIG_BUTTON_ACTION',
 "HAI does not know the button action '${action}'.".toString(), trig.index)
 }
-if (!allOf) {
 return [ok: true, triggers: refs.collect { [kind: 'button', ref: it, number: number, action: action] }]
 }
-return rmNo('RM_TRIG_ALL_BUTTONS',
-('This trigger needs all of its buttons pressed. A button press is a moment rather ' +
-'than a state HAI can check afterwards, so there is no way to rebuild "all of them" ' +
-'from it.'), trig.index)
-}
 if (cap == 'Lock codes') {
-return rmNo('RM_TRIG_UNMAPPED',
-('This Lock codes trigger fires when the lock is unlocked with a code, but what Rule Machine ' +
-'compares its stored value with has not been measured, so the rule is not ' +
-'copied. Keep the rule in Rule Machine, or build the trigger in HAI on the lock\'s ' +
-'lastCodeName.').toString(), trig.index)
+String code = "${ops.value ?: ''}".trim()
+if (!code || code.equalsIgnoreCase('unlocked')) return [ok: true, triggers: [], unfinished: true]
+return [ok: true, triggers: refs.collect { [kind: 'deviceAttribute', ref: it, attribute: RM_LOCK_CODE_ATTR,
+op: 'is', value: code] }]
 }
 String attr = cap == 'Custom Attribute' ? (ops.attribute as String) : (rmTrigAttr()[cap] as String)
 if (attr == null) {
@@ -2915,6 +2971,9 @@ return [ok: true, triggers: [out]]
 }
 Map rmTrigRulePaused(Map ops, Object index) {
 List rules = (ops.rules instanceof List) ? ((List) ops.rules).findAll { (it as String)?.trim() } : []
+if (rules.isEmpty() && "${ops.value ?: ''}".trim().isEmpty() && !(ops.rules instanceof List && !((List) ops.rules).isEmpty())) {
+return [ok: true, triggers: [], unfinished: true]
+}
 if (rules.isEmpty()) {
 return rmNo('RM_TRIG_DEVICE', 'This Rule paused trigger does not say which rule it watches. Pick the rule in Rule Machine and scan again.', index)
 }
@@ -3038,7 +3097,7 @@ return rmNo('RM_EXPR_EVALUATION',
 "knows how to reproduce '${RM_EVAL_WALK}'.").toString())
 }
 List ops = tokens.findAll { rmIsOperator(it as String) }.collect { (it as String).toUpperCase() }
-List unestablished = ops.findAll { it == 'NOT' || it == 'XOR' }
+List unestablished = ops.findAll { it == 'NOT' }
 if (!unestablished.isEmpty()) {
 return rmNo('RM_EXPR_UNESTABLISHED',
 ("This rule combines its conditions with ${unestablished.unique().join(' and ')}, and " +
@@ -3107,20 +3166,27 @@ if (!operands.isEmpty()) operators << (pending ?: 'AND')
 operands << leaf
 }
 if (operands.isEmpty()) return [ok: true, node: null]
-Map node = operands[operands.size() - 1]
-boolean built = false
-for (int i = operators.size() - 1; i >= 0; i--) {
-String type = operators[i] == 'OR' ? 'any' : 'all'
-Map left = operands[i]
-if (built && node.type == type) {
-node = [type: type, of: [left] + node.of]
-} else {
-node = [type: type, of: [left, node]]
-}
-built = true
-}
-if (operators.contains('AND') && operators.contains('OR')) node.rmGrouping = true
+List built = []
+Map node = rmExprChain(operands, operators, 0, operands[0], built)
+if ((operators as Set).size() > 1) node.rmGrouping = true
 return [ok: true, node: node]
+}
+Map rmExprChain(List operands, List operators, int i, Map acc, List built) {
+if (i >= operators.size()) return acc
+String op = operators[i] as String
+Map next = operands[i + 1]
+if (op == 'XOR') {
+Map x = (built.any { it.is(acc) } && acc.type == 'xor') ? [type: 'xor', of: ((List) acc.of) + [next]]
+: [type: 'xor', of: [acc, next]]
+built << x
+return rmExprChain(operands, operators, i + 1, x, built)
+}
+String type = op == 'OR' ? 'any' : 'all'
+Map rest = rmExprChain(operands, operators, i + 1, next, built)
+Map node = (built.any { it.is(rest) } && rest.type == type) ? [type: type, of: [acc] + rest.of]
+: [type: type, of: [acc, rest]]
+built << node
+return node
 }
 Map rmCondition(Map cond) {
 if (cond == null) return rmNo('RM_COND_MISSING', 'There is no condition here to translate.')
@@ -3736,18 +3802,18 @@ return rmNo('RM_ACT_DEFINED_COMMAND', 'This action does not say which command to
 }
 boolean modelled = schemaOperation(cmd) != null
 Integer meterMs = null
+Integer longGapSecs = null
 if (ops.meterMillis != null) {
 String gapText = (ops.meterMillis as String).trim()
 Integer gap = (ops.meterMillis instanceof Number) ? ((Number) ops.meterMillis).intValue() :
 (gapText.isInteger() ? gapText.toInteger() : null)
-if (gap == null || gap < 0 || gap > 10000) {
+if (gap == null || gap < 0) {
 return rmNo('RM_ACT_DEFINED_METER',
-("This sends ${cmd} to its devices one at a time, ${ops.meterMillis} milliseconds apart, and " +
-'HAI pauses at most 10 seconds (10000 milliseconds) between devices, so it is not copied. ' +
-'Build it in HAI as one step per device with a delay between them, or keep the rule in ' +
-'Rule Machine.').toString())
+("This sends ${cmd} to its devices one at a time, and the gap between them (${ops.meterMillis}) " +
+'is not a number of milliseconds HAI can read.').toString())
 }
-if (gap > 0) meterMs = gap
+if (gap > 10000) longGapSecs = (int) Math.ceil(gap / 1000.0d)
+else if (gap > 0) meterMs = gap
 }
 List args = []
 List params = (ops.parameters instanceof List) ? ops.parameters : []
@@ -3765,6 +3831,18 @@ step.meterMs = meterMs
 step.refs = new ArrayList((List) got.refs).sort { Object a, Object b -> rmDevNum(a) <=> rmDevNum(b) }
 }
 if (!modelled) step.passthrough = true
+if (longGapSecs != null) {
+List order = new ArrayList((List) got.refs).sort { Object a, Object b -> rmDevNum(a) <=> rmDevNum(b) }
+List steps = []
+order.eachWithIndex { Object ref, int i ->
+if (i > 0) steps << [type: 'wait', waitKind: 'delay', seconds: longGapSecs]
+Map one = new LinkedHashMap(step)
+one.remove('refs')
+one.ref = ref
+steps << one
+}
+return [ok: true, steps: steps]
+}
 return [ok: true, steps: [step]]
 }
 long rmDevNum(Object ref) {
@@ -3921,17 +3999,17 @@ if (frame.otherwise != null) built.otherwise = frame.otherwise
 frame = stack.remove(stack.size() - 1)
 rmFrameAdd(frame, [built])
 }
-if (frame.kind == 'repeat' || stack.any { ((Map) it).kind == 'repeat' }) {
-return rmNo('RM_ACT_BRANCH_UNCLOSED',
-'A Repeat in this rule has no END-REP, so which steps it repeats is not stored. HAI will not choose for you.')
+while (frame.kind != 'root' && !stack.isEmpty()) {
+Map built
+if (frame.kind == 'repeat') {
+built = ((Map) frame.step) + [steps: frame.then]
+} else {
+built = [type: 'if', condition: frame.condition, then: frame.then]
+if (!((List) frame.elseIf).isEmpty()) built.elseIf = frame.elseIf
+if (frame.otherwise != null) built.otherwise = frame.otherwise
 }
-if (!stack.isEmpty() || frame.kind != 'root') {
-int open = stack.size()
-return rmNo('RM_ACT_BRANCH_UNCLOSED',
-("${open} IF step${open == 1 ? '' : 's'} in this rule never close. Rule Machine most " +
-'likely runs the rest of the rule as the body, but that has not been measured, and ' +
-'the alternative is that those steps run no matter what the IF tests. Those are ' +
-'opposites for every step after it, so HAI will not choose for you.').toString())
+frame = stack.remove(stack.size() - 1)
+rmFrameAdd(frame, [built])
 }
 return [ok: true, steps: frame.steps, skipped: skipped, count: acts.size()]
 }
@@ -4429,14 +4507,6 @@ return [ok: true, steps: [[type: 'comment', text: (ops.text ?: '') as String]]]
 Map rmActHttpPost(Map ops) {
 String url = ops.url as String
 if (url == null || url.trim().isEmpty()) return rmNo('RM_ACT_HTTP_URL', 'This HTTP request has no address.')
-String host = (url =~ /^[a-zA-Z]+:\/\/([^\/:?#]+)/).with { it.find() ? it.group(1).toLowerCase() : '' }
-if (host in ['localhost', '127.0.0.1', '[::1]'] || url.toLowerCase().contains('/hub/reboot') ||
-url.toLowerCase().contains('/hub/shutdown')) {
-return rmNo('RM_ACT_HTTP_HUB',
-("This sends a request to the hub itself (${url}), which is the hub's admin API - on this " +
-'hub it reboots it. HAI will not rebuild that as an ordinary web request; set it up by hand ' +
-'if it is wanted.').toString())
-}
 Map step = [type: 'http', method: ((ops.method ?: 'post') as String), url: url]
 if (ops.body != null) step.body = ops.body as String
 if (ops.contentType != null) step.contentType = ops.contentType as String

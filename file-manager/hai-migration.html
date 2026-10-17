@@ -18,269 +18,71 @@
   --amber:#e0a050;--amber-soft:rgba(224,160,80,.1);--amber-line:rgba(224,160,80,.4)}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 var(--sans);padding:20px 16px 48px}
-main{max-width:1000px;margin:0 auto}
-h1{font-size:19px;margin:0 0 4px}
-.sub{color:var(--dim);font-size:13px;margin:0 0 18px;max-width:70ch}
-.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
-input[type=search]{flex:1 1 200px;min-width:0;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);font:inherit}
-button,a.btn{font:inherit;text-decoration:none;display:inline-block;padding:5px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);cursor:pointer}
-button:disabled{cursor:not-allowed;opacity:.55}
-button.go{border-color:var(--hai);color:var(--hai);font-weight:600}
-.rows{display:flex;flex-direction:column;gap:5px}
-.row{background:var(--card);border:1px solid var(--line);border-radius:7px}
-.head{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:8px 11px;cursor:pointer}
-.head.w1{grid-template-columns:1fr auto auto auto}
-.head.w2{grid-template-columns:1fr auto auto auto auto}
-.head.w3{grid-template-columns:1fr auto auto auto auto auto}
-.nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.nm small{display:block;font-weight:400;color:var(--dim);font-size:12px;overflow:hidden;text-overflow:ellipsis}
-.nm small.unread{color:var(--warn)}
-.tag{font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:99px;border:1px solid currentColor;white-space:nowrap}
-.tag.rm{color:var(--rm)}.tag.hai{color:var(--hai)}.tag.both{color:var(--warn)}
-.tag.ready{color:var(--hai)}.tag.decide{color:var(--rm)}.tag.blocked{color:var(--warn)}.tag.unknown{color:var(--off)}
-/* `neither` is a paired rule where nothing is running - the job the rule did is not being done. It does not
-   share the muted colour with "not assessed", which would read as nothing to see. */
-.tag.neither{color:var(--warn)}
-.bandw{font-size:12px;color:var(--dim);white-space:nowrap}
-.why ul{margin:5px 0 0;padding-left:18px}.why li{margin:2px 0}
-/* A dependency outside the rule - devices HAI may not use, or other rules that reach into this one. Not
-   styled like a reason, because it is not a description of the rule: it is something to deal with before
-   moving it, and it belongs to things that are not on this row. */
-.dep{border:1px solid var(--warn);background:rgba(127,127,127,.06);border-radius:6px;
-     padding:7px 10px;margin:0 0 8px;font-size:12.5px;max-width:78ch}
-.dep b{color:var(--warn)}
-.tipbtn{border:0;background:none;padding:0 4px;font:inherit;cursor:pointer;color:inherit}
-.deps{display:flex;gap:6px;align-items:center}
-.dep0{font-size:11px;color:var(--warn);white-space:nowrap}
-.ph{font-size:12px;color:var(--dim);white-space:nowrap}
-.body{display:none;border-top:1px solid var(--line);padding:11px}
-.row.open .body{display:block}
-.row.open .head{background:rgba(127,127,127,.06)}
-.acts{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:9px}
-.why{font-size:12.5px;color:var(--dim);margin:0 0 7px;max-width:78ch}
-.pair{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;margin-bottom:9px}
-.pair div{min-width:170px}
-.pair b{display:block;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);font-weight:600}
-a{color:inherit}
-.note{background:var(--card);border:1px solid var(--line);border-radius:7px;padding:10px 12px;font-size:13px;margin-bottom:16px;max-width:78ch}
-.err{border-color:var(--warn);color:var(--warn)}
-.empty{color:var(--dim);padding:22px 0}
-/* Assess now: a checkbox per row, and the bar's select-all and buttons. */
-.nm input.sel{margin:0 7px 0 0;vertical-align:-2px}
-.selall{font-size:13px;color:var(--dim);white-space:nowrap}
-.selall input{vertical-align:-2px}
-#assessMsg{font-size:13px;color:var(--dim)}
-/* Conversion report: one view of what the page already rebuilt for every rule. It leads
-   with the rules that can move, in the page's own colours: green ready, amber waiting on HAI,
-   red needs the person, grey not read. */
-.rep{background:var(--card);border:1px solid var(--line);border-radius:7px;padding:12px 14px;margin-bottom:14px;font-size:13px}
-.rep h2{font-size:15px;margin:0}
-.rep h3{font-size:13.5px;margin:0 0 3px}
-.rep ul{margin:0;padding-left:18px}.rep li{margin:5px 0}
-.rep .n{font-weight:400;color:var(--dim);font-size:12px;white-space:nowrap}
-.rep details summary{cursor:pointer;color:var(--dim);font-size:12px;width:max-content;max-width:100%}
-.rep details[open]{color:var(--dim);font-size:12.5px}
-.rep .hint{color:var(--dim);margin:0 0 6px;max-width:78ch}
-/* The report's actions sit at its top and stay there while it scrolls, not at the bottom,
-   unhighlighted. Copy is the primary action. */
-.rep .repbar{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;
-  background:var(--card);margin:-12px -14px 12px;padding:10px 14px;border-bottom:1px solid var(--line);border-radius:7px 7px 0 0}
-.rep .repbar span{display:flex;flex-wrap:wrap;gap:8px}
-.rep .hero{font-size:22px;line-height:1.25;font-weight:600;margin:6px 0 2px}
-.rep .hero b{color:var(--hai);font-size:34px;vertical-align:-3px}
-.rep .soon{margin:0 0 4px;font-size:14.5px}
-.rep li details{display:inline}
-.rep li details[open]{display:block}
-.rep li details > div{margin:3px 0 2px;padding-left:10px;border-left:2px solid var(--line)}
-.rep .key .tests{margin:0 0 0 auto}
-.rep .meter{display:flex;height:12px;border-radius:99px;overflow:hidden;background:var(--line);margin:10px 0 7px;gap:2px}
-.rep .meter i{display:block;height:100%;min-width:3px}
-.rep .ok{--tone:var(--hai)}.rep .wait{--tone:var(--rm)}.rep .you{--tone:var(--warn)}.rep .none{--tone:var(--off)}.rep .info{--tone:var(--off)}
-.rep .meter i{background:var(--tone)}
-.rep .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--tone);margin-right:6px;flex:none}
-.rep .key{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;margin-bottom:10px}
-.rep .key span{display:inline-flex;align-items:center}
-.rep .tests{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;color:var(--dim);margin:2px 0 6px;cursor:pointer}
-.rep .ask{border:1px solid var(--hai);border-radius:7px;padding:10px 12px;margin:0 0 12px;background:rgba(127,127,127,.06)}
-.rep .ask.bad{border-color:var(--warn)}
-.rep .ask .acts{margin:8px 0 0}
-.rep .rbr{margin:20px 0 4px;font-size:14px}
-.rep .go-list{margin:14px 0 6px}
-.rep .glh{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
-.rep .glh h3{font-size:15px;margin:0}
-.rep .gl{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:2px 18px}
-.rep .gi{display:flex;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--line)}
-.rep .gi .dot{margin-top:5px}
-.rep .gi small{display:block;color:var(--dim);font-size:12px}
-.rep details.fold{border-top:1px solid var(--line);padding:7px 0}
-.rep details.fold > summary{font-size:13px;color:var(--fg);display:flex;flex-wrap:wrap;align-items:center;gap:4px;width:auto}
-.rep details.fold > summary::after{content:'\25B8';color:var(--dim);margin-left:2px;order:1}
-.rep details.fold[open] > summary::after{content:'\25BE'}
-.rep details.fold[open]{color:var(--fg);font-size:13px}
-.rep .fb{padding:6px 0 2px 16px}
-.rep .rl{display:flex;align-items:flex-start;padding:5px 0 5px 4px}
-.rep .rl .dot{margin-top:4px}
-.rep .rl details{margin-top:2px}
-.rep .foot{margin:12px 0 0;font-size:12px}
-/* The one next step, on every rule and every section: a small label, not a button. */
-.rep .nx{display:inline-block;font-size:11.5px;font-weight:500;line-height:1.35;color:var(--fg);border:1px solid var(--line);border-radius:99px;
-  padding:1px 8px;margin:2px 0 0 4px;background:rgba(127,127,127,.07);white-space:normal}
-.rep .gi .nx{margin:3px 0 0}
-.rep details.fold > summary .nx{margin:0 0 0 8px;order:2}
-.rep .repbar button small{font-weight:400;opacity:.8}
-button.primary{background:var(--hai);border-color:var(--hai);color:var(--card);font-weight:600}
-/* A phone keeps the three actions on one line under the title: the remaining count moves to the in-page question. */
-@media (max-width:560px){.rep{padding:12px 12px}.rep .repbar{margin:-12px -12px 12px;padding:8px 12px;gap:6px}.rep .repbar h2{flex-basis:100%}
-  .rep .repbar span{flex-wrap:nowrap;gap:6px}.rep .repbar button{padding:5px 8px}.rep .repbar button small{display:none}
-  .rep .hero{font-size:19px}.rep .hero b{font-size:28px}.rep .soon{font-size:14px}.rep .key .tests{margin:0}}
-
-/* The guided flow: ten steps in four lanes, each opening its own screen. */
-.top{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-end;justify-content:space-between;margin-bottom:12px}
-.top>div:first-child{flex:1 1 520px;min-width:0}
-.top .hacts{flex:0 1 auto;justify-content:flex-end;max-width:340px}
-.eyebrow{font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:3px}
-.why2{margin:6px 0 0;font-size:12.5px;color:var(--dim);max-width:80ch}
-button.quiet{border:0;background:none;padding:5px 2px;color:var(--dim);text-decoration:underline;flex-basis:100%;text-align:right}
-.top h1{margin:0;font-size:26px;font-weight:700;letter-spacing:-.01em}.top .sub{margin:4px 0 0}
-.hacts{display:flex;flex-wrap:wrap;gap:8px}
-button.primary,a.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
-button.go{border-color:var(--accent);color:var(--accent)}
-.flow{display:flex;flex-direction:column;gap:14px;margin-bottom:16px}
-.lanec{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px 16px}
-.lanec .lh{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;margin-bottom:11px}
-.lanec .lh b{font:700 12px var(--mono);letter-spacing:.09em;color:var(--accent)}
-.lanec .lh span{font-size:12.5px;color:var(--dim)}
-.lane{display:grid;grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr) 22px minmax(0,1fr);gap:8px;align-items:stretch}
-.arrow{display:grid;place-items:center;color:var(--dim);font-size:16px;pointer-events:none}
-.step{position:relative;display:flex;flex-direction:column;gap:6px;text-align:left;padding:12px 13px;border:1px solid transparent;border-radius:9px;
-  background:var(--tile);color:var(--fg);font:inherit;cursor:pointer;min-width:0}
-.step:hover,.step:focus-visible{border-color:var(--accent)}
-.step.on{box-shadow:0 0 0 2px var(--accent)}
-.step .sh{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-weight:600;font-size:14.5px}
-.step .sh small{font-weight:400;font-size:12px;color:var(--dim)}
-.step .no{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--on-accent);font:600 12px var(--mono);flex:none}
-.step .st{margin-left:auto;font:500 10.5px var(--mono);color:var(--dim);white-space:nowrap}
-.step .st.done{color:var(--accent)}.step .st.now{color:var(--rm)}
-.step .big{font:600 30px/1 var(--mono);color:var(--accent)}
-.step .cap{font-size:12.5px;color:var(--dim);line-height:1.4}
-.step .cap b{color:var(--fg)}
-.step .mono{font:600 12.5px var(--mono)}
-.step .lnk{color:var(--accent);text-decoration:underline;font-weight:600;font-size:12.5px}
-.step.cut{background:var(--accent);color:var(--on-accent)}
-.step.cut .no{background:var(--on-accent);color:var(--accent)}
-.step.cut .cap,.step.cut .st,.step.cut .cap b{color:var(--on-accent)}
-.mbar{display:flex;height:12px;border-radius:4px;overflow:hidden;gap:2px;background:var(--line)}
-.mbar i{display:block}
-.mbar .ok,.cnt .ok b{background:var(--accent);color:var(--accent)}
-.mbar .you,.cnt .you b{background:var(--amber);color:var(--amber)}
-.mbar .wait,.cnt .wait b{background:var(--off);color:var(--off)}
-.mbar .none,.cnt .none b{background:var(--line);color:var(--dim)}
-.bar2{display:flex;border-radius:5px;overflow:hidden;gap:2px;background:var(--line)}
-.bar2 i{display:flex;align-items:center;justify-content:center;font:600 11px var(--mono);font-style:normal;color:#fff;min-width:0;overflow:hidden;white-space:nowrap;padding:0 4px}
-.bar2 .ok,.bar2 .rd{background:var(--accent)}.bar2 .rd:nth-child(even){background:var(--accent2)}.bar2 .you{background:var(--amber)}.bar2 .wait{background:var(--off)}.bar2 .none{background:var(--dim)}
-.cnt{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 10px}
-.cnt span{display:flex;flex-direction:column;font-size:12px;color:var(--dim)}
-.cnt b{background:none!important;font:600 22px/1.1 var(--mono)}
-.tiles{display:flex;gap:4px}
-.tile{display:flex;flex-direction:column;justify-content:center;border-radius:5px;padding:5px 8px;min-width:52px;flex-basis:0;overflow:hidden;background:var(--accent);color:var(--on-accent)}
-.tile b{font:600 18px/1.1 var(--mono)}.tile span{font-size:10.5px;opacity:.9;white-space:nowrap}
-.tile.t2{background:var(--accent2)}.tile.t3{background:var(--tile2);color:var(--accent)}.tile.lp{background:var(--warn)}
-.pills{display:flex;flex-wrap:wrap;gap:5px}
-.pill{font:500 12px var(--mono);padding:3px 9px;border-radius:99px;border:1px solid var(--line);background:var(--card);white-space:nowrap}
-.pill.bad{border-color:var(--warn);color:var(--warn)}.pill.good{border-color:var(--accent);color:var(--accent)}
-.band{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:10px;width:100%;padding:11px 14px;border:1px solid var(--amber-line);border-radius:9px;
-  background:var(--amber-soft);color:var(--fg);font:inherit;text-align:left;cursor:pointer}
-.band:hover,.band:focus-visible{border-color:var(--amber)}
-.band.on{box-shadow:0 0 0 2px var(--amber)}
-.band .no{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--amber);color:#fff;font:600 12px var(--mono)}
-.band b{font-size:14.5px;color:var(--amber)}.band span{font-size:12.5px;color:var(--dim)}
-.screen{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:16px 18px;margin-bottom:18px}
-.screen .where{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
-.screen h2{font-size:20px;margin:3px 0 4px}
-.screen .what{margin:0 0 12px;color:var(--dim);max-width:72ch}
-.screen .todo{background:var(--accent-soft);border-radius:8px;padding:9px 12px;margin:0 0 14px;max-width:80ch}
-.screen .todo b{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:2px}
-.screen h3{font-size:14px;margin:16px 0 6px}
-.screen .foot{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;border-top:1px solid var(--line);margin-top:16px;padding-top:12px}
-.screen .foot p{margin:0;font-size:13px;color:var(--dim);max-width:60ch}
-.screen .foot div{display:flex;flex-wrap:wrap;gap:8px}
-.screen .msg{border:1px solid var(--accent);border-radius:8px;padding:9px 12px;margin:0 0 12px}
-.screen .msg.bad{border-color:var(--warn);color:var(--warn)}
-.screen .ask{border:2px solid var(--accent);border-radius:8px;padding:11px 13px;margin:0 0 12px}
-.screen .ask.warn{border-color:var(--warn)}
-.screen .ask .acts{margin:9px 0 0}
-.screen .empty{padding:8px 0;color:var(--dim)}
-.list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:8px 10px;border-top:1px solid var(--line)}
-.li:first-child{border-top:0}
-.li .nm2{flex:1 1 220px;min-width:0}
-.li .nm2 a.rn{font-weight:600}
-.li .sub2{display:block;font-size:12px;color:var(--dim)}
-.li .acts{margin:0}
-.rl2{font-size:12px;color:var(--dim);white-space:nowrap}
-p.rl2{white-space:normal}
-.rl2 a{color:var(--accent)}
-.badge{font:500 11px var(--mono);padding:1px 7px;border-radius:99px;border:1px solid currentColor;white-space:nowrap}
-.badge.tested{color:var(--hai)}.badge.dry{color:var(--accent)}.badge.not{color:var(--off)}.badge.bad{color:var(--warn)}
-.rounds{display:flex;flex-direction:column;gap:10px}
-.round{border:1px solid var(--line);border-radius:10px;padding:11px 13px}
-.round.done{border-color:var(--hai)}
-.round .rh{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
-.round .rh b{font-size:15px}
-.round .nx2{margin:7px 0 0;font-size:13px}
-.round details summary{cursor:pointer;font-size:12.5px;color:var(--dim);margin-top:6px}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
-.offer{border:1px solid var(--rm);border-radius:8px;padding:9px 12px;margin:0 0 10px;font-size:13px}
-.scen{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0}
-.scen td,.scen th{border-top:1px solid var(--line);padding:6px 6px;text-align:left;vertical-align:top}
-.scen th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);font-weight:600}
-.scen .diff{color:var(--rm)}
-.check{margin:6px 0;padding-left:18px}.check li{margin:3px 0}
-.attest{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
-.attest input[type=text]{padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);font:inherit;width:140px}
-.sec{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-bottom:10px}
-.allrules{font-size:15px;margin:22px 0 8px}
-@media (max-width:700px){
-  .lanec{padding:12px}
-  .lane{grid-template-columns:1fr;gap:6px}
-  .arrow{transform:rotate(90deg);height:14px;font-size:13px}
-  .step .big{font-size:26px}
-  .screen{padding:13px 12px}
-  .screen h2{font-size:18px}
-  .top .hacts{width:100%;max-width:none}.top .hacts button{flex:1 1 auto}.top .hacts button.quiet{text-align:center}
-}
-@media (max-width:560px){.head,.head.w1,.head.w2,.head.w3{grid-template-columns:1fr auto auto}.ph,.bandw{display:none}}
+main{max-width:900px;margin:0 auto}
+h1{font-size:20px;margin:0 0 4px}
+h2{font-size:16px;margin:0}
+a{color:var(--accent)}
+button{font:inherit;padding:5px 11px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.5}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
+button.link{border:0;background:none;padding:0;color:var(--accent);text-decoration:underline;cursor:pointer}
+.top{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
+.sub{color:var(--dim);font-size:13px;margin:0;max-width:62ch}
+.hacts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.read{color:var(--dim);font-size:12px;margin:0 0 14px}
+.note{padding:8px 11px;border:1px solid var(--line);border-radius:7px;background:var(--card);margin:0 0 10px;font-size:13px}
+.note.err{border-color:var(--warn);color:var(--warn)}
+.sec{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin:0 0 14px}
+.sec .sh{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;margin-bottom:8px}
+.sec .n{font-family:var(--mono);font-size:12px;color:var(--dim);margin-left:6px;font-weight:400}
+.sec .none{color:var(--dim);font-size:13px;margin:2px 0}
+.msg{font-size:13px;margin:8px 0 0}
+.msg.err{color:var(--warn)}
+.batch{border-top:1px solid var(--line);padding-top:6px;margin-top:6px}
+.batch:first-of-type{border-top:0;margin-top:0;padding-top:0}
+.bh{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--dim);margin:2px 0 2px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.r{display:grid;grid-template-columns:22px 1fr auto;gap:2px 8px;align-items:start;padding:5px 0}
+.r input[type=checkbox]{margin:3px 0 0}
+.r .nm{font-weight:600;overflow-wrap:anywhere}
+.r .nm button.tg{border:0;background:none;padding:0 4px 0 0;color:var(--dim);font-size:11px;cursor:pointer}
+.r .why{grid-column:2/4;color:var(--dim);font-size:12.5px}
+.r .why.need{color:var(--rm)}
+.r .act{white-space:nowrap}
+.st{font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:1px 7px;border:1px solid currentColor;border-radius:99px;white-space:nowrap}
+.st.ok{color:var(--hai)}.st.no{color:var(--rm)}.st.empty{color:var(--off)}.st.live{color:var(--hai)}.st.paused{color:var(--accent)}
+.det{grid-column:2/4;font-size:12.5px;color:var(--fg);background:var(--bg);border-radius:6px;padding:7px 9px;margin-top:4px}
+.det ul{margin:2px 0 6px;padding-left:18px}
+.det .links{display:flex;flex-wrap:wrap;gap:4px 12px}
+.anyway{grid-column:2/4;font-size:12.5px}
+.foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.r>.st{justify-self:end;align-self:start}
+@media (max-width:560px){.r .act{grid-column:2/4;justify-self:start}}
+.find{margin:0 0 12px}
+.find input{width:100%;max-width:360px;box-sizing:border-box;font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
+.bar{position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:center;padding:9px 12px;border:1px solid var(--accent);border-radius:8px;background:var(--tile);color:var(--fg);font-weight:600;margin:0 0 12px}
+.bar[hidden]{display:none}
+.bar.ok{border-color:var(--hai);color:var(--hai);background:var(--card)}
+.bar.err{border-color:var(--warn);color:var(--warn);background:var(--card)}
+.bar .spin{width:16px;height:16px;flex:0 0 16px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.bar .spin{animation:none;border-color:var(--accent)}}
 </style>
 </head>
 <body>
 <main>
 <header class="top">
-  <div><div class="eyebrow">Optional</div><h1>Move Rule Machine rules to HAI, if you want to</h1>
-  <p class="sub">Optional. Your Rule Machine rules keep working as they are. Move only the ones you want, one rule or one round at a time. Nothing changes on your hub until you approve a plan, and every move can be rolled back.</p>
-  <p class="why2">A moved rule reads in plain words, is checked before it goes live, can be explained or changed with the AI helper, and keeps its own history of what it did and when.</p></div>
-  <div class="hacts"><button type="button" id="scanAgain">Scan again</button><button type="button" id="openPlan" class="primary">Review the proposed plan</button>
-  <button type="button" id="notNow" class="quiet">Not now: keep using Rule Machine</button></div>
+  <div><h1>Move Rule Machine rules to HAI</h1>
+  <p class="sub">Optional. Rule Machine keeps running each rule until you cut it over, and you can roll back any time.</p></div>
+  <div class="hacts"><button type="button" id="scanAgain">Scan again</button><button type="button" id="notNow" class="link">Not now</button></div>
 </header>
-<section id="flow" class="flow" aria-label="The ten migration steps"></section>
-<section id="screen" class="screen" hidden aria-live="polite"></section>
-
+<p class="read" id="read"></p>
+<div class="find"><input type="search" id="find" placeholder="Search rules" aria-label="Search rules by name" autocomplete="off"></div>
+<div class="bar" id="bar" role="status" aria-live="polite" hidden></div>
 <div id="notes"></div>
-<h2 class="allrules">Every rule</h2>
-
-<div class="bar">
-  <input type="search" id="q" placeholder="Filter by rule name" aria-label="Filter by rule name">
-  <button id="reload">Reload</button>
-  <button id="report" title="Every rule HAI read, and what its copy would refuse, leave out or do differently">Conversion report</button>
-</div>
-<div class="bar">
-  <label class="selall"><input type="checkbox" id="selall"> Select all shown</label>
-  <button id="assessSel" disabled>Assess selected</button>
-  <button id="assessAll" disabled>Assess all</button>
-  <span id="assessMsg"></span>
-</div>
-
-<section id="rep" class="rep" hidden></section>
-<div class="rows" id="rows"><p class="empty">Loading the rules on this hub…</p></div>
+<section class="sec" id="sAssess" aria-labelledby="hAssess"></section>
+<section class="sec" id="sClone" aria-labelledby="hClone"></section>
+<section class="sec" id="sCut" aria-labelledby="hCut"></section>
+<section class="sec" id="sBack" aria-labelledby="hBack"></section>
 </main>
 
 <script>
@@ -335,9 +137,10 @@ var HAI_STATE = {active: 'running', disabled: 'stopped', held: 'held, not on the
 // Four verdicts, and the chip class says which kind of thing it is rather than how worried to be.
 // 'unassessed' deliberately shares the muted colour with 'neither': nobody looked is not a warning.
 var VERDICT = {
-  'ready': ['ready', 'Ready to read'],
+  'ready': ['ready', 'Ready to copy'],
   'needs-decision': ['decide', 'Needs a decision'],
   'blocked': ['blocked', 'Cannot be read'],
+  'empty': ['unknown', 'Empty rule'],
   'unassessed': ['unknown', 'Not assessed']
 };
 
@@ -352,220 +155,6 @@ function note(text, bad) {
   document.getElementById('notes').appendChild(d);
 }
 
-function render() {
-  var filter = document.getElementById('q').value.trim().toLowerCase();
-  var host = document.getElementById('rows');
-  var shown = ROWS.filter(function (r) { return !filter || (r.rmName || '').toLowerCase().indexOf(filter) >= 0; });
-  if (!shown.length) {
-    host.innerHTML = '<p class="empty">' + (ROWS.length ? 'No rule matches that.' : 'This hub has no Rule Machine rules, or Rule Machine is not installed.') + '</p>';
-    return;
-  }
-  host.innerHTML = '';
-  shown.forEach(function (r) {
-    // No pairing means no reading. `live` is null for a rule with no HAI copy - there is no second side
-    // for it to be live instead of - and falling back to `neither` would tell a person that every rule
-    // running perfectly well in Rule Machine was not running at all, and in the warning colour, which is
-    // kept for a real half-switched failure.
-    var live = r.live ? (LIVE[r.live] || LIVE.neither) : null;
-    var v = r.verdict ? VERDICT[r.verdict] : null;
-    var warns = (r.warnings || []).filter(function (w) { return !w.restartRepair; });
-    var band = (r.complexity && BAND[r.complexity.band]) || '';
-    var el = document.createElement('section');
-    el.className = 'row' + (OPEN[r.rmId] ? ' open' : '');
-
-    var head = document.createElement('div');
-    // The grid has to declare as many columns as the head actually emits, and the head emits a different
-    // number per row: both chips on a rule with a reading, the verdict alone on a Blocked rule whose
-    // difficulty is unknown, and neither on a rule nothing has decoded. One fixed five-column grid
-    // wrapped the short rows onto a second line.
-    var extras = (live ? 1 : 0) + (v ? 1 : 0) + (band ? 1 : 0) + ((r.round || r.inLoop || r.waitsOnLoop) ? 1 : 0) - 1;
-    head.className = 'head' + (extras >= 3 ? ' w3' : extras === 2 ? ' w2' : extras === 1 ? ' w1' : '');
-    head.setAttribute('role', 'button');
-    head.setAttribute('tabindex', '0');
-    head.innerHTML = '<div class="nm"><input type="checkbox" class="sel" aria-label="Select for Assess"' +
-      (SEL[r.rmId] ? ' checked' : '') + '>' + esc(r.rmName) + ' ' + badgeHtml(r) +
-      (r.haiMissing ? '<small>the HAI copy this was paired with is gone</small>'
-        // On the copy's id, not its name: a copy just put on the hub may not report a name yet, and the row
-        // read "no HAI copy yet" above a detail that showed the copy.
-        : r.haiId ? '<small>paired with ' + esc(r.haiName || 'its HAI copy') + (r.haiState && HAI_STATE[r.haiState] ? ' (' + esc(HAI_STATE[r.haiState]) + ')' : '') + '</small>'
-        : '<small>no HAI copy yet</small>') +
-      // Automation Map's last scan does not hold this rule, so nothing on the row is an assessment of it.
-      (r.unread ? '<small class="unread" title="Automation Map has not read this rule since it was made. Scan in Automation Map, then reload.">Not read yet</small>' : '') +
-      '</div>' + (live ? '<span class="tag ' + live[0] + '" title="' + esc(live[2]) + '">' + esc(live[1]) + '</span>' : '') +
-      // No reading means no chip. A rule Automation Map has not decoded, or any rule at all on a build
-      // with no mapper, shows nothing here - an absent reading and a bad one must not look alike.
-      (v ? '<span class="tag ' + v[0] + '">' + esc(v[1]) + '</span>' : '') +
-      // On the closed row too, as a count. A dependency a person only sees after expanding is one they
-      // will meet for the first time halfway through a bulk migration.
-      // A restart repair note (restartRepair) is not a dependency, so it takes no ⚠ on the closed row.
-      (warns.length
-        ? '<span class="dep0" title="' + esc(warns.map(function (w) { return w.message; }).join(' ')) + '">' +
-          '⚠ ' + warns.map(function (w) { return w.kind === 'mode' ? 'sets the mode' : w.kind === 'refused' ? 'not on the hub' : w.kind === 'drift' ? 'changed since copied' : w.kind === 'watch' ? 'last run went wrong' : w.names.length + ({devices: ' device', disabled: ' disabled device', variables: ' variable'}[w.kind] || ' rule') + (w.names.length === 1 ? '' : 's'); }).join(', ') +
-          '</span>' : '') +
-      (band ? '<span class="bandw">' + esc(band) + '</span>' : '') +
-      // Which round this rule is safe to migrate in. On the closed row because it is the thing that
-      // decides whether to touch this rule at all today.
-      (r.inLoop ? '<span class="dep0" title="These rules command each other, so no order is safe for them one at a time.">⚠ in a loop</span>'
-        : r.waitsOnLoop ? '<span class="dep0" title="A rule in a loop commands this one, so it cannot move until the loop is resolved.">⚠ waits on a loop</span>'
-        : r.round ? '<span class="bandw">round ' + esc(r.round) + '</span>' : '') +
-      '<span class="ph">' + esc(PHASE[r.phase] || r.phase) + '</span>';
-    head.onclick = function () { OPEN[r.rmId] = !OPEN[r.rmId]; render(); };
-    var box = head.querySelector('input.sel');
-    box.onclick = function (e) { e.stopPropagation(); };
-    box.onchange = function () { if (box.checked) SEL[r.rmId] = true; else delete SEL[r.rmId]; assessBar(); renderFlow(); if (STEP) renderScreen(); };
-    head.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); head.onclick(); } };
-    el.appendChild(head);
-
-    var body = document.createElement('div');
-    body.className = 'body';
-    // Every reason, but only with the row open. The screens doc's rule: the row carries the band and
-    // the heaviest line, the rest waits to be asked for. Most rules sit in the middle
-    // band, so a row that spent three lines on reasons would make the list unreadable.
-    var reasons = (r.verdictReasons || []).concat((r.complexity && r.complexity.reasons) || []);
-    // What the mapper actually made of the rule's conditions, marked so it reads as a result rather than
-    // as one more sentence in a list. A refusal here is the most specific thing on the row.
-    if (r.conditions) {
-      reasons = [(r.conditions.ok ? '✓ ' : '✕ ') + r.conditions.message].concat(
-        reasons.filter(function (x) { return x !== r.conditions.message; }));
-    }
-    body.innerHTML = (live ? '<p class="why">' + esc(live[2]) + '</p>' : '') +
-      // A div, not a p: a <ul> inside a <p> is invalid and the browser closes the paragraph before the
-      // list, which puts the list outside .why and silently drops its styling.
-      (reasons.length ? '<div class="why">What HAI makes of this rule:<ul>' +
-        reasons.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>' : '') +
-      // The side-by-side. HAI's words on one side, a link to the Rule Machine rule on the other - the
-      // PAGE, not Rule Machine's stored rendering of it, because that string is a cache and can
-      // still name a mode renamed long ago. And the caveat is on the screen, not in a
-      // comment: Rule Machine renders what a condition looks at, never what the rule does with it.
-      // The dependencies first, above everything else in the body: they are the reason a person might
-      // not do this at all, so they are not something to be read after the difficulty and the reasons.
-      // A caller that only repairs this rule after a restart gets one grey line, not the red box.
-      (r.repairNote ? '<p class="why">' + esc(r.repairNote) + '</p>' : '') +
-      ((r.warnings || []).map(function (w) {
-        if (w.restartRepair) return '<p class="why">' + esc(w.message) + '</p>';
-        return '<div class="dep"><b>' +
-          ({devices: 'Devices HAI is not allowed to use', disabled: 'Devices disabled on this hub',
-            variables: 'Hub variables HAI rules may not change', mode: 'HAI rules may not set the mode',
-            refused: 'The copy is held, not on the hub', drift: 'Changed in Rule Machine since it was copied', watch: 'The HAI copy needs a look'}[w.kind] || 'Other rules depend on this one') +
-          '</b><br>' + esc(w.message) + '</div>';
-      }).join('')) +
-      // How the copy behaves where Rule Machine and HAI differ: kept as Rule
-      // Machine by default, with HAI's way offered as an upgrade the person ticks before copying.
-      ((r.rebuild && r.rebuild.behaviour && r.rebuild.behaviour.length) ?
-        '<div class="why"><b>How the copy behaves</b><ul>' + r.rebuild.behaviour.map(function (b) {
-          var canPick = b.upgrade && !r.haiId && (r.ops || {}).clone && r.ops.clone.available;
-          var ticked = canPick && UPG[r.rmId] && UPG[r.rmId][b.upgrade.key];
-          return '<li>' + (b.differs ? '⚠ ' : '✓ ') + esc(b.text) +
-            (canPick ? '<br><label title="' + esc(b.upgrade.tip || '') + '"><input type="checkbox" data-upg="' + esc(b.upgrade.key) + '"' + (ticked ? ' checked' : '') +
-              '> Upgrade: ' + esc(b.upgrade.label) + '</label>' +
-              // A tooltip on hover, and the same words on a tap of ⓘ, because a phone has no hover.
-              (b.upgrade.tip ? ' <button type="button" class="tipbtn" data-tip aria-label="What this upgrade does">ⓘ</button>' +
-                '<small class="upgtip" hidden><br>' + esc(b.upgrade.tip) + '</small>' : '') : '') + '</li>';
-        }).join('') + '</ul></div>' : '') +
-      ((r.conditions && r.conditions.rendered) ?
-        '<div class="why"><b>HAI reads this rule as</b><br>' + esc(r.conditions.rendered) +
-        '<br><small>Open the Rule Machine rule below and read them together. Agreeing means both apps see ' +
-        'the same conditions; it does not prove they would behave the same, because neither rendering ' +
-        'shows the order Rule Machine checks them in.</small></div>' : '') +
-      '<div class="pair"><div><b>Rule Machine</b><a href="' + esc(r.rmUrl) + '">' + esc(r.rmName) + '</a><br>' +
-      (r.rmDisabled ? 'disabled' : r.rmPaused == null ? 'not checked' : r.rmPaused ? 'paused' : r.rmStopped ? 'stopped' : 'running') + '</div>' +
-      '<div><b>HAI copy</b>' + (r.haiId ? esc(r.haiName || 'its HAI copy') + '<br>' + esc(r.haiMissing ? 'deleted' : (HAI_STATE[r.haiState] || 'on the hub')) : 'none') +
-      // Switched over: when the copy last ran, so a copy that has gone quiet is noticed.
-      (r.phase === 'switched' && r.haiId && !r.haiMissing ? '<br><small>' + (r.haiLastRunAt ? 'last ran ' + esc(new Date(Number(r.haiLastRunAt)).toLocaleString()) : 'has not run since it was switched over') + '</small>' : '') +
-      '</div></div>';
-
-    Array.prototype.forEach.call(body.querySelectorAll('button[data-tip]'), function (btn) {
-      btn.onclick = function () { var t = btn.nextElementSibling; if (t) t.hidden = !t.hidden; };
-    });
-    Array.prototype.forEach.call(body.querySelectorAll('input[data-upg]'), function (box) {
-      box.onchange = function () {
-        UPG[r.rmId] = UPG[r.rmId] || {};
-        UPG[r.rmId][box.getAttribute('data-upg')] = box.checked;
-      };
-    });
-
-    var acts = document.createElement('div');
-    acts.className = 'acts';
-    Object.keys(LABELS).forEach(function (op) {
-      var can = (r.ops || {})[op] || {available: false, why: 'This version does not offer that.'};
-      // Nothing moves before the plan is approved (the page's promise in its subtitle); Switch back never waits.
-      if ((op === 'clone' || op === 'switchOver') && can.available && !flowApproved()) can = {available: false, why: NEEDS_APPROVAL};
-      var b = document.createElement('button');
-      b.textContent = LABELS[op];
-      b.disabled = !can.available;
-      if (can.available) b.className = 'go';
-      // An unavailable control keeps its reason on itself, so hovering or reading the row explains it
-      // rather than leaving a person to guess why a button will not press.
-      if (!can.available) b.title = can.why;
-      b.onclick = function () { act(r, op, b); };
-      acts.appendChild(b);
-    });
-    var ab = document.createElement('button');
-    ab.textContent = 'Assess now';
-    ab.disabled = !ASSESS.available || !!PENDING;
-    ab.title = !ASSESS.available ? (ASSESS.why || '') : 'Ask Automation Map to read this rule again now';
-    ab.onclick = function () { assess([r.rmId], false); };
-    acts.appendChild(ab);
-    body.appendChild(acts);
-
-    Object.keys(LABELS).forEach(function (op) {
-      var can = (r.ops || {})[op] || {};
-      if (can.available === false && can.why) {
-        var p = document.createElement('p');
-        p.className = 'why';
-        p.innerHTML = '<b>' + esc(LABELS[op]) + ':</b> ' + esc(can.why);
-        body.appendChild(p);
-      }
-    });
-
-    el.appendChild(body);
-    host.appendChild(el);
-  });
-}
-
-// The rows a step's reply read again, swapped into the list, keeping every other row as it was.
-function mergeState(state) {
-  var fresh = {};
-  (state.rows || []).forEach(function (x) { fresh[x.rmId] = x; });
-  var merged = {};
-  for (var k in state) merged[k] = state[k];
-  merged.rows = ROWS.map(function (x) { return fresh[x.rmId] || x; });
-  return merged;
-}
-
-// What the last press did, shown after the list is read again. load() clears the notes, so a result noted
-// before it was wiped straight away: neither a success nor a failure ever stayed on screen.
-var LAST = null;
-
-function act(r, op, button) {
-  if (op === 'deleteClone' && !window.confirm('Delete the HAI copy of ' + (r.rmName || 'this rule') + '? The Rule Machine rule is not changed.')) return;
-  button.disabled = true;
-  var body = {rmId: r.rmId, op: op};
-  if (op === 'clone') body.upgrades = Object.keys(UPG[r.rmId] || {}).filter(function (k) { return UPG[r.rmId][k]; });
-  q('/migration/api/apply', body).then(function (out) {
-    if (!out || out.ok !== true) {
-      LAST = ['<b>' + esc(LABELS[op]) + ' did not happen.</b> ' + esc((out && out.message) || 'The hub did not say why.'), true];
-    } else {
-      LAST = ['<b>' + esc(r.rmName || LABELS[op]) + ':</b> ' + esc(out.message || 'Done.'), false];
-    }
-    // The reply carries the pressed rule's row read again after the step, and the notes for the whole list, so
-    // only that row is swapped in. Without it (an older app, or the read after the step failed) the list is read again.
-    if (out && out.state && out.state.ok === true) {
-      document.getElementById('notes').innerHTML = '';
-      if (LAST) { note(LAST[0], LAST[1]); LAST = null; }
-      show(mergeState(out.state));
-    } else {
-      load();
-    }
-    // A copy whose set-up the hub had not finished when it answered: read the list again once it has, so the
-    // row shows the copy as stopped (or held, with its reason) without the person reloading.
-    if (out && out.unconfirmed) setTimeout(load, 4000);
-  }).catch(function (e) {
-    LAST = ['<b>' + esc(LABELS[op]) + ' could not be sent.</b> ' + esc(e.message), true];
-    load();
-  });
-}
-
 // How long ago an ISO time was, in words; '' when there is no time to judge.
 function ago(iso) {
   var t = Date.parse(iso || '');
@@ -576,166 +165,6 @@ function ago(iso) {
     : Math.round(m / 1440) + ' days';
 }
 
-// Rules Automation Map's last scan does not hold, said at the top: a rule with no
-// reading must not pass for one that was assessed. HAI holds no Automation Map token, so the button opens
-// Automation Map's own page, where Scan is; Reload here afterwards.
-function unreadNote(out) {
-  var n = ROWS.filter(function (r) { return r.unread; }).length;
-  if (!n) return;
-  var age = ago((out.provider || {}).generatedAt);
-  note('<b>' + n + ' rule' + (n === 1 ? ' has' : 's have') + ' not been read by Automation Map yet</b>' +
-       (age ? ' (last scan ' + esc(age) + ' ago)' : '') + '. They are marked Not read yet, and nothing on those rows is an assessment. ' +
-       (out.amAppId != null
-         ? '<a href="/installedapp/configure/' + encodeURIComponent(out.amAppId) + '" target="_blank" rel="noopener" class="btn">Scan in Automation Map</a> then Reload.'
-         : 'Run a scan in Automation Map, then Reload.'), true);
-}
-
-function load() {
-  document.getElementById('notes').innerHTML = '';
-  if (LAST) { note(LAST[0], LAST[1]); LAST = null; }
-  q('/migration/api/state').then(function (out) {
-    if (!out || out.ok !== true) {
-      document.getElementById('rows').innerHTML = '';
-      note('<b>The rule list could not be read.</b> ' + esc((out && out.message) || 'The hub did not say why.'), true);
-      return;
-    }
-    show(out);
-  });
-}
-
-// Draws a state read: the whole list from load(), or the list with a pressed rule's row swapped in from act().
-function show(out) {
-  ROWS = out.rows || [];
-  // The guided flow's inputs. A press's reply carries no plan, so the plan of the last full read stays.
-  if (out.plan) PLAN = out.plan;
-  if (out.links) LINKS = out.links;
-  if ('planApproved' in out) APPROVED = out.planApproved || null;
-  if (out.provider) PROVIDER = out.provider;
-  // The provider's own note is the first one, and it is marked when it says the page is doing less
-  // than it looks like it is. `partial` is deliberately not marked: an unfinished scan is normal
-  // operation and says so in words, and colouring the ordinary case teaches the eye to skip the colour.
-  var loud = {absent: 1, incompatible: 1, broken: 1, stale: 1};
-  var pstate = (out.provider || {}).state;
-  (out.notes || []).forEach(function (n, i) { note(esc(n), i === 0 && loud[pstate]); });
-  unreadNote(out);
-  ASSESS = out.assess || {available: false, why: 'Needs Automation Map 2.4.36 or later.'};
-  // Ticks for rules no longer listed are dropped, so a count never includes a rule that is gone.
-  var listed = {};
-  ROWS.forEach(function (r) { listed[r.rmId] = 1; });
-  Object.keys(SEL).forEach(function (k) { if (!listed[k]) delete SEL[k]; });
-  // A request still outstanding from before this load (another tab, or a reload): keep waiting for it.
-  if (!PENDING && ASSESS.request) watch(ASSESS.request);
-  if (WROTE && ASSESS.decodeWrittenAt && Date.parse(ASSESS.decodeWrittenAt) < WROTE - 2000) {
-    note('Automation Map answered, but the decode HAI read is older than the request. Reload in a moment.', true);
-  }
-  WROTE = 0;
-  render();
-  assessBar();
-  // An open report follows the rows it was built from.
-  if (!document.getElementById('rep').hidden) renderReport();
-  renderFlow();
-  renderScreen();
-}
-
-// ---- Assess now ----------------------------------------------------------------------------------------
-// One POST per press: the Migration app sends Automation Map one location event. Then this page reads the
-// app's small answer record every 3 seconds, and only while a request is outstanding.
-var WROTE = 0;
-
-function shownRows() {
-  var filter = document.getElementById('q').value.trim().toLowerCase();
-  return ROWS.filter(function (r) { return !filter || (r.rmName || '').toLowerCase().indexOf(filter) >= 0; });
-}
-
-function assessBar() {
-  var n = Object.keys(SEL).length;
-  var sel = document.getElementById('assessSel');
-  var all = document.getElementById('assessAll');
-  var off = !ASSESS.available || !!PENDING;
-  sel.textContent = 'Assess selected' + (n ? ' (' + n + ')' : '');
-  sel.disabled = off || !n;
-  all.disabled = off || !ROWS.length;
-  sel.title = all.title = ASSESS.available ? '' : (ASSESS.why || '');
-  var shown = shownRows();
-  var box = document.getElementById('selall');
-  box.checked = shown.length > 0 && shown.every(function (r) { return SEL[r.rmId]; });
-  if (!PENDING) document.getElementById('assessMsg').textContent = ASSESS.available ? (ASSESS.hint || '') : (ASSESS.why || '');
-}
-
-function assess(ids, all) {
-  if (PENDING) return;
-  var n = all ? ROWS.length : ids.length;
-  document.getElementById('assessMsg').textContent = 'Asking Automation Map…';
-  q('/migration/api/assess', all ? {all: true} : {rmIds: ids}).then(function (out) {
-    if (!out || out.ok !== true) {
-      if (out && out.assess) { watch(out.assess); return; }
-      document.getElementById('assessMsg').textContent = '';
-      LAST = ['<b>Assess did not start.</b> ' + esc((out && out.message) || 'The hub did not say why.'), true];
-      load();
-      return;
-    }
-    watch(out.assess);
-  }).catch(function (e) {
-    document.getElementById('assessMsg').textContent = '';
-    note('<b>Assess could not be sent.</b> ' + esc(e.message), true);
-  });
-}
-
-function watch(a) {
-  a.seenAt = Date.now();
-  PENDING = a;
-  var n = a.count || 0;
-  var words = a.all ? 'Assessing all ' + n + ' rules (a full Automation Map scan)…'
-    : 'Assessing ' + n + ' rule' + (n === 1 ? '' : 's') + '…';
-  document.getElementById('assessMsg').textContent = words;
-  assessBar();
-  render();
-  setTimeout(poll, 3000);
-}
-
-function poll() {
-  if (!PENDING) return;
-  q('/migration/api/assess').then(function (out) {
-    var a = out && out.assess;
-    if (!a || a.requestId !== PENDING.requestId) { PENDING = null; assessBar(); return; }
-    if (a.done) { finished(a); return; }
-    if (a.progress && !PENDING.progress) {
-      document.getElementById('assessMsg').textContent = 'Automation Map is running a full scan for this…';
-    }
-    a.seenAt = PENDING.seenAt;
-    PENDING = a;
-    var wait = a.waitMs || (a.all ? 300000 : 120000);
-    if (Date.now() - PENDING.seenAt > wait) {
-      var mins = Math.round(wait / 60000);
-      PENDING = null;
-      document.getElementById('assessMsg').textContent = '';
-      LAST = ['<b>Automation Map did not answer within ' + mins + ' minutes.</b> If it was updated recently, open ' +
-              'Automation Map once so it listens for HAI, then try again. Reloading shows whatever it has finished.', true];
-      load();
-      return;
-    }
-    setTimeout(poll, 3000);
-  }).catch(function () { setTimeout(poll, 3000); });
-}
-
-function finished(a) {
-  var d = a.done;
-  PENDING = null;
-  document.getElementById('assessMsg').textContent = '';
-  if (d.ok === true) {
-    var secs = d.ms != null ? ' in ' + Math.max(1, Math.round(d.ms / 1000)) + ' s' : '';
-    var failed = (d.failed || []).length;
-    LAST = [d.mode === 'ids'
-      ? '<b>Assessed ' + d.refreshed + ' rule' + (d.refreshed === 1 ? '' : 's') + secs + '.</b>' +
-        (failed ? ' ' + failed + ' could not be read by Automation Map.' : '')
-      : '<b>Automation Map scanned the hub' + secs + '.</b> Every rule below is from that scan.', false];
-    WROTE = a.sentAt || 0;
-    SEL = {};
-  } else {
-    LAST = ['<b>Assess did not finish.</b> ' + esc(d.message || d.reason || 'Automation Map did not say why.'), true];
-  }
-  load();
-}
 
 // ---- Conversion report ---------------------------------------------------------------------------------
 // Built from the rows this page already has: the state read rebuilds every decoded rule in memory, writes
@@ -750,7 +179,7 @@ function finished(a) {
 // it on invented rows, the way check-editor-page.js parses the page.
 
 // Test rules: left out of the report unless "Show test rules" is ticked, and never copied in bulk. A rule is a
-// test rule when its name matches one of these, or when its rebuild says it has no actions yet (a draft).
+// test rule when its name matches one of these, or when its rebuild says it has no actions in Rule Machine (a draft).
 // One list, so a new naming habit is one line here.
 var TEST_RULE_NAMES = [
   /^__/,              // probe and throwaway rules
@@ -758,7 +187,7 @@ var TEST_RULE_NAMES = [
   /\(throwaway\)/i,
   /\(probe/i          // "(probe)" and "(probe, keep)"
 ];
-var TEST_RULE_NO_ACTIONS = 'This rule has no actions yet';
+var TEST_RULE_NO_ACTIONS = 'this rule has no actions in Rule Machine';
 
 // How many rules one bulk Copy may name: MIG_BATCH_MAX in engine/lib/hai_migration.groovy. The app copies that
 // many in one press and reports the rest as not reached, so the page offers exactly that many at a time.
@@ -780,7 +209,7 @@ var REP_FIXES = [
   {key: 'hand', light: 'you', title: 'Won\'t be copied, set up by hand',
    hint: 'HAI leaves these out on purpose. If you still want them, set them up yourself.',
    say: 'Will not be copied: set it up by hand if you still want it.', act: 'Rebuild by hand, or keep it in Rule Machine',
-   phrases: ['admin API', 'reboots it']},
+   phrases: ['Not copied on purpose']},
   {key: 'you', light: 'you', title: 'Needs you',
    hint: 'One change from you each, and these can move.',
    say: 'Needs a change from you before it can move.', act: 'One change each',
@@ -793,6 +222,7 @@ var REP_YOU_SAY = [
   ['disabled on this hub', 'Can be copied, but uses a disabled device: enable it before switching over.'],
   ['may not change', 'Changes a hub variable HAI rules may not change yet.'],
   ['sets the mode', 'Sets the mode, which HAI rules may not do yet.'],
+  ['Copy it anyway', 'Reboots or shuts down the hub: tick "Copy it anyway" on its row if you want it copied.'],
   ['has changed since', 'Changed in Rule Machine since it was copied: copy it again.'],
   ['could not go on the hub', 'Its copy is held, not on the hub.'],
   ['last run went wrong', 'Its HAI copy\'s last run went wrong.'],
@@ -828,7 +258,7 @@ function repIssues(r) {
   else if (r.rebuild && r.rebuild.ok === false) add(r.rebuild.message || 'HAI cannot rebuild this rule.');
   (r.warnings || []).forEach(function (w) {
     if (w.kind === 'rules') return;
-    // A disabled device, a held copy, a changed rule, a copy whose last run went wrong: each one the person's.
+    // A held copy, a changed rule, a copy whose last run went wrong: each one the person's.
     add(w.message, w.blocking ? null : REP_YOU, w);
   });
   if (!out.length && (r.verdict === 'needs-decision' || r.verdict === 'blocked')) {
@@ -841,9 +271,13 @@ function repIssues(r) {
 function repLight(r, issues) {
   if (r.unread) return {light: 'none', say: 'Not read by Automation Map yet.'};
   if (!r.verdict || r.verdict === 'unassessed') return {light: 'none', say: 'Not assessed yet.'};
-  var mine = issues.filter(function (x) { return x.fix.light === 'you'; });
+  if (r.verdict === 'empty') return {light: 'wait', say: 'Empty rule: it has no actions in Rule Machine.'};
+  // A disabled device does not stop a copy, only that rule's Switch over, so it does not colour the rule: counting it
+  // made the headline disagree with the rows (HAI, 17 October). Its next step still says to enable the device.
+  var counted = issues.filter(function (x) { return !(x.w && x.w.kind === 'disabled'); });
+  var mine = counted.filter(function (x) { return x.fix.light === 'you'; });
   if (mine.length) return {light: 'you', say: (mine[0].fix === REP_YOU && repYouSay(mine[0].text)) || mine[0].fix.say};
-  if (issues.length) return {light: 'wait', say: issues[0].fix.say};
+  if (counted.length) return {light: 'wait', say: counted[0].fix.say};
   if (r.verdict !== 'ready') return {light: 'you', say: REP_YOU.say};
   if (r.phase === 'switched') return {light: 'ok', say: 'Already moved to HAI.'};
   if (r.haiId) return {light: 'ok', say: 'Copied to HAI, not switched over yet.'};
@@ -895,7 +329,10 @@ function repNext(r, issues, light, by) {
     if (off) return (r.haiId ? 'Enable ' : 'Copy now; enable ') + repNames(off.w, 'its device') + ' before switching over';
     return 'Keep it in Rule Machine for now';
   }
-  if (light === 'wait') return 'Nothing to do, wait for the fix';
+  // A disabled device no longer colours the rule (repLight), so its step is said here too.
+  var off0 = kind('disabled');
+  if (light === 'wait') return off0 && !r.haiId ? 'Enable ' + repNames(off0.w, 'its device') + ' before switching over, then wait for the fix' : 'Nothing to do, wait for the fix';
+  if (off0 && r.phase !== 'switched') return (r.haiId ? 'Enable ' : 'Copy now; enable ') + repNames(off0.w, 'its device') + ' before switching over';
   if (r.phase === 'switched') return 'Nothing to do, it runs on HAI';
   var options = ((r.rebuild && r.rebuild.behaviour) || []).some(function (b) { return b.differs || b.upgrade; });
   var copy = r.haiId ? '' : 'Copy';
@@ -1059,207 +496,42 @@ function reportText(d) {
 }
 // ---- report logic ends ----
 
-var REP_SHOW_TESTS = false;
-var REP_ASK = false;
-var REP_MSG = null;
-
-function repItem(x) {
-  var p = repSplit(x[0]);
-  var many = x[1].length > 1;
-  // One "details" per line: the rest of the sentence, and the rules it applies to when there are several.
-  var more = (p[1] || many) ? ' <details><summary>' + (many ? x[1].length + ' rules' : 'more') + '</summary><div>' +
-    (p[1] ? esc(p[1]) : '') + (many ? (p[1] ? '<br>' : '') + 'Rules: ' + esc(x[1].join(', ')) + '.' : '') + '</div></details>' : '';
-  return '<li>' + (many ? '' : '<b>' + esc(x[1][0]) + '</b>: ') + esc(p[0]) + more + '</li>';
-}
-// A section a person opens when wanted: a quiet summary with a dot and a count, closed by default.
-function repTag(act) { return act ? '<span class="nx">' + esc(act) + '</span>' : ''; }
-function repFold(tone, title, n, body, open, act) {
-  if (!body) return '';
-  return '<details class="fold"' + (open ? ' open' : '') + '><summary><i class="dot ' + tone + '"></i>' + esc(title) +
-    ' <span class="n">' + n + '</span>' + repTag(act) + '</summary><div class="fb">' + body + '</div></details>';
-}
-function repGroup(tone, title, hint, items, act) {
-  if (!items.length) return '';
-  var n = repRuleCount(items);
-  return repFold(tone, title, n, (hint ? '<p class="hint">' + esc(hint) + '</p>' : '') + '<ul>' + items.map(repItem).join('') + '</ul>', false, act);
-}
-function repReach(d) {
-  if (!d.reach.length) return '';
-  return repFold('info', 'Move order', d.reach.length, '<p class="hint">' + esc(REP_REACH_WHY) + '</p><ul>' +
-    d.reachTop.map(function (x) {
-      return '<li>' + esc(repReachLine(x)) + ' <details><summary>which rules</summary><div>' + esc(x[1].join(', ')) + '.</div></details></li>';
-    }).join('') +
-    (d.reachRest.length ? '<li><details><summary>' + repPlural(d.reachRest.length, 'more rule is', 'more rules are') +
-      ' reached into by fewer</summary><div>' + d.reachRest.map(function (x) { return esc(x[0]) + ' (by ' + esc(x[1].join(', ')) + ')'; }).join('; ') +
-      '.</div></details></li>' : '') + '</ul>', false, REP_ACTS.reach);
-}
-function repRules(k, xs) {
-  return xs.map(function (x) {
-    return '<div class="rl"><i class="dot ' + k + '"></i><div><b>' + esc(x.r.rmName) + '</b> ' + esc(x.say) + ' ' + repTag(x.next) +
-      (x.issues.length ? ' <details><summary>details</summary><ul>' + x.issues.map(function (i) { return '<li>' + esc(i.text) + '</li>'; }).join('') +
-        '</ul></details>' : '') + '</div></div>';
-  }).join('');
-}
-
-function renderReport() {
-  var el = document.getElementById('rep');
-  var ticked = {};
-  Object.keys(UPG).forEach(function (id) { if (Object.keys(UPG[id]).some(function (k) { return UPG[id][k]; })) ticked[id] = true; });
-  var d = reportData(ROWS, REP_SHOW_TESTS, ticked);
-  var h = repHeadline(d);
-  var pct = function (n) { return d.total ? (100 * n / d.total) : 0; };
-  var batch = d.ready.slice(0, REP_BATCH_MAX);
-  var after = d.ready.length - batch.length;
-  var copyLabel = after > 0 ? 'Copy the first ' + batch.length + ' ready' : 'Copy all ' + batch.length + ' ready';
-  var bulk = function (id) {
-    return batch.length ? '<button type="button" id="' + id + '" class="go"' + (flowApproved() ? '' : ' disabled title="' + esc(NEEDS_APPROVAL) + '"') + '>' + esc(copyLabel) +
-      (after > 0 ? ' <small>' + after + ' more after</small>' : '') + '</button>' : '';
-  };
-
-  el.innerHTML =
-    '<div class="repbar"><h2>Conversion report</h2><span>' + bulk('repBulk') +
-      '<button type="button" id="repCopy" class="primary">Copy as text</button>' +
-      '<button type="button" id="repClose">Close</button></span></div>' +
-    (REP_ASK && batch.length ? '<div class="ask"><b>Copy ' + repPlural(batch.length, 'rule', 'rules') + ' to HAI?</b> ' +
-      esc(batch.map(function (r) { return r.rmName; }).join(', ')) + '.<br>Each copy is made stopped, and nothing switches over: ' +
-      'your Rule Machine rules keep running until you switch each one yourself.' +
-      (after > 0 ? ' The other ' + after + ' ready rules wait for the next press.' : '') +
-      (d.readyTicked.length ? ' Not in this copy, because you ticked an upgrade on their row: ' +
-        esc(d.readyTicked.map(function (r) { return r.rmName; }).join(', ')) + '. Copy those from their row to keep it.' : '') +
-      '<div class="acts"><button type="button" id="repGo" class="primary">Copy ' + batch.length + '</button>' +
-      '<button type="button" id="repNo">Not now</button></div></div>' : '') +
-    (REP_MSG ? '<div class="ask' + (REP_MSG[1] ? ' bad' : '') + '">' + REP_MSG[0] + '</div>' : '') +
-    '<p class="hero"><b>' + h.count + '</b> ' + esc(h.rest) + '</p>' +
-    (h.soon ? '<p class="soon">' + esc(h.soon) + '</p>' : '') +
-    '<div class="meter" role="img" aria-label="' + esc(REP_LIGHTS.map(function (k) { return d.lights[k[0]].length + ' ' + k[1]; }).join(', ')) + '">' +
-      REP_LIGHTS.map(function (k) { var n = d.lights[k[0]].length; return n ? '<i class="' + k[0] + '" style="width:' + pct(n) + '%"></i>' : ''; }).join('') + '</div>' +
-    '<div class="key">' + REP_LIGHTS.map(function (k) {
-      var n = d.lights[k[0]].length;
-      return n ? '<span><i class="dot ' + k[0] + '"></i>' + n + ' ' + k[1] + '</span>' : '';
-    }).join('') +
-    (h.done ? '<span class="n">' + esc(h.done) + '</span>' : '') +
-    (d.tests ? '<label class="tests"><input type="checkbox" id="repTests"' + (REP_SHOW_TESTS ? ' checked' : '') + '> Show test rules (' + d.tests + ')</label>' : '') +
-    '</div>' +
-    // The rules that can go, first and open.
-    (d.lights.ok.length ? '<div class="go-list"><div class="glh"><h3>Ready to move <span class="n">' + d.lights.ok.length + '</span></h3>' + bulk('repBulk2') + '</div>' +
-      '<div class="gl">' + d.lights.ok.map(function (x) {
-        return '<div class="gi"><i class="dot ok"></i><div><b>' + esc(x.r.rmName) + '</b><small>' + esc(x.say) + '</small>' + repTag(x.next) + '</div></div>';
-      }).join('') + '</div></div>' : '') +
-    // Everything else, below and closed, under one calm heading.
-    (d.notYet ? '<h3 class="rbr">Not yet <span class="n">' + d.notYet + '</span></h3>' : '') +
-    d.groupList.map(function (g) { return repGroup(g.f.light, g.f.title, g.f.hint, g.items, g.f.act); }).join('') +
-    (d.unread.length ? repFold('none', 'Not read yet', d.unread.length, '<p class="hint">' +
-      esc(d.unread.join(', ')) + '. Scan in Automation Map or Assess them, then Reload.</p>', false, REP_ACTS.unread) : '') +
-    ((d.differs.length || d.skipped.length || d.reach.length || d.pbOnly.length) ? '<h3 class="rbr">Worth knowing</h3>' : '') +
-    repGroup('info', 'Behaves differently from Rule Machine', 'Each difference is said once, with the rules it applies to.', d.differs, REP_ACTS.differs) +
-    repGroup('info', 'Left out of the copy', '', d.skipped, REP_ACTS.skipped) +
-    repReach(d) +
-    (d.pbOnly.length ? repFold('info', 'Private Boolean', d.pbOnly.length, '<ul>' + d.pbOnly.map(function (x) {
-      return '<li>' + esc(repPbLine(x)) + ' <details><summary>' + repPlural(x[1].length, 'rule', 'rules') + '</summary><div>' + esc(x[1].join(', ')) + '.</div></details></li>';
-    }).join('') + '</ul>', false, REP_ACTS.pb) : '') +
-    '<h3 class="rbr">Rule by rule</h3>' +
-    ['ok', 'wait', 'you', 'none'].map(function (k) {
-      var xs = d.lights[k];
-      return xs.length ? repFold(k, REP_LIGHT_TITLES[k], xs.length, repRules(k, xs), k === 'ok', REP_ACTS[k]) : '';
-    }).join('') +
-    '<p class="hint foot">Every rule Automation Map has read, rebuilt in memory as a copy would be. Nothing is written to the hub. Reload after an Assess to refresh it.</p>';
-
-  var on = function (id, f) { var b = document.getElementById(id); if (b) b.onclick = f; };
-  on('repClose', function () { el.hidden = true; REP_ASK = false; REP_MSG = null; });
-  on('repBulk', function () { REP_ASK = true; REP_MSG = null; renderReport(); });
-  on('repBulk2', function () { REP_ASK = true; REP_MSG = null; renderReport(); el.scrollIntoView({block: 'start'}); });
-  on('repNo', function () { REP_ASK = false; renderReport(); });
-  on('repGo', function () { repBulkCopy(batch, this); });
-  var t = document.getElementById('repTests');
-  if (t) t.onchange = function () { REP_SHOW_TESTS = t.checked; renderReport(); };
-  on('repCopy', function () {
-    var txt = reportText(d);
-    var done = function () { document.getElementById('repCopy').textContent = 'Copied'; };
-    if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(txt).then(done, function () { fallbackCopy(txt); }); } else fallbackCopy(txt);
-  });
-}
-
-// The same bulk Copy the app already serves (op clone with rmIds), for the ready rules shown. Every copy is made
-// stopped; the reply carries those rows read again, which are swapped in as a single Copy's are.
-function repBulkCopy(batch, button) {
-  button.disabled = true;
-  button.textContent = 'Copying…';
-  q('/migration/api/apply', {op: 'clone', rmIds: batch.map(function (r) { return r.rmId; })}).then(function (out) {
-    REP_ASK = false;
-    REP_MSG = [out && out.ok === true ? '<b>Done.</b> ' + esc(out.message || '') + ' Test each copy, then switch over on its row when you trust it.'
-      : '<b>Not every copy was made.</b> ' + esc((out && out.message) || 'The hub did not say why.'), !(out && out.ok === true)];
-    if (out && out.state && out.state.ok === true) show(mergeState(out.state)); else load();
-  }).catch(function (e) {
-    REP_ASK = false;
-    REP_MSG = ['<b>Copy could not be sent.</b> ' + esc(e.message), true];
-    renderReport();
-  });
-}
-
-function showReport() {
-  var el = document.getElementById('rep');
-  if (!el.hidden) { el.hidden = true; return; }
-  REP_ASK = false;
-  REP_MSG = null;
-  renderReport();
-  el.hidden = false;
-}
-function fallbackCopy(t) {
-  var ta = document.createElement('textarea');
-  ta.value = t; ta.rows = 10; ta.style.width = '100%';
-  document.getElementById('rep').appendChild(ta);
-  ta.focus(); ta.select();
-  try { if (document.execCommand('copy')) document.getElementById('repCopy').textContent = 'Copied'; } catch (e) { /* the text is selected to copy by hand */ }
-}
 // ---- Flow logic ----------------------------------------------------------------------------------------
-// The guided flow: Scan, Assess, Batch, Report, Select, Prerequisites, Clone, Test, Cutover,
-// Rollback. Everything from here to "flow logic ends" reads only its arguments and the report logic above, so
-// engine/check-migration-flow.js runs it on invented rows. Progress is read from the rows (the ledger's phases,
-// the attestation and the last dry run) and the plan approval; the page keeps nothing of its own but the selection.
+// The guided flow, four steps (17 October: the ten were confusing): Check, Choose, Copy, Switch over.
+// Everything from here to "flow logic ends" reads only its arguments and the report logic above, so
+// engine/check-migration-flow.js runs it on invented rows. Progress is read from the rows (the ledger's phases);
+// the page keeps nothing of its own but the selection. There is no plan to approve: pressing Copy is the approval,
+// and Switch back sits on every rule on HAI, so rolling back is not a step.
 
 var FLOW_STEPS = [
-  {n: 1, lane: 'Discover', title: 'Scan', what: 'Automation Map reads every Rule Machine rule on this hub, so HAI knows what each one does.'},
-  {n: 2, lane: 'Discover', title: 'Assess', what: 'HAI works out, rule by rule, whether a copy can be made and what stands in the way.'},
-  {n: 3, lane: 'Discover', title: 'Batch', what: 'Rules that command other rules have to move first, so the rules are put into rounds.'},
-  {n: 4, lane: 'Plan', title: 'Report', what: 'The proposed plan: each round, its rules and what to do next, for your approval.'},
-  {n: 5, lane: 'Plan', title: 'Select', what: 'Choose what to move now: a whole round, a group, or single rules.'},
-  {n: 6, lane: 'Plan', title: 'Prerequisites', what: 'What HAI Engine must be allowed to use before your selection can move.'},
-  {n: 7, lane: 'Move', title: 'Clone', what: 'HAI makes a stopped copy of each selected rule. Rule Machine keeps running.'},
-  {n: 8, lane: 'Move', title: 'Test', what: 'Try each copy: a dry run on HAI\'s simulator, then for real, and say that it works.'},
-  {n: 9, lane: 'Move', title: 'Cutover', what: 'Rule Machine is paused, and seen to be paused, before the HAI copy goes live.'},
-  {n: 10, lane: 'Rollback', title: 'Rollback', what: 'At any time, one rule or a whole round: the HAI copy stops and Rule Machine runs again. Both are kept.'}
+  {n: 1, title: 'Check', what: 'Automation Map reads every Rule Machine rule, HAI works out what each copy needs, and rules that command each other are put into rounds. All of it happens on its own.'},
+  {n: 2, title: 'Choose', what: 'Tick the rules to move now, or a whole round. Anything that stops a copy shows here.'},
+  {n: 3, title: 'Copy', what: 'HAI makes a stopped copy of each chosen rule. Rule Machine keeps running, so nothing changes in your house yet.'},
+  {n: 4, title: 'Switch over', what: 'Rule Machine is paused, and seen to be paused, before the HAI copy goes live. Switch back is there for every rule, at any time.'}
 ];
+var FLOW_LAST = FLOW_STEPS.length;
 var FLOW_NEXT = {
-  1: 'HAI assesses what Automation Map read.',
-  2: 'The rules are put into rounds, so nothing moves before the rules that command it.',
-  3: 'The rounds become a proposed plan for you to approve.',
-  4: 'You choose the rules to move now.',
-  5: 'HAI lists what must be set up before your selection can move.',
-  6: 'HAI makes stopped copies of the rules you selected.',
-  7: 'You try each copy, first on the simulator and then for real.',
-  8: 'Rule Machine is paused and the HAI copy goes live.',
-  9: 'Keep watching the copies. If one misbehaves, switch it back.',
-  10: 'Pick the next round, or stop here: every round leaves nothing half-moved.'
+  1: 'You choose the rules to move now.',
+  2: 'HAI makes stopped copies of the rules you chose. Pressing Copy is your go-ahead.',
+  3: 'You switch the copies over when you are ready. Rule Machine runs them until then.',
+  4: 'Watch the rules on HAI. If one misbehaves, switch it back. Then choose the next ones.'
 };
 
-// Where a rule has got: none, held (a copy refused by the hub), copied, tested, switched or reverted.
+// Where a rule has got: none, held (a copy refused by the hub), copied, switched or reverted.
 function flowStage(r) {
   if (!r.haiId || r.haiMissing) return 'none';
   if (r.haiState === 'held') return 'held';
   if (r.phase === 'switched') return 'switched';
   if (r.phase === 'reverted') return 'reverted';
-  return r.testedAt ? 'tested' : 'copied';
+  return 'copied';
 }
-// One badge per copied rule: tested by you, dry run passed, or not tested.
+// A badge only for a copy someone said they tried for real (recorded before the test step was dropped).
 function flowBadge(r, me) {
-  if (!r.haiId || r.haiMissing) return null;
-  if (r.testedAt) return {cls: 'tested', text: 'tested by ' + (!r.testedBy || r.testedBy === 'you' || r.testedBy === me ? 'you' : r.testedBy)};
-  if (r.dryRunAt && r.dryRunOk) return {cls: 'dry', text: 'dry run passed'};
-  if (r.dryRunAt) return {cls: 'bad', text: 'dry run found a problem'};
-  return {cls: 'not', text: 'not tested'};
+  if (!r.haiId || r.haiMissing || !r.testedAt) return null;
+  return {cls: 'tested', text: 'tested by ' + (!r.testedBy || r.testedBy === 'you' || r.testedBy === me ? 'you' : r.testedBy)};
 }
 function flowCounts(rows) {
-  var c = {total: rows.length, none: 0, held: 0, copied: 0, tested: 0, switched: 0, reverted: 0};
+  var c = {total: rows.length, none: 0, held: 0, copied: 0, switched: 0, reverted: 0};
   rows.forEach(function (r) { c[flowStage(r)]++; });
   return c;
 }
@@ -1270,7 +542,7 @@ function flowLights(rows) {
   ['ok', 'wait', 'you', 'none'].forEach(function (k) { d.lights[k].forEach(function (x) { of[x.r.rmId] = {light: k, say: x.say, next: x.next}; }); });
   return {d: d, of: of};
 }
-// The plan's rounds with their rows, lights and stages, and the next thing to do in each.
+// The rounds with their rows, lights and stages, and the next thing to do in each.
 function flowRounds(plan, rows, of) {
   var byId = {};
   rows.forEach(function (r) { byId[r.rmId] = r; });
@@ -1291,14 +563,13 @@ function flowRoundNext(rs, of, c) {
   var parts = [];
   if (needYou) parts.push(repPlural(needYou, 'rule needs', 'rules need') + ' a change from you first');
   if (toCopy) parts.push('copy ' + repPlural(toCopy, 'ready rule', 'ready rules'));
-  if (c.copied) parts.push('test ' + repPlural(c.copied, 'copy', 'copies'));
-  if (c.tested) parts.push('switch over ' + repPlural(c.tested, 'tested copy', 'tested copies'));
+  if (c.copied) parts.push('switch over ' + repPlural(c.copied, 'copy', 'copies'));
   if (c.reverted) parts.push(repPlural(c.reverted, 'rule was', 'rules were') + ' switched back: check why before trying again');
   if (wait) parts.push(repPlural(wait, 'rule stays', 'rules stay') + ' in Rule Machine for now');
   var s = parts.join('; ');
   return s ? s.charAt(0).toUpperCase() + s.slice(1) + '.' : 'Nothing to do in this round yet.';
 }
-// Selecting a rule keeps dependents together: every rule that commands it (all the way up) must move with it or
+// Choosing a rule keeps dependents together: every rule that commands it (all the way up) must move with it or
 // before it; the rules it commands may follow later. Both are offered, never added silently.
 function flowDeps(links, sel) {
   var inSel = function (id) { return !!sel[id]; };
@@ -1316,25 +587,25 @@ function flowDeps(links, sel) {
   });
   return {before: Object.keys(before).sort(), after: Object.keys(after).sort()};
 }
-// What must be set up before the rules named can move: migPrereqs in engine/lib/hai_migration.groovy, for a
-// selection the page holds. `ids` null means every row.
+// What stops the rules named being copied: migPrereqs in engine/lib/hai_migration.groovy, for a selection the page
+// holds. A disabled device is not one: the copy is made with it, and only that rule's Switch over waits for it.
+// `ids` null means every row.
 function flowPrereqs(rows, ids) {
-  var dev = {}, vars = {}, off = {}, mode = [];
+  var dev = {}, vars = {}, mode = [];
   var add = function (m, k, n) { m[k] = m[k] || []; if (m[k].indexOf(n) < 0) m[k].push(n); };
   rows.forEach(function (r) {
     if (ids && !ids[r.rmId]) return;
     (r.warnings || []).forEach(function (w) {
       if (w.kind === 'mode') { if (mode.indexOf(r.rmName) < 0) mode.push(r.rmName); return; }
-      var into = w.kind === 'devices' ? dev : w.kind === 'variables' ? vars : w.kind === 'disabled' ? off : null;
+      var into = w.kind === 'devices' ? dev : w.kind === 'variables' ? vars : null;
       if (into) (w.names || []).forEach(function (n) { add(into, n, r.rmName); });
     });
   });
   var items = function (m, fix, at) { return Object.keys(m).sort().map(function (k) { return {name: k, rules: m[k], fix: fix, at: at}; }); };
   var out = items(dev, 'Select it in HAI Engine\'s devices', 'engine')
     .concat(items(vars, 'Add it to Approved hub variables in HAI Engine', 'engine'))
-    .concat(mode.length ? [{name: 'Allow rules to change the mode', rules: mode, fix: 'Turn on Allow rules to change the mode in HAI Engine', at: 'engine'}] : [])
-    .concat(items(off, 'Enable it in Devices before switching over', 'devices'));
-  return {items: out, devices: Object.keys(dev).length + Object.keys(off).length, variables: Object.keys(vars).length,
+    .concat(mode.length ? [{name: 'Allow rules to change the mode', rules: mode, fix: 'Turn on Allow rules to change the mode in HAI Engine', at: 'engine'}] : []);
+  return {items: out, devices: Object.keys(dev).length, variables: Object.keys(vars).length,
           settings: mode.length ? 1 : 0, blocking: Object.keys(dev).length + Object.keys(vars).length + (mode.length ? 1 : 0)};
 }
 // The rows selected, in plan order; those on which an operation is available now; and those it is not, with why.
@@ -1344,488 +615,403 @@ function flowCannot(rs, op) {
   return rs.filter(function (r) { return !(r.ops && r.ops[op] && r.ops[op].available); })
     .map(function (r) { return {r: r, why: ((r.ops || {})[op] || {}).why || 'Not available on this rule.'}; });
 }
-// Which steps are done, for the ticks on the infographic, and the first one that is not.
+// Which steps are done, for the ticks on the overview, and the first one that is not.
 function flowProgress(x) {
   var sel = flowSelected(x.rows, x.sel);
   var st = sel.map(flowStage);
   var copied = st.filter(function (s) { return s !== 'none' && s !== 'held'; }).length;
   var done = {
-    1: !!x.provider && x.provider.state !== 'absent' && x.provider.state !== 'broken' && x.rows.length > 0,
-    2: x.rows.length > 0 && !x.rows.some(function (r) { return r.unread; }),
-    3: !!(x.plan && x.plan.rounds && x.plan.rounds.length),
-    4: !!(x.approved && x.plan && x.approved.fingerprint === x.plan.fingerprint),
-    5: sel.length > 0,
-    6: sel.length > 0 && flowPrereqs(x.rows, x.sel).blocking === 0,
-    7: sel.length > 0 && copied === sel.length,
-    8: sel.length > 0 && st.every(function (s) { return s === 'tested' || s === 'switched'; }),
-    9: sel.length > 0 && st.every(function (s) { return s === 'switched'; }),
-    10: false
+    1: !!x.provider && x.provider.state !== 'absent' && x.provider.state !== 'broken' && x.rows.length > 0 &&
+       !x.rows.some(function (r) { return r.unread; }),
+    2: sel.length > 0 && flowPrereqs(x.rows, x.sel).blocking === 0,
+    3: sel.length > 0 && copied === sel.length,
+    4: sel.length > 0 && st.every(function (s) { return s === 'switched'; })
   };
   var now = 0;
-  for (var i = 1; i <= 9; i++) if (!done[i]) { now = i; break; }
+  for (var i = 1; i <= FLOW_LAST; i++) if (!done[i]) { now = i; break; }
   return {done: done, now: now};
 }
 // ---- flow logic ends ----
 
+// ---- The page -------------------------------------------------------------------------------------------
+// One page, four sections, in the order a rule moves through them (17 October): Assess shows the rules in
+// batches and which can be cloned, Clone makes paused HAI copies of the ticked ones, Cut over pauses the Rule
+// Machine rule and makes its copy live, and Rollback undoes that. A rule appears in one section only: the one its
+// state puts it in. Nothing else is on the screen.
+
 var PLAN = null;
 var LINKS = {};
-var APPROVED = null;
-var STEP = 0;
-var FLOW_MSG = null;
-var FLOW_ASK = null;
-var FLOW_Q = '';
-var DRY = {};
-var ME = '';
-try { ME = localStorage.getItem('haiMigrationTester') || ''; } catch (e) { ME = ''; }
-
-function flowLink(href, text) { return href ? '<a href="' + esc(href) + '" target="_blank" rel="noopener">' + esc(text) + '</a>' : ''; }
-function editorHref(r) { return LINKS.editor && r.haiId ? LINKS.editor + '#rule=' + encodeURIComponent(r.haiId) : null; }
-function mapHref(r) { return LINKS.map ? LINKS.map + '#focus=a' + encodeURIComponent(r.rmId) : null; }
-// Every named rule links to its Rule Machine page, its HAI copy in the editor, and Automation Map focused on it.
-function ruleName(r) {
-  var more = [flowLink(editorHref(!r.haiMissing ? r : {}), 'HAI copy'), flowLink(mapHref(r), 'map')].filter(Boolean);
-  return '<a class="rn" href="' + esc(r.rmUrl) + '" target="_blank" rel="noopener" title="Open the Rule Machine rule">' + esc(r.rmName) + '</a>' +
-    (more.length ? ' <span class="rl2">' + more.join(' · ') + '</span>' : '');
-}
-function badgeHtml(r) { var b = flowBadge(r, ME); return b ? '<span class="badge ' + b.cls + '">' + esc(b.text) + '</span>' : ''; }
-function flowCtx() {
-  var L = flowLights(ROWS);
-  return {L: L, rounds: flowRounds(PLAN, ROWS, L.of), counts: flowCounts(ROWS),
-          prog: flowProgress({rows: ROWS, plan: PLAN, approved: APPROVED, sel: SEL, provider: PROVIDER})};
-}
 var PROVIDER = null;
+var ME = '';
+var CUT = {};
+var MSG = {};
+var DET = {};
+var WORKING = false;
+var FIND = '';
+var FIRST = true;
+var BAR_TIMER = null;
 
-// Whether moving is unlocked: a plan exists and is approved, or there is no plan to approve (no detailed reading).
-function flowApproved() { return !(PLAN && PLAN.rounds && PLAN.rounds.length) || !!(APPROVED && APPROVED.fingerprint === PLAN.fingerprint); }
-var NEEDS_APPROVAL = 'Approve the proposed plan first (step 4). Nothing changes on your hub until you do.';
+// The one status bar: what is happening now, then how it went (17 October: a plain "Working…" looked hung).
+function bar(kind, text) {
+  var b = document.getElementById('bar');
+  clearTimeout(BAR_TIMER);
+  if (!kind) { b.hidden = true; return; }
+  b.className = 'bar' + (kind === 'ok' ? ' ok' : kind === 'err' ? ' err' : '');
+  b.innerHTML = (kind === 'work' ? '<span class="spin" aria-hidden="true"></span>' : '') + '<span>' + text + '</span>';
+  b.hidden = false;
+  if (kind === 'ok') BAR_TIMER = setTimeout(function () { bar(null); }, 10000);
+}
+// Search by rule name, in every section at once; ticks are kept whatever is shown.
+function shown(r) { return !FIND || String(r.rmName || '').toLowerCase().indexOf(FIND) >= 0; }
+function noMatch() { return '<p class="none">No rule matches “' + esc(FIND) + '”.</p>'; }
 
-// The overview: three lanes of steps with arrows, Cutover filled,
-// and Rollback as a band under Move. Every number is read from the rows, the plan and the selection.
-function renderFlow() {
-  var host = document.getElementById('flow');
-  var x = flowCtx();
-  var L = x.L.d.lights, c = x.counts, prog = x.prog;
-  var nSel = Object.keys(SEL).length;
-  var pre = flowPrereqs(ROWS, nSel ? SEL : null);
-  var rounds = x.rounds;
-  var held = (PLAN && PLAN.held) || [];
-  var t = Date.parse((PROVIDER || {}).generatedAt || '');
-  var age = isNaN(t) ? 'not read yet' : (Date.now() - t < 60000 ? 'just now' : ago(PROVIDER.generatedAt) + ' ago');
-  var copies = c.copied + c.tested;
-  var seg = function (cls, n) { return n ? '<i class="' + cls + '" style="flex:' + n + '"></i>' : ''; };
-  var cnt = function (cls, n, label) { return '<span class="' + cls + '"><b>' + n + '</b>' + label + '</span>'; };
-  var pill = function (n, one, many) { return '<span class="pill' + (n ? ' bad' : '') + '">' + repPlural(n, one, many) + '</span>'; };
-  var head = {1: ['Scan', ''], 2: ['Assess', 'map each rule to HAI'], 3: ['Batch', 'order by dependencies'], 4: ['Report', ''], 5: ['Select', ''],
-              6: ['Prerequisites', ''], 7: ['Clone', ''], 8: ['Test', ''], 9: ['Cutover', '']};
-  var fig = {
-    1: '<div class="big">' + ROWS.length + '</div><div class="cap">Rule Machine rules read by Automation Map, ' + esc(age) + '</div>',
-    2: '<div class="mbar" role="img" aria-label="' + esc(L.ok.length + ' ready to move, ' + L.you.length + ' need a decision, ' + L.wait.length + ' stay in Rule Machine for now, ' + L.none.length + ' not read') + '">' +
-       seg('ok', L.ok.length) + seg('you', L.you.length) + seg('wait', L.wait.length) + seg('none', L.none.length) + '</div>' +
-       '<div class="cnt">' + cnt('ok', L.ok.length, 'ready to move') + cnt('you', L.you.length, 'need a decision') + cnt('wait', L.wait.length, 'stay in Rule Machine for now') +
-       (L.none.length ? cnt('none', L.none.length, 'not read yet') : '') + '</div>',
-    3: (rounds.length ? '<div class="tiles">' + rounds.map(function (r, i) {
-         return '<span class="tile' + (i === 1 ? ' t2' : i >= 2 ? ' t3' : '') + '" style="flex:' + Math.max(1, r.ids.length) + '"><b>' + r.ids.length + '</b><span>round ' + r.round + '</span></span>';
-       }).join('') + (held.length ? '<span class="tile lp" style="flex:' + held.length + '"><b>' + held.length + '</b><span>loop</span></span>' : '') + '</div>' +
-       '<div class="cap">Each round depends only on earlier ones, so you can stop after any round.</div>'
-       : '<div class="cap">Needs Automation Map\'s detailed reading to put the rules in order.</div>'),
-    4: '<div class="cap">A proposed plan for your approval: what moves in each round, what needs a decision, and what HAI won\'t copy.</div>' +
-       '<span class="lnk">' + (prog.done[4] ? 'Approved. Open the plan' : 'Open the plan') + '</span>',
-    5: '<div class="cap">You choose a round, a group, or single rules. HAI keeps rules that depend on each other together.</div>' +
-       '<div class="mono">' + nSel + ' selected</div>',
-    6: '<div class="cap">What to add to the HAI console first, so the copies can run' + (nSel ? '' : ' (every rule, until you select)') + ':</div>' +
-       (pre.devices + pre.variables + pre.settings ? '<div class="pills">' + pill(pre.devices, 'device', 'devices') + pill(pre.variables, 'hub variable', 'hub variables') +
-         pill(pre.settings, 'setting', 'settings') + '</div>' : '<div class="pills"><span class="pill good">none needed</span></div>'),
-    7: '<div class="cap">HAI clones the selected Rule Machine rules. Each clone is <b>stopped</b> and Rule Machine keeps running, so nothing changes yet.</div>' +
-       '<div class="mono">' + repPlural(copies, 'copy', 'copies') + ' waiting</div>',
-    8: '<div class="cap">Try each copy before it takes over: a dry run on the simulator, then for real, and say that it works.</div>' +
-       '<div class="mono">' + c.tested + ' of ' + copies + ' tested</div>',
-    9: '<div class="cap"><b>The Rule Machine rule is paused and the HAI rule goes live. HAI checks Rule Machine has really paused before it starts.</b></div>' +
-       '<div class="mono">' + c.switched + ' live on HAI</div>'
+function hasCopy(r) { return !!r.haiId && !r.haiMissing; }
+function isLive(r) { return hasCopy(r) && (r.phase === 'switched' || r.live === 'hai' || r.live === 'both'); }
+function power(r) { return (r.warnings || []).filter(function (w) { return w.kind === 'hubPower'; })[0] || null; }
+function canClone(r) { return !r.unread && r.verdict !== 'empty' && !!(r.ops && r.ops.clone && r.ops.clone.available); }
+function upgList(r) { var u = UPG[r.rmId] || {}; return Object.keys(u).filter(function (k) { return u[k]; }); }
+function cloneReady(r) { return canClone(r) && (!power(r) || !!(UPG[r.rmId] || {}).hubPower); }
+// The first sentence of a reason, so a row carries one short line.
+function first(text) { var t = String(text || ''); var m = /^(.*?[.!?])(\s|$)/.exec(t); return m ? m[1] : t; }
+function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+function assessStatus(r) {
+  if (r.verdict === 'empty') return {cls: 'empty', word: 'Empty rule', why: 'It has no actions in Rule Machine.'};
+  if (r.unread) return {cls: 'no', word: 'Can’t clone', why: 'Not read by Automation Map yet: press Scan again.'};
+  if (canClone(r)) return {cls: 'ok', word: 'Can clone', why: null};
+  var why = (r.ops && r.ops.clone && r.ops.clone.why) || (r.verdictReasons || [])[0] || 'HAI cannot copy this rule.';
+  return {cls: 'no', word: 'Can’t clone', why: first(why)};
+}
+
+function cutStatus(r) {
+  var off = (r.warnings || []).filter(function (w) { return w.kind === 'disabled'; })[0];
+  if (off) return 'Enable ' + (off.names || []).join(', ') + ' first.';
+  if (r.ops && r.ops.switchOver && r.ops.switchOver.available) return null;
+  return first((r.ops && r.ops.switchOver && r.ops.switchOver.why) || 'This copy cannot go live yet.');
+}
+
+function batchesOf(rows) {
+  var by = {};
+  rows.forEach(function (r) { var k = r.round ? String(r.round) : 'other'; (by[k] = by[k] || []).push(r); });
+  return Object.keys(by).sort(function (a, b) { return a === 'other' ? 1 : b === 'other' ? -1 : Number(a) - Number(b); })
+    .map(function (k) { return {key: k, title: k === 'other' ? 'Other rules' : 'Batch ' + k, rows: by[k]}; });
+}
+
+function detail(r) {
+  if (!DET[r.rmId]) return '';
+  var reasons = (r.verdictReasons || []).slice(0, 3);
+  var ups = ((r.rebuild && r.rebuild.behaviour) || []).filter(function (b) { return b.upgrade && b.key !== 'hubPower' && !hasCopy(r); });
+  var links = ['<a href="/installedapp/configure/' + encodeURIComponent(r.rmId) + '" target="_blank" rel="noopener">Open in Rule Machine</a>'];
+  if (hasCopy(r) && LINKS.editor) links.push('<a href="' + esc(LINKS.editor + '#rule=' + encodeURIComponent(r.haiId)) + '" target="_blank" rel="noopener">Open the HAI copy</a>');
+  if (hasCopy(r) && !isLive(r) && r.ops && r.ops.deleteClone && r.ops.deleteClone.available) links.push('<button type="button" class="link" data-del="' + esc(r.rmId) + '">Delete the HAI copy</button>');
+  return '<div class="det">' +
+    (reasons.length ? '<ul>' + reasons.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
+    ups.map(function (b) {
+      var on = !!(UPG[r.rmId] || {})[b.upgrade.key];
+      return '<div><label><input type="checkbox" data-upg="' + esc(r.rmId) + '" data-key="' + esc(b.upgrade.key) + '"' + (on ? ' checked' : '') + '> ' + esc(b.upgrade.label) + '</label></div>';
+    }).join('') +
+    '<div class="links">' + links.join('') + '</div></div>';
+}
+
+function nameCell(r) {
+  return '<span class="nm"><button type="button" class="tg" data-det="' + esc(r.rmId) + '" aria-expanded="' + (DET[r.rmId] ? 'true' : 'false') +
+    '" aria-label="Details">' + (DET[r.rmId] ? '▼' : '▶') + '</button>' + esc(r.rmName) + '</span>';
+}
+
+function msgHtml(key) { var m = MSG[key]; return m ? '<p class="msg' + (m[1] ? ' err' : '') + '">' + m[0] + '</p>' : ''; }
+
+function renderAssess(all) {
+  var el = document.getElementById('sAssess');
+  var can = all.filter(canClone).length;
+  var rows = all.filter(shown);
+  var h = '<div class="sh"><h2 id="hAssess">1. Assess<span class="n">' + can + ' of ' + all.length + ' can clone</span></h2></div>';
+  if (!all.length) { el.innerHTML = h + '<p class="none">Every rule has an HAI copy.</p>'; return; }
+  if (!rows.length) { el.innerHTML = h + noMatch(); return; }
+  h += batchesOf(rows).map(function (b) {
+    var ok = b.rows.filter(cloneReady);
+    var all = ok.length && ok.every(function (r) { return SEL[r.rmId]; });
+    return '<div class="batch"><div class="bh">' +
+      (ok.length ? '<input type="checkbox" data-batch="' + esc(b.key) + '"' + (all ? ' checked' : '') + ' aria-label="Tick all in ' + esc(b.title) + '">' : '') +
+      esc(b.title) + ' <span class="n">' + b.rows.length + '</span></div>' +
+      b.rows.map(function (r) {
+        var s = assessStatus(r);
+        var p = power(r);
+        var tick = cloneReady(r) ? '<input type="checkbox" data-sel="' + esc(r.rmId) + '"' + (SEL[r.rmId] ? ' checked' : '') + ' aria-label="Tick ' + esc(r.rmName) + '">' : '<span></span>';
+        return '<div class="r">' + tick + nameCell(r) + '<span class="st ' + s.cls + '">' + s.word + '</span>' +
+          (s.why ? '<span class="why">' + esc(s.why) + '</span>' : '') +
+          (p && canClone(r) ? '<label class="anyway"><input type="checkbox" data-anyway="' + esc(r.rmId) + '"' + ((UPG[r.rmId] || {}).hubPower ? ' checked' : '') + '> ' +
+            'Clone it anyway: this rule ' + (/shut/.test(p.message || '') ? 'shuts down' : 'reboots') + ' the hub, and the copy will too</label>' : '') +
+          detail(r) + '</div>';
+      }).join('') + '</div>';
+  }).join('');
+  el.innerHTML = h;
+}
+
+function renderClone(rows) {
+  var el = document.getElementById('sClone');
+  var ticked = rows.filter(function (r) { return SEL[r.rmId] && cloneReady(r); });
+  el.innerHTML = '<div class="sh"><h2 id="hClone">2. Clone</h2></div>' +
+    '<div class="foot"><button type="button" class="primary" id="cloneGo"' + (ticked.length && !WORKING ? '' : ' disabled') + '>Clone ' + ticked.length + '</button>' +
+    '<span class="sub">' + (ticked.length ? 'The copies land paused. Rule Machine keeps running.' : 'Tick rules in Assess to clone them.') + '</span></div>' +
+    msgHtml('clone');
+}
+
+function renderCut(all) {
+  var el = document.getElementById('sCut');
+  var n = all.filter(function (r) { return !cutStatus(r) && CUT[r.rmId]; }).length;
+  var rows = all.filter(shown);
+  var ok = rows.filter(function (r) { return !cutStatus(r); });
+  var h = '<div class="sh"><h2 id="hCut">3. Cut over<span class="n">' + plural(all.length, 'copy', 'copies') + ' paused on HAI</span></h2>' +
+    (all.length ? '<button type="button" class="primary" id="cutGo"' + (n && !WORKING ? '' : ' disabled') + '>Cut over ' + n + '</button>' : '') + '</div>';
+  if (!all.length) { el.innerHTML = h + '<p class="none">Nothing cloned yet.</p>' + msgHtml('cut'); return; }
+  if (!rows.length) { el.innerHTML = h + noMatch() + msgHtml('cut'); return; }
+  var allOn = ok.length && ok.every(function (r) { return CUT[r.rmId]; });
+  h += (ok.length > 1 ? '<div class="bh"><input type="checkbox" id="cutAll"' + (allOn ? ' checked' : '') + ' aria-label="Tick every copy shown"> Every copy' + (FIND ? ' shown' : '') + '</div>' : '') +
+    rows.map(function (r) {
+      var why = cutStatus(r);
+      var tick = why ? '<span></span>' : '<input type="checkbox" data-cut="' + esc(r.rmId) + '"' + (CUT[r.rmId] ? ' checked' : '') + ' aria-label="Tick ' + esc(r.rmName) + '">';
+      return '<div class="r">' + tick + nameCell(r) + '<span class="st paused">Paused on HAI</span>' +
+        (why ? '<span class="why need">' + esc(why) + '</span>' : '') + detail(r) + '</div>';
+    }).join('');
+  el.innerHTML = h + msgHtml('cut');
+}
+
+function renderBack(all) {
+  var el = document.getElementById('sBack');
+  var rows = all.filter(shown);
+  var h = '<div class="sh"><h2 id="hBack">4. Rollback<span class="n">' + plural(all.length, 'rule', 'rules') + ' live on HAI</span></h2></div>';
+  if (!all.length) { el.innerHTML = h + '<p class="none">No rule is live on HAI yet.</p>' + msgHtml('back'); return; }
+  if (!rows.length) { el.innerHTML = h + noMatch() + msgHtml('back'); return; }
+  h += batchesOf(rows).map(function (b) {
+    return '<div class="batch"><div class="bh">' + esc(b.title) +
+      (b.rows.length > 1 ? ' <button type="button" class="link" data-backbatch="' + esc(b.key) + '">Roll back all ' + b.rows.length + '</button>' : '') + '</div>' +
+      b.rows.map(function (r) {
+        var can = r.ops && r.ops.switchBack && r.ops.switchBack.available;
+        return '<div class="r"><span></span>' + nameCell(r) + '<span class="act"><span class="st live">Live on HAI</span> ' +
+          '<button type="button" data-back="' + esc(r.rmId) + '"' + (can && !WORKING ? '' : ' disabled') + '>Roll back</button></span>' +
+          (can ? '' : '<span class="why need">' + esc(first(r.ops && r.ops.switchBack && r.ops.switchBack.why)) + '</span>') + detail(r) + '</div>';
+      }).join('') + '</div>';
+  }).join('');
+  el.innerHTML = h + msgHtml('back');
+}
+
+function render() {
+  var assessRows = ROWS.filter(function (r) { return !hasCopy(r); });
+  var cutRows = ROWS.filter(function (r) { return hasCopy(r) && !isLive(r); });
+  var liveRows = ROWS.filter(isLive);
+  // Ticks only for rules still in the section they were ticked in.
+  Object.keys(SEL).forEach(function (k) { if (!assessRows.some(function (r) { return r.rmId === k && cloneReady(r); })) delete SEL[k]; });
+  Object.keys(CUT).forEach(function (k) { if (!cutRows.some(function (r) { return r.rmId === k && !cutStatus(r); })) delete CUT[k]; });
+  renderAssess(assessRows);
+  renderClone(assessRows);
+  renderCut(cutRows);
+  renderBack(liveRows);
+  wire();
+}
+
+function wire() {
+  var all = function (sel, f) { Array.prototype.forEach.call(document.querySelectorAll(sel), f); };
+  all('[data-det]', function (b) { b.onclick = function () { var k = b.getAttribute('data-det'); DET[k] = !DET[k]; render(); }; });
+  all('[data-sel]', function (b) { b.onchange = function () { var k = b.getAttribute('data-sel'); if (b.checked) SEL[k] = true; else delete SEL[k]; render(); }; });
+  all('[data-batch]', function (b) {
+    b.onchange = function () {
+      var key = b.getAttribute('data-batch');
+      ROWS.forEach(function (r) { if (!hasCopy(r) && shown(r) && (r.round ? String(r.round) : 'other') === key && cloneReady(r)) { if (b.checked) SEL[r.rmId] = true; else delete SEL[r.rmId]; } });
+      render();
+    };
+  });
+  all('[data-anyway]', function (b) {
+    b.onchange = function () { var k = b.getAttribute('data-anyway'); UPG[k] = UPG[k] || {}; UPG[k].hubPower = b.checked; if (!b.checked) delete SEL[k]; render(); };
+  });
+  all('[data-upg]', function (b) {
+    b.onchange = function () { var k = b.getAttribute('data-upg'); UPG[k] = UPG[k] || {}; UPG[k][b.getAttribute('data-key')] = b.checked; };
+  });
+  all('[data-cut]', function (b) { b.onchange = function () { var k = b.getAttribute('data-cut'); if (b.checked) CUT[k] = true; else delete CUT[k]; render(); }; });
+  var cutAll = document.getElementById('cutAll');
+  if (cutAll) cutAll.onchange = function () {
+    ROWS.forEach(function (r) { if (hasCopy(r) && !isLive(r) && !cutStatus(r) && shown(r)) { if (cutAll.checked) CUT[r.rmId] = true; else delete CUT[r.rmId]; } });
+    render();
   };
-  var stepBtn = function (n) {
-    var d = prog.done[n], now = prog.now === n;
-    return '<button type="button" class="step' + (n === 9 ? ' cut' : '') + (STEP === n ? ' on' : '') + '" data-step="' + n + '">' +
-      '<span class="sh"><span class="no">' + n + '</span>' + esc(head[n][0]) + (head[n][1] ? ' <small>' + esc(head[n][1]) + '</small>' : '') +
-      '<span class="st' + (d ? ' done' : now ? ' now' : '') + '">' + (d ? '✓ done' : now ? 'next' : '') + '</span></span>' + fig[n] + '</button>';
-  };
-  var arrow = '<span class="arrow" aria-hidden="true">→</span>';
-  var lane = function (label, words, ns, extra) {
-    return '<section class="lanec"><div class="lh"><b>' + label + '</b><span>' + esc(words) + '</span></div><div class="lane">' +
-      ns.map(stepBtn).join(arrow) + '</div>' + (extra || '') + '</section>';
-  };
-  host.innerHTML = lane('DISCOVER', 'What you have, and what HAI can take', [1, 2, 3]) +
-    lane('PLAN', 'You approve before anything moves', [4, 5, 6]) +
-    lane('MOVE', 'One rule or one round at a time', [7, 8, 9],
-      '<button type="button" class="band' + (STEP === 10 ? ' on' : '') + '" data-step="10"><span class="no">10</span><b>↺ Rollback, any time</b>' +
-      '<span>Reactivate the Rule Machine rule and stop the HAI rule, for one rule or a whole round. Both copies are kept until you delete one yourself.' +
-      (c.reverted ? ' ' + repPlural(c.reverted, 'rule', 'rules') + ' switched back so far.' : '') + '</span></button>');
-  Array.prototype.forEach.call(host.querySelectorAll('[data-step]'), function (b) {
-    b.onclick = function () { openStep(Number(b.getAttribute('data-step'))); };
+  var cg = document.getElementById('cloneGo');
+  if (cg) cg.onclick = function () { runAll('clone', ROWS.filter(function (r) { return SEL[r.rmId] && cloneReady(r); }), 'clone'); };
+  var cu = document.getElementById('cutGo');
+  if (cu) cu.onclick = function () { runAll('switchOver', ROWS.filter(function (r) { return CUT[r.rmId]; }), 'cut'); };
+  all('[data-back]', function (b) { b.onclick = function () { var k = b.getAttribute('data-back'); runAll('switchBack', ROWS.filter(function (r) { return r.rmId === k; }), 'back'); }; });
+  all('[data-backbatch]', function (b) {
+    b.onclick = function () {
+      var key = b.getAttribute('data-backbatch');
+      runAll('switchBack', ROWS.filter(function (r) { return isLive(r) && shown(r) && (r.round ? String(r.round) : 'other') === key; }), 'back');
+    };
+  });
+  all('[data-del]', function (b) {
+    b.onclick = function () {
+      var k = b.getAttribute('data-del');
+      var r = ROWS.filter(function (x) { return x.rmId === k; })[0];
+      if (r && window.confirm('Delete the HAI copy of ' + (r.rmName || 'this rule') + '? The Rule Machine rule is not changed.')) runAll('deleteClone', [r], 'cut');
+    };
   });
 }
 
-function openStep(n) {
-  STEP = n;
-  FLOW_ASK = null;
-  FLOW_MSG = null;
-  try { history.replaceState(null, '', n ? '#step=' + n : location.pathname + location.search); } catch (e) { /* not allowed here */ }
-  renderFlow();
-  renderScreen();
-  if (n) document.getElementById('screen').scrollIntoView({block: 'start', behavior: 'smooth'});
-}
-
-// The frame every screen shares: where you are, what this step does, what to do, the body, and what comes next.
-function screenFrame(st, todo, body, nextLabel) {
-  var next = st.n < 10 ? FLOW_STEPS[st.n] : null;
-  return '<div class="where">Step ' + st.n + ' of 10 · ' + esc(st.lane) + '</div><h2>' + esc(st.title) + '</h2><p class="what">' + esc(st.what) + '</p>' +
-    (FLOW_MSG ? '<div class="msg' + (FLOW_MSG[1] ? ' bad' : '') + '">' + FLOW_MSG[0] + '</div>' : '') +
-    (FLOW_ASK ? '<div class="ask' + (FLOW_ASK.warn ? ' warn' : '') + '"><b>' + esc(FLOW_ASK.title) + '</b><br>' + FLOW_ASK.body +
-      '<div class="acts"><button type="button" class="primary" data-act="askGo">' + esc(FLOW_ASK.go) + '</button><button type="button" data-act="askNo">Cancel</button></div></div>' : '') +
-    '<div class="todo"><b>What you need to do</b>' + todo + '</div>' + body +
-    '<div class="foot"><p><b>What happens next:</b> ' + esc(FLOW_NEXT[st.n]) + '</p><div>' +
-    (st.n > 1 ? '<button type="button" data-act="back">Back</button>' : '') +
-    '<button type="button" data-act="close">Close</button>' +
-    (next ? '<button type="button" class="primary" data-act="next">' + esc(nextLabel || ('Next step: ' + next.title)) + '</button>' : '') + '</div></div>';
-}
-
-function ruleRow(r, extra, of) {
-  var l = of ? of[r.rmId] : null;
-  return '<div class="li"><span class="nm2">' + ruleName(r) + (l || extra ? '<span class="sub2">' + (l ? esc(l.say) : '') + (extra ? ' ' + extra : '') + '</span>' : '') + '</span>' +
-    badgeHtml(r) + (r.round ? '<span class="rl2">round ' + esc(r.round) + '</span>' : '') + '</div>';
-}
-function ruleList(rs, extra, of) {
-  return rs.length ? '<div class="list">' + rs.map(function (r) { return ruleRow(r, extra ? extra(r) : '', of); }).join('') + '</div>' : '';
-}
-function selectedOrAll(pred) {
-  var sel = flowSelected(ROWS, SEL);
-  return (sel.length ? sel : ROWS).filter(pred);
-}
-
-function renderScreen() {
-  var el = document.getElementById('screen');
-  if (!STEP) { el.hidden = true; el.innerHTML = ''; return; }
-  el.hidden = false;
-  var st = FLOW_STEPS[STEP - 1];
-  var x = flowCtx();
-  var of = x.L.of;
-  var sel = flowSelected(ROWS, SEL);
-  var nothing = '<p class="empty">Nothing is selected yet. <button type="button" data-step="5">Go to Select</button></p>';
-  var todo = '', body = '', nextLabel = null;
-  if (STEP === 1) {
-    var p = PROVIDER || {};
-    var unread = ROWS.filter(function (r) { return r.unread; });
-    todo = (p.state === 'absent' || p.state === 'broken' || p.state === 'incompatible')
-      ? 'Automation Map has not given HAI a reading. Install or update it, scan, then come back.'
-      : unread.length ? 'Scan again so Automation Map reads the ' + repPlural(unread.length, 'rule', 'rules') + ' it has not read yet.'
-      : 'Nothing, unless you changed rules in Rule Machine since the last scan. Then scan again.';
-    body = '<div class="sec"><b>' + ROWS.length + ' Rule Machine rules</b> on this hub. ' + esc(p.note || '') +
-      (unread.length ? '<p>' + repPlural(unread.length, 'rule has', 'rules have') + ' not been read: ' + unread.slice(0, 8).map(function (r) { return ruleName(r); }).join(', ') + (unread.length > 8 ? ' and others' : '') + '.</p>' : '') +
-      '<div class="acts" style="margin-top:8px"><button type="button" class="go" data-act="scan"' + (ASSESS.available && !PENDING ? '' : ' disabled title="' + esc(ASSESS.why || 'Automation Map is busy.') + '"') + '>Scan again</button>' +
-      (LINKS.map ? flowLink(LINKS.map, 'Open Automation Map') : '') + '</div></div>';
-  } else if (STEP === 2) {
-    var L = x.L.d.lights;
-    todo = L.you.length ? repPlural(L.you.length, 'rule needs', 'rules need') + ' a change from you before it can move; the plan and Prerequisites say which. Rules ready to move need nothing, and any rule can simply stay in Rule Machine.'
-      : 'Nothing: read it, then go on to the rounds.';
-    body = '<div class="bar2" style="height:26px;margin-bottom:6px">' + [['ok', 'ready to move'], ['you', 'need a decision'], ['wait', 'stay in Rule Machine for now'], ['none', 'not read']].map(function (k) {
-      var n = L[k[0]].length; return n ? '<i class="' + k[0] + '" style="flex:' + n + '" title="' + esc(n + ' ' + k[1]) + '">' + n + '</i>' : ''; }).join('') + '</div>' +
-      [['ok', 'Ready to move'], ['you', 'Needs a decision from you'], ['wait', 'Stays in Rule Machine for now: HAI does not take these yet'], ['none', 'Not read yet']].map(function (k) {
-        var xs = L[k[0]]; if (!xs.length) return '';
-        return '<details' + (k[0] === 'you' ? ' open' : '') + '><summary><b>' + esc(k[1]) + '</b> <span class="rl2">' + xs.length + '</span></summary>' +
-          ruleList(xs.map(function (y) { return y.r; }), function (r) { return '<span class="badge not">' + esc((of[r.rmId] || {}).next || '') + '</span>'; }, of) + '</details>';
-      }).join('') +
-      '<p><button type="button" data-act="report">Open the full conversion report</button></p>';
-  } else if (STEP === 3) {
-    var held = (PLAN && PLAN.held) || [];
-    var outside = (PLAN && PLAN.outside) || [];
-    var byId = {}; ROWS.forEach(function (r) { byId[r.rmId] = r; });
-    todo = x.rounds.length ? 'Nothing: the rounds are worked out for you. Read why, then see the plan.'
-      : 'Automation Map\'s detailed reading is needed to order the rules. Scan in Automation Map, then reload.';
-    body = (x.rounds.length ? '<p>A rule that commands another has to move first: a Rule Machine rule that commands a moved rule goes on commanding its paused Rule Machine copy, and nothing says so. ' +
-      'Each round depends only on the rounds before it, so you can stop after any round and nothing is left half-moved.</p>' +
-      '<div class="bar2" style="height:26px;margin-bottom:10px">' + x.rounds.map(function (r) { return '<i class="rd" style="flex:' + Math.max(1, r.ids.length) + '">Round ' + r.round + ': ' + r.ids.length + '</i>'; }).join('') + '</div>' +
-      x.rounds.map(function (r) {
-        return '<details><summary><b>Round ' + r.round + '</b> <span class="rl2">' + repPlural(r.ids.length, 'rule', 'rules') + '</span></summary>' + ruleList(r.rows, null, of) + '</details>';
-      }).join('') : '') +
-      (held.length ? '<div class="offer"><b>' + repPlural(held.length, 'rule is', 'rules are') + ' held back by a loop.</b> They command each other, so no order is safe one at a time: ' +
-        held.map(function (id) { return byId[id] ? ruleName(byId[id]) : esc(id); }).join(', ') + '.</div>' : '') +
-      (outside.length ? '<p class="rl2">' + repPlural(outside.length, 'rule has', 'rules have') + ' no round yet, because Automation Map has not read them in detail.</p>' : '');
-  } else if (STEP === 4) {
-    var approved = x.prog.done[4];
-    var changed = APPROVED && PLAN && APPROVED.fingerprint !== PLAN.fingerprint;
-    todo = !x.rounds.length ? 'There is no plan without rounds. See Batch.'
-      : approved ? 'Nothing: you approved this plan on ' + esc(new Date(Number(APPROVED.at)).toLocaleString()) + '. Go on and select what to move first.'
-      : (changed ? 'The rounds have changed since you approved the plan. Read it again, then ' : 'Read the plan, then ') + 'approve it. Approving changes nothing on the hub; it records that this is the order you will follow.';
-    body = (x.rounds.length ? '<div class="acts" style="margin-bottom:10px">' + (approved
-        ? '<span class="badge tested">approved</span> <button type="button" data-act="withdraw">Withdraw approval</button>'
-        : '<button type="button" class="primary" data-act="approve">Approve this plan</button>') + '</div>' : '') +
-      '<div class="rounds">' + x.rounds.map(function (r) {
-        var l = r.lights;
-        return '<div class="round' + (r.done ? ' done' : '') + '"><div class="rh"><b>Round ' + r.round + '</b><span class="rl2">' + repPlural(r.ids.length, 'rule', 'rules') + '</span>' +
-          (l.ok ? '<span class="pill good">' + l.ok + ' ready to move</span>' : '') + (l.you ? '<span class="pill bad">' + l.you + ' need you</span>' : '') +
-          (l.wait ? '<span class="pill">' + l.wait + ' stay in Rule Machine for now</span>' : '') + (l.none ? '<span class="pill">' + l.none + ' not read</span>' : '') +
-          (r.counts.copied + r.counts.tested ? '<span class="badge not">' + (r.counts.copied + r.counts.tested) + ' copied</span>' : '') +
-          (r.counts.tested ? '<span class="badge tested">' + r.counts.tested + ' tested</span>' : '') +
-          (r.counts.switched ? '<span class="badge dry">' + r.counts.switched + ' live on HAI</span>' : '') +
-          '<button type="button" data-act="selRound" data-round="' + r.round + '">Select this round</button></div>' +
-          '<p class="nx2"><b>Next:</b> ' + esc(r.next) + '</p>' +
-          (r.prereqs && r.prereqs.items && r.prereqs.items.length ? '<p class="rl2">Needs first: ' + esc(r.prereqs.items.map(function (i) { return i.name; }).slice(0, 5).join(', ')) + (r.prereqs.items.length > 5 ? ' and more' : '') + '</p>' : '') +
-          '<details><summary>The ' + repPlural(r.ids.length, 'rule', 'rules') + '</summary>' +
-          ruleList(r.rows, function (rr) { return '<span class="badge not">' + esc((of[rr.rmId] || {}).next || '') + '</span>'; }, of) + '</details></div>';
-      }).join('') + '</div>';
-    nextLabel = approved ? null : 'Next step: Select (approve first)';
-  } else if (STEP === 5) {
-    var dep = flowDeps((PLAN && PLAN.links) || {}, SEL);
-    var byId5 = {}; ROWS.forEach(function (r) { byId5[r.rmId] = r; });
-    var nm = function (ids) { return ids.map(function (id) { return byId5[id] ? ruleName(byId5[id]) : esc(id); }).join(', '); };
-    var q = FLOW_Q.toLowerCase();
-    var shown = ROWS.filter(function (r) { return !q || (r.rmName || '').toLowerCase().indexOf(q) >= 0; })
-      .slice().sort(function (a, b) { return (a.round || 99) - (b.round || 99) || (a.rmName < b.rmName ? -1 : 1); });
-    var stages = flowCounts(ROWS);
-    todo = sel.length ? repPlural(sel.length, 'rule is', 'rules are') + ' selected. Add the rules your selection depends on when asked, then go on.'
-      : 'Pick a round from the plan (the first unfinished one is the safe choice), a group, or tick single rules.';
-    body = '<div class="chips">' + x.rounds.map(function (r) { return '<button type="button" data-act="selRound" data-round="' + r.round + '">Round ' + r.round + ' (' + r.ids.length + ')</button>'; }).join('') +
-      '<button type="button" data-act="selGroup" data-group="ok">All ready (' + x.L.d.lights.ok.length + ')</button>' +
-      (stages.copied ? '<button type="button" data-act="selGroup" data-group="copied">Copied, not tested (' + stages.copied + ')</button>' : '') +
-      (stages.tested ? '<button type="button" data-act="selGroup" data-group="tested">Tested, not live (' + stages.tested + ')</button>' : '') +
-      (sel.length ? '<button type="button" data-act="selClear">Clear the selection</button>' : '') + '</div>' +
-      (dep.before.length ? '<div class="offer"><b>' + repPlural(dep.before.length, 'rule commands', 'rules command') + ' your selection</b> and must move with it or before it: ' + nm(dep.before) +
-        '. Moved alone, they would go on commanding the paused Rule Machine copies. <button type="button" class="go" data-act="addBefore">Include them</button></div>' : '') +
-      (dep.after.length ? '<div class="offer"><b>Your selection commands ' + repPlural(dep.after.length, 'rule', 'rules') + '</b>: ' + nm(dep.after) +
-        '. They can move later, after your selection. <button type="button" data-act="addAfter">Include them too</button></div>' : '') +
-      '<p><input type="search" id="flowQ" placeholder="Filter by rule name" aria-label="Filter by rule name" value="' + esc(FLOW_Q) + '" style="width:100%;max-width:360px"></p>' +
-      '<div class="list">' + shown.map(function (r) {
-        return '<label class="li"><input type="checkbox" data-sel="' + esc(r.rmId) + '"' + (SEL[r.rmId] ? ' checked' : '') + '><span class="nm2">' + ruleName(r) +
-          '<span class="sub2">' + esc((of[r.rmId] || {}).say || '') + '</span></span>' + badgeHtml(r) + (r.round ? '<span class="rl2">round ' + esc(r.round) + '</span>' : '') + '</label>';
-      }).join('') + '</div>';
-  } else if (STEP === 6) {
-    var pr = flowPrereqs(ROWS, sel.length ? SEL : null);
-    todo = !pr.items.length ? 'Nothing: HAI Engine already allows everything ' + (sel.length ? 'your selection' : 'these rules') + ' use.'
-      : 'Fix each item on the page it links to, then come back and press Reload. Blocking items stop a copy; a disabled device only stops the switch over.';
-    body = (sel.length ? '' : '<p class="empty">Nothing is selected, so this is the list for every rule. <button type="button" data-step="5">Select rules</button></p>') +
-      '<div class="pills" style="margin-bottom:10px"><span class="pill' + (pr.devices ? ' bad' : ' good') + '">' + repPlural(pr.devices, 'device', 'devices') + '</span>' +
-      '<span class="pill' + (pr.variables ? ' bad' : ' good') + '">' + repPlural(pr.variables, 'hub variable', 'hub variables') + '</span>' +
-      '<span class="pill' + (pr.settings ? ' bad' : ' good') + '">' + repPlural(pr.settings, 'setting', 'settings') + '</span></div>' +
-      (pr.items.length ? '<div class="list">' + pr.items.map(function (i) {
-        var href = i.at === 'devices' ? LINKS.devices : LINKS.engine;
-        return '<div class="li"><span class="nm2"><b>' + esc(i.name) + '</b><span class="sub2">' + esc(i.fix) + '. Needed by ' + esc(i.rules.join(', ')) + '.</span></span>' +
-          flowLink(href, i.at === 'devices' ? 'Open Devices' : (i.name === 'Allow rules to change the mode' ? 'HAI Engine: Allow rules to change the mode' : /variable/.test(i.fix) ? 'HAI Engine: Approved hub variables' : 'HAI Engine: Devices')) + '</div>';
-      }).join('') + '</div>' : '<p class="empty">Nothing to set up.</p>') +
-      '<p><button type="button" data-act="reload">Reload after fixing</button></p>';
-  } else if (STEP === 7) {
-    var can = flowCan(sel, 'clone');
-    var have = sel.filter(function (r) { var s = flowStage(r); return s !== 'none' && s !== 'held'; });
-    var not = flowCannot(sel, 'clone').filter(function (y) { return have.indexOf(y.r) < 0; });
-    todo = !flowApproved() ? NEEDS_APPROVAL : !sel.length ? 'Select the rules to copy first.' : can.length ? 'Copy the ' + repPlural(can.length, 'rule', 'rules') + ' that can be copied. Each copy is stopped, so nothing changes in your house yet.'
-      : have.length === sel.length ? 'Nothing: every selected rule has a copy. Go on and test them.' : 'Deal with what stops the others first (see Prerequisites).';
-    body = !sel.length ? nothing :
-      (can.length ? '<h3>Can be copied now (' + can.length + ')</h3>' + ruleList(can, null, of) +
-        '<p><button type="button" class="primary" data-act="clone"' + (flowApproved() ? '' : ' disabled title="' + esc(NEEDS_APPROVAL) + '"') + '>' + (can.length > REP_BATCH_MAX ? 'Copy the first ' + REP_BATCH_MAX : 'Copy ' + repPlural(can.length, 'rule', 'rules')) + '</button>' +
-        (can.length > REP_BATCH_MAX ? ' <span class="rl2">' + REP_BATCH_MAX + ' at a time, so the hub keeps up; press again for the rest.</span>' : '') + '</p>' : '') +
-      (have.length ? '<h3>Already copied (' + have.length + ')</h3>' + ruleList(have, null, null) : '') +
-      (not.length ? '<h3>Cannot be copied yet (' + not.length + ')</h3>' + ruleList(not.map(function (y) { return y.r; }), function (r) { return esc(not.filter(function (y) { return y.r === r; })[0].why); }, null) : '');
-  } else if (STEP === 8) {
-    var copies = selectedOrAll(function (r) { var s = flowStage(r); return s === 'copied' || s === 'tested' || s === 'switched'; });
-    todo = !copies.length ? 'Copy rules first (step 7).' : 'For each copy: press Dry run to see what it would do, try it for real with the checklist, then tick that it works. That unlocks Cutover for it.';
-    body = (!sel.length && copies.length ? '<p class="rl2">Nothing is selected, so every copy is shown.</p>' : '') +
-      (!copies.length ? (sel.length ? '<p class="empty">None of your selection has a copy yet.</p>' : nothing) : copies.map(function (r) {
-        var d = DRY[r.rmId];
-        var last = r.phase === 'switched' ? r.haiLastRunAt : r.copyLastRunAt;
-        return '<div class="sec"><div class="rh" style="display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center">' + ruleName(r) + badgeHtml(r) + '</div>' +
-          '<div class="acts" style="margin:8px 0 4px"><button type="button" class="go" data-act="dry" data-id="' + esc(r.rmId) + '">' + (d ? 'Dry run again' : 'Dry run') + '</button>' +
-          (editorHref(r) ? flowLink(editorHref(r), 'Open in the editor (Run now)') : '') +
-          (r.haiChildId ? ' ' + flowLink('/installedapp/configure/' + r.haiChildId, 'Its history on the hub') : '') + '</div>' +
-          (d && d.pending ? '<p class="rl2">Running the dry run…</p>' : '') +
-          (d && !d.pending ? '<p class="' + (d.ok ? '' : 'diff') + '"><b>' + esc(d.message || '') + '</b></p>' +
-            (d.scenarios && d.scenarios.length ? '<table class="scen"><tr><th>When</th><th>The copy would</th></tr>' + d.scenarios.map(function (s) {
-              return '<tr><td>' + esc(s.scenario) + '</td><td>' + esc(s.result) + (s.note ? '<br><small class="diff">' + esc(s.note) + '</small>' : '') + '</td></tr>';
-            }).join('') + '</table>' : '') +
-            (d.checklist && d.checklist.length ? '<b>Now try it for real</b><ol class="check">' + d.checklist.map(function (c) { return '<li>' + esc(c.doIt) + ' Expect: ' + esc(c.expect) + '</li>'; }).join('') + '</ol>' +
-              (r.phase === 'switched' ? '' : '<p class="rl2">The copy is stopped, so it does not act on its own. To try it for real, open it in the editor and run its steps there, or start it for the test (Rule Machine acts as well while both run), then stop it again.</p>') : '') : '') +
-          '<p class="rl2">Last run of the copy: ' + (last ? esc(new Date(Number(last)).toLocaleString()) : 'none yet') + '. <button type="button" data-act="reload">Read again</button></p>' +
-          (r.testedAt ? '<p>Tested in real life by ' + esc(r.testedBy || 'you') + ', ' + esc(new Date(Number(r.testedAt)).toLocaleString()) + '.</p>'
-            : '<div class="attest"><label><input type="checkbox" data-attest="' + esc(r.rmId) + '"> I tested this in real life and it works</label>' +
-              '<label>Tested by <input type="text" data-by="' + esc(r.rmId) + '" value="' + esc(ME) + '" maxlength="40" placeholder="your name"></label>' +
-              '<button type="button" data-act="attest" data-id="' + esc(r.rmId) + '">Record it</button></div>') + '</div>';
-      }).join(''));
-  } else if (STEP === 9) {
-    var ready = flowCan(sel, 'switchOver');
-    var live = sel.filter(function (r) { return r.live === 'hai'; });
-    var trouble = ROWS.filter(function (r) { return r.live === 'neither' || r.live === 'both'; });
-    var untested = ready.filter(function (r) { return !r.testedAt; });
-    todo = !flowApproved() && ready.length ? NEEDS_APPROVAL : !sel.length ? 'Select the rules to switch over first.' : ready.length ? 'Switch over ' + repPlural(ready.length, 'copy', 'copies') + '. Each one waits until Rule Machine is seen paused before the copy starts.' +
-        (untested.length ? ' ' + untested.length + (untested.length === 1 ? ' has' : ' have') + ' not been tested in real life, so you will be asked before promoting ' + (untested.length === 1 ? 'it' : 'them') + '.' : '')
-      : live.length === sel.length ? 'Nothing: your selection runs on HAI. Watch it for a few days.' : 'Copy and test the selection first.';
-    body = (trouble.length ? '<div class="msg bad"><b>Not confirmed:</b> ' + trouble.map(function (r) {
-        return ruleName(r) + ' (' + (r.live === 'both' ? 'both copies running' : 'nothing running') + ')'; }).join(', ') +
-        '. Switch these back, or finish the switch, before anything else. <button type="button" data-step="10">Go to Rollback</button></div>' : '') +
-      (!sel.length ? nothing : '') +
-      (ready.length ? '<h3>Ready to switch over (' + ready.length + ')</h3>' + ruleList(ready, null, null) +
-        (untested.length ? '<p class="rl2">' + repPlural(untested.length, 'copy has', 'copies have') + ' not been tested in real life.</p>' : '') +
-        '<p><button type="button" class="primary" data-act="cutover"' + (flowApproved() ? '' : ' disabled title="' + esc(NEEDS_APPROVAL) + '"') + '>Switch over ' + (ready.length > REP_BATCH_MAX ? 'the first ' + REP_BATCH_MAX : repPlural(ready.length, 'rule', 'rules')) + '</button></p>' : '') +
-      (live.length ? '<h3>Live on HAI (' + live.length + ')</h3>' + ruleList(live, function (r) { return r.haiLastRunAt ? 'last ran ' + esc(new Date(Number(r.haiLastRunAt)).toLocaleString()) : 'has not run since it went live'; }, null) : '');
-  } else if (STEP === 10) {
-    var back = ROWS.filter(function (r) { return r.ops && r.ops.switchBack && r.ops.switchBack.available; });
-    var reverted = ROWS.filter(function (r) { return flowStage(r) === 'reverted'; });
-    todo = back.length ? 'Only if a copy misbehaves: switch back one rule, or a whole round. The HAI copy stops, Rule Machine runs again, and both are kept.'
-      : 'Nothing: no rule is running on HAI, so there is nothing to switch back.';
-    body = x.rounds.filter(function (r) { return r.rows.some(function (y) { return back.indexOf(y) >= 0; }); }).map(function (r) {
-        var n = r.rows.filter(function (y) { return back.indexOf(y) >= 0; }).length;
-        return '<div class="sec"><b>Round ' + r.round + '</b> <span class="rl2">' + n + ' of ' + r.ids.length + ' on HAI' + (n < r.ids.length ? ', partly moved' : '') + '</span> ' +
-          '<button type="button" data-act="backRound" data-round="' + r.round + '">Switch back round ' + r.round + ' (' + n + ')</button></div>';
-      }).join('') +
-      (back.length ? '<h3>On HAI now (' + back.length + ')</h3><div class="list">' + back.map(function (r) {
-        return '<div class="li"><span class="nm2">' + ruleName(r) + '</span>' + badgeHtml(r) + '<button type="button" data-act="backOne" data-id="' + esc(r.rmId) + '">Switch back</button></div>';
-      }).join('') + '</div>' : '') +
-      (reverted.length ? '<h3>Switched back (' + reverted.length + ')</h3>' + ruleList(reverted, function () { return 'Rule Machine runs it; the HAI copy is kept, stopped.'; }, null) : '');
+// Every press goes through the existing apply route: a rule with an option ticked on its own (the app takes options
+// on a single copy only), the rest in batches the app's cap allows, one after another (the app is single-threaded).
+var WORDS = {clone: ['cloned', 'paused on HAI'], switchOver: ['cut over', 'live on HAI'], switchBack: ['rolled back', 'back on Rule Machine'], deleteClone: ['deleted', '']};
+function runAll(op, rules, where) {
+  if (!rules.length || WORKING) return;
+  var queue = [];
+  var plain = [];
+  rules.forEach(function (r) {
+    var up = op === 'clone' ? upgList(r) : [];
+    if (up.length) queue.push({rmId: r.rmId, op: op, upgrades: up}); else plain.push(r.rmId);
+  });
+  for (var i = 0; i < plain.length; i += REP_BATCH_MAX) {
+    var ids = plain.slice(i, i + REP_BATCH_MAX);
+    queue.push(ids.length === 1 ? {rmId: ids[0], op: op} : {op: op, rmIds: ids});
   }
-  el.innerHTML = screenFrame(st, todo, body, nextLabel);
-  wireScreen(el);
+  var done = 0;
+  var failed = [];
+  var names = {};
+  rules.forEach(function (r) { names[r.rmId] = r.rmName; });
+  WORKING = true;
+  delete MSG[where];
+  var who = rules.length === 1 ? esc(rules[0].rmName || 'this rule') : plural(rules.length, 'rules', 'rules');
+  var DOING = {clone: 'Cloning ', switchOver: 'Cutting over ', switchBack: 'Rolling back ', deleteClone: 'Deleting the HAI copy of '};
+  bar('work', (DOING[op] || 'Working on ') + who + '…');
+  render();
+  var next = function () {
+    if (!queue.length) {
+      WORKING = false;
+      var w = WORDS[op];
+      var said = (done ? (done === 1 && rules.length === 1 ? esc(rules[0].rmName || 'The rule') : plural(done, 'rule', 'rules')) + ' ' + w[0] + '.' + (w[1] ? ' Now ' + w[1] + '.' : '') : '') +
+        (failed.length ? ' Not done: ' + failed.map(function (f) { return esc(f); }).join('; ') : '');
+      bar(failed.length ? 'err' : 'ok', said.trim() || 'Nothing was done.');
+      if (op === 'clone') rules.forEach(function (r) { delete SEL[r.rmId]; });
+      if (op === 'switchOver') rules.forEach(function (r) { delete CUT[r.rmId]; });
+      load();
+      return;
+    }
+    var body = queue.shift();
+    if (rules.length > 1) bar('work', (DOING[op] || 'Working on ') + who + '… ' + (done + failed.length) + ' of ' + rules.length + ' done.');
+    q('/migration/api/apply', body).then(function (out) {
+      if (out && out.done instanceof Array) {
+        done += out.done.length;
+        (out.failed || []).concat(out.notAttempted || []).forEach(function (f) { failed.push((f.rmName || names[f.rmId] || f.rmId) + ' (' + first(f.message || 'no reason given') + ')'); });
+      } else if (out && out.ok === true) {
+        done += 1;
+      } else {
+        failed.push((names[body.rmId] || (body.rmIds || []).map(function (k) { return names[k]; }).join(', ')) + ' (' + first((out && out.message) || 'The hub did not say why.') + ')');
+      }
+      next();
+    }).catch(function (e) { failed.push(first(e.message)); next(); });
+  };
+  next();
 }
 
-function wireScreen(el) {
-  var on = function (sel, f) { Array.prototype.forEach.call(el.querySelectorAll(sel), function (b) { b.onclick = function (e) { f(b, e); }; }); };
-  on('[data-act=next]', function () { openStep(STEP + 1); });
-  on('[data-act=back]', function () { openStep(STEP - 1); });
-  on('[data-act=close]', function () { openStep(0); });
-  on('[data-step]', function (b) { openStep(Number(b.getAttribute('data-step'))); });
-  on('[data-act=askNo]', function () { FLOW_ASK = null; renderScreen(); });
-  on('[data-act=askGo]', function (b) { var a = FLOW_ASK; FLOW_ASK = null; b.disabled = true; flowApply(a.op, a.ids, a.round, a.extra); });
-  on('[data-act=scan]', function () { assess([], true); });
-  on('[data-act=reload]', function () { load(); });
-  on('[data-act=report]', function () { var r = document.getElementById('rep'); if (r.hidden) showReport(); r.scrollIntoView({block: 'start'}); });
-  on('[data-act=approve]', function () { planPost({approve: PLAN.fingerprint}); });
-  on('[data-act=withdraw]', function () { planPost({withdraw: true}); });
-  on('[data-act=selRound]', function (b) {
-    var n = Number(b.getAttribute('data-round'));
-    SEL = {};
-    (PLAN.rounds.filter(function (r) { return r.round === n; })[0] || {rmIds: []}).rmIds.forEach(function (id) { SEL[id] = true; });
-    FLOW_MSG = ['Round ' + n + ' is selected (' + Object.keys(SEL).length + ' rules).', false];
-    if (STEP !== 5) { openStep(5); FLOW_MSG = ['Round ' + n + ' is selected (' + Object.keys(SEL).length + ' rules).', false]; }
-    selChanged();
-  });
-  on('[data-act=selGroup]', function (b) {
-    var g = b.getAttribute('data-group');
-    var of = flowLights(ROWS).of;
-    SEL = {};
-    ROWS.forEach(function (r) {
-      var s = flowStage(r);
-      if ((g === 'ok' && s === 'none' && (of[r.rmId] || {}).light === 'ok') || (g === 'copied' && s === 'copied') || (g === 'tested' && s === 'tested')) SEL[r.rmId] = true;
-    });
-    selChanged();
-  });
-  on('[data-act=selClear]', function () { SEL = {}; selChanged(); });
-  on('[data-act=addBefore]', function () { flowDeps(PLAN.links || {}, SEL).before.forEach(function (id) { SEL[id] = true; }); selChanged(); });
-  on('[data-act=addAfter]', function () { flowDeps(PLAN.links || {}, SEL).after.forEach(function (id) { SEL[id] = true; }); selChanged(); });
-  Array.prototype.forEach.call(el.querySelectorAll('input[data-sel]'), function (box) {
-    box.onchange = function () { if (box.checked) SEL[box.getAttribute('data-sel')] = true; else delete SEL[box.getAttribute('data-sel')]; selChanged(); };
-  });
-  var fq = el.querySelector('#flowQ');
-  if (fq) fq.oninput = function () { FLOW_Q = fq.value; var at = fq.selectionStart; renderScreen(); var n = document.getElementById('flowQ'); n.focus(); try { n.setSelectionRange(at, at); } catch (e) { /* fine */ } };
-  on('[data-act=clone]', function () {
-    var can = flowCan(flowSelected(ROWS, SEL), 'clone').slice(0, REP_BATCH_MAX);
-    FLOW_ASK = {op: 'clone', ids: can.map(function (r) { return r.rmId; }), title: 'Copy ' + repPlural(can.length, 'rule', 'rules') + ' to HAI?',
-      body: esc(can.map(function (r) { return r.rmName; }).join(', ')) + '. Each copy is made stopped; your Rule Machine rules keep running.', go: 'Copy ' + can.length};
-    renderScreen();
-  });
-  on('[data-act=cutover]', function () {
-    var can = flowCan(flowSelected(ROWS, SEL), 'switchOver').slice(0, REP_BATCH_MAX);
-    var untested = can.filter(function (r) { return !r.testedAt; });
-    FLOW_ASK = {op: 'switchOver', ids: can.map(function (r) { return r.rmId; }), warn: untested.length > 0,
-      title: untested.length ? 'Promote without testing?' : 'Switch over ' + repPlural(can.length, 'rule', 'rules') + '?',
-      body: (untested.length ? 'Not tested in real life: ' + esc(untested.map(function (r) { return r.rmName; }).join(', ')) + '. ' : '') +
-        'Rule Machine pauses ' + esc(can.map(function (r) { return r.rmName; }).join(', ')) + ', and each HAI copy starts only once its Rule Machine rule is seen paused. Rollback brings any of them back.',
-      go: untested.length ? 'Promote without testing' : 'Switch over ' + can.length};
-    renderScreen();
-  });
-  on('[data-act=backRound]', function (b) {
-    var n = Number(b.getAttribute('data-round'));
-    var rs = ROWS.filter(function (r) { return Number(r.round) === n && r.ops && r.ops.switchBack && r.ops.switchBack.available; });
-    FLOW_ASK = {op: 'switchBack', round: n, ids: rs.map(function (r) { return r.rmId; }), warn: true, title: 'Switch back round ' + n + '?',
-      body: 'The HAI copies of ' + esc(rs.map(function (r) { return r.rmName; }).join(', ')) + ' stop, and their Rule Machine rules run again. Both are kept.' +
-        (rs.length > REP_BATCH_MAX ? ' ' + REP_BATCH_MAX + ' go back per press; press again for the rest.' : ''),
-      go: 'Switch back ' + Math.min(rs.length, REP_BATCH_MAX)};
-    renderScreen();
-  });
-  on('[data-act=backOne]', function (b) {
-    var r = ROWS.filter(function (y) { return y.rmId === b.getAttribute('data-id'); })[0];
-    FLOW_ASK = {op: 'switchBack', ids: [r.rmId], warn: true, title: 'Switch back ' + r.rmName + '?', body: 'The HAI copy stops and the Rule Machine rule runs again. Both are kept.', go: 'Switch back'};
-    renderScreen();
-  });
-  on('[data-act=dry]', function (b) { dryRun(b.getAttribute('data-id')); });
-  on('[data-act=attest]', function (b) {
-    var id = b.getAttribute('data-id');
-    var box = el.querySelector('input[data-attest="' + id + '"]');
-    var by = (el.querySelector('input[data-by="' + id + '"]') || {}).value || '';
-    if (!box || !box.checked) { FLOW_MSG = ['Tick "I tested this in real life and it works" first.', true]; renderScreen(); return; }
-    ME = by.trim();
-    try { localStorage.setItem('haiMigrationTester', ME); } catch (e) { /* not kept */ }
-    flowApply('markTested', [id], null, {by: ME || 'you'});
+function load() {
+  document.getElementById('notes').innerHTML = '';
+  var slow = null;
+  if (FIRST) {
+    bar('work', 'Reading your rules from Automation Map…');
+    slow = setTimeout(function () { if (FIRST) bar('work', 'Still reading your rules. Large hubs can take up to a minute.'); }, 20000);
+  }
+  q('/migration/api/state').then(function (out) {
+    clearTimeout(slow);
+    if (!out || out.ok !== true) {
+      bar('err', 'Your rules could not be read. ' + esc((out && out.message) || 'The hub did not say why.'));
+      return;
+    }
+    if (FIRST) { FIRST = false; bar(null); }
+    show(out);
+  }).catch(function (e) { clearTimeout(slow); bar('err', 'Your rules could not be read. ' + esc(e.message || 'The hub did not answer.')); });
+}
+
+// Before the first answer: the four sections with their titles, so the page has its shape and does not look hung.
+function skeleton() {
+  [['sAssess', 'hAssess', '1. Assess'], ['sClone', 'hClone', '2. Clone'], ['sCut', 'hCut', '3. Cut over'], ['sBack', 'hBack', '4. Rollback']].forEach(function (x) {
+    document.getElementById(x[0]).innerHTML = '<div class="sh"><h2 id="' + x[1] + '">' + x[2] + '</h2></div><p class="none">Loading…</p>';
   });
 }
 
-function selChanged() { renderFlow(); renderScreen(); render(); assessBar(); }
-
-// One press of a flow step, through the same apply route the rows use: one rule as a single step, several (or a
-// round) as a batch, capped by the app at MIG_BATCH_MAX.
-function flowApply(op, ids, round, extra) {
-  var body = ids.length === 1 && round == null ? {rmId: ids[0], op: op} : {op: op, rmIds: ids};
-  if (round != null) body.round = round;
-  if (op === 'clone' && ids.length === 1) body.upgrades = Object.keys(UPG[ids[0]] || {}).filter(function (k) { return UPG[ids[0]][k]; });
-  if (extra) for (var k in extra) body[k] = extra[k];
-  FLOW_MSG = ['Working…', false];
-  renderScreen();
-  q('/migration/api/apply', body).then(function (out) {
-    var skipped = (out && out.skipped) || [];
-    FLOW_MSG = [(out && out.ok === true ? '<b>Done.</b> ' : '<b>Not everything happened.</b> ') + esc((out && out.message) || 'The hub did not say why.') +
-      (skipped.length ? ' Left as they were: ' + esc(skipped.map(function (y) { return y.rmName + ' (' + y.why + ')'; }).join('; ')) : ''), !(out && out.ok === true)];
-    if (out && out.state && out.state.ok === true) show(mergeState(out.state)); else load();
-    if (out && out.unconfirmed) setTimeout(load, 4000);
-  }).catch(function (e) { FLOW_MSG = ['<b>That could not be sent.</b> ' + esc(e.message), true]; renderScreen(); });
+// One short line for what was read; the provider's own note only when it says something is wrong.
+function readLine(out) {
+  var p = out.provider || {};
+  var age = ago(p.generatedAt);
+  var bits = [];
+  if (age) bits.push('Rules read ' + age + ' ago');
+  var v = /Automation Map (\d+\.\d+\.\d+)/.exec((out.notes || []).join(' '));
+  if (v) bits.push('by Automation Map ' + v[1]);
+  document.getElementById('read').textContent = bits.length ? bits.join(' ') + '.' : '';
+  var loud = {absent: 1, incompatible: 1, broken: 1, stale: 1};
+  if (loud[p.state] && (out.notes || [])[0]) note(esc(out.notes[0]), true);
 }
 
-function dryRun(rmId) {
-  DRY[rmId] = {pending: true};
-  renderScreen();
-  q('/migration/api/dryrun', {rmId: rmId}).then(function (out) {
-    DRY[rmId] = out && out.scenarios ? out : {ok: false, message: (out && out.message) || 'The dry run did not answer.', scenarios: []};
-    var r = ROWS.filter(function (y) { return y.rmId === rmId; })[0];
-    if (r && out && out.scenarios) { r.dryRunAt = Date.now(); r.dryRunOk = out.ok === true; }
-    renderFlow(); renderScreen(); render();
-  }).catch(function (e) { DRY[rmId] = {ok: false, message: 'The dry run could not be sent: ' + e.message, scenarios: []}; renderScreen(); });
+function show(out) {
+  ROWS = out.rows || [];
+  if (out.plan) PLAN = out.plan;
+  if (out.links) LINKS = out.links;
+  if (out.provider) PROVIDER = out.provider;
+  ASSESS = out.assess || {available: false, why: 'Needs Automation Map 2.4.36 or later.'};
+  if (!PENDING && ASSESS.request) watch(ASSESS.request);
+  readLine(out);
+  render();
 }
 
-function planPost(body) {
-  q('/migration/api/plan', body).then(function (out) {
-    if (out && out.ok) APPROVED = out.planApproved || null;
-    FLOW_MSG = [esc((out && out.message) || 'The hub did not answer.'), !(out && out.ok)];
-    renderFlow(); renderScreen();
-  });
+// ---- Scan again ------------------------------------------------------------------------------------------
+// One POST: the Migration app asks Automation Map to scan. Then this page reads the app's small answer record
+// every 3 seconds, and only while a request is outstanding.
+function scanMsg(t) { var b = document.getElementById('scanAgain'); b.textContent = t || 'Scan again'; b.disabled = !!t; }
+
+function assess() {
+  if (PENDING) return;
+  if (!ASSESS.available) { note(esc(ASSESS.why || 'Automation Map cannot scan for HAI yet.'), true); return; }
+  scanMsg('Scanning…');
+  q('/migration/api/assess', {all: true}).then(function (out) {
+    if (out && out.assess) { watch(out.assess); return; }
+    scanMsg('');
+    note('<b>The scan did not start.</b> ' + esc((out && out.message) || 'The hub did not say why.'), true);
+  }).catch(function (e) { scanMsg(''); note('<b>The scan could not be sent.</b> ' + esc(e.message), true); });
 }
 
-document.getElementById('scanAgain').onclick = function () { assess([], true); };
-document.getElementById('openPlan').onclick = function () { openStep(4); };
-// Migration is optional: this just leaves the page. A tab the page did not open cannot close
-// itself, so it goes back, or to the hub's apps.
+function watch(a) {
+  a.seenAt = Date.now();
+  PENDING = a;
+  scanMsg('Scanning…');
+  setTimeout(poll, 3000);
+}
+
+function poll() {
+  if (!PENDING) return;
+  q('/migration/api/assess').then(function (out) {
+    var a = out && out.assess;
+    if (!a || a.requestId !== PENDING.requestId) { PENDING = null; scanMsg(''); return; }
+    if (a.done) {
+      PENDING = null;
+      scanMsg('');
+      if (a.done.ok !== true) note('<b>The scan did not finish.</b> ' + esc(a.done.message || a.done.reason || 'Automation Map did not say why.'), true);
+      load();
+      return;
+    }
+    a.seenAt = PENDING.seenAt;
+    PENDING = a;
+    var wait = a.waitMs || 300000;
+    if (Date.now() - PENDING.seenAt > wait) {
+      PENDING = null;
+      scanMsg('');
+      note('<b>Automation Map did not answer within ' + Math.round(wait / 60000) + ' minutes.</b> Open Automation Map once, then try again.', true);
+      return;
+    }
+    setTimeout(poll, 3000);
+  }).catch(function () { setTimeout(poll, 3000); });
+}
+
+document.getElementById('scanAgain').onclick = assess;
+document.getElementById('find').oninput = function () { FIND = this.value.trim().toLowerCase(); if (!FIRST) render(); };
+// Migration is optional: this just leaves the page. A tab the page did not open cannot close itself, so it goes
+// back, or to the hub's apps.
 document.getElementById('notNow').onclick = function () {
   try { window.close(); } catch (e) { /* not ours to close */ }
   setTimeout(function () { if (history.length > 1) history.back(); else location.href = '/installedapp/list'; }, 150);
 };
-
-document.getElementById('report').onclick = showReport;
-document.getElementById('selall').onchange = function () {
-  var on = this.checked;
-  shownRows().forEach(function (r) { if (on) SEL[r.rmId] = true; else delete SEL[r.rmId]; });
-  render();
-  assessBar();
-  renderFlow();
-  if (STEP) renderScreen();
-};
-document.getElementById('assessSel').onclick = function () { assess(Object.keys(SEL), false); };
-document.getElementById('assessAll').onclick = function () { assess([], true); };
-
-document.getElementById('q').oninput = function () { render(); assessBar(); };
-document.getElementById('reload').onclick = load;
-(function () { var m = /^#step=(\d+)$/.exec(location.hash); if (m && Number(m[1]) >= 1 && Number(m[1]) <= 10) STEP = Number(m[1]); })();
+skeleton();
 load();
 </script>
 </body>

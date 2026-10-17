@@ -1,4 +1,4 @@
-# Installing the HAI preview, version 0.5.90-dev
+# Installing the HAI preview, version 0.5.101-dev
 
 HAI is a rule engine for Hubitat. This folder holds everything a preview tester needs. You do not need
 Python, a command line or a copy of the source code: only a web browser and your hub's own pages.
@@ -76,9 +76,7 @@ page that needs it will not open.
 
 ## 6. Optional: moving rules from Rule Machine
 
-1. Install Automation Map 2.4.36 or later, and let it scan your hub. Until that version reaches Automation Map's
-   main channel, install its Dev channel in Hubitat Package Manager: **Install**, **From a URL**,
-   `https://raw.githubusercontent.com/GordonThelander/hubitat-automation-map/dev/packageManifest.json`.
+1. Install or update Automation Map to 2.4.48 or later through Hubitat Package Manager, and let it scan your hub.
 2. Open **HAI Engine** and press **Turn on HAI Migration**.
 3. Open **Rule Machine Migration Facility** from the HAI Engine page.
 
