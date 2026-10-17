@@ -478,10 +478,11 @@ try { RMUtils.sendAction((List) c.ids, c.action as String, app.label, '5.0'); re
 catch (Exception e) { return [ok: false, message: e.message as String] }
 },
 haiRuleOp: { Map c -> parent.haiMigrationCall('haiRuleOp', c) },
+keepDraft: { Map c -> parent.haiMigrationCall('keepDraft', c) },
 activateStopped: { Map c ->
 Map out = parent.haiMigrationCall('activateStopped', c)
 return out?.refused instanceof Map
-? [ok: false, code: out.code, message: migRefusalWords((Map) out.refused, out.doc)]
+? [ok: false, code: out.code, message: migRefusalWords((Map) out.refused, out.doc), renames: out.renames]
 : out
 },
 rmPausedNow: { Object rmId -> (Boolean) ((Map) parent.haiMigrationCall('rmPausedNow', [rmId: rmId]))?.paused },
@@ -920,7 +921,7 @@ return "the trigger \"${said}\"".toString()
 @Field static final int MIG_CONFIRM_TRIES = 3
 @Field static final long MIG_CONFIRM_GAP_MS = 250L
 @Field static final String MIGRATION_PAGE_FILE = 'hai-migration.html'
-@Field static final String MIGRATION_PAGE_SHA256 = 'cea8068a870be1db1955f16f25f91020e40d7f6453d9f1fe7e5fa51d9a1133e4'
+@Field static final String MIGRATION_PAGE_SHA256 = '171a8185eddc51489f1f8510d34c94adff57c9c7d3cc5d446ae710c1ede5e96f'
 @Field static final String MIG_PROV_OK = 'ok'
 @Field static final String MIG_PROV_PARTIAL = 'partial'
 @Field static final String MIG_PROV_ABSENT = 'absent'
@@ -1411,8 +1412,19 @@ boolean unconfirmed = stopped != null && stopped.ok != true && stopped.unconfirm
 boolean refused = stopped != null && stopped.ok != true && !unconfirmed
 if (refused) {
 try { migCall(plat, 'haiRuleOp', [ruleId: made.doc?.id, op: 'remove']) } catch (Exception ignored) { }
-return [ok: false, op: 'clone', code: (stopped.code as String) ?: 'MIGRATION_REFUSED', phase: 'activate',
-message: ('Not cloned: ' + ((stopped.message ?: stopped.code ?: 'the hub refused the copy') as String)).toString()]
+List renames = stopped.renames instanceof List ? stopped.renames : []
+String offer = renames.isEmpty() ? '' : (' ' + renames.collect { Map n ->
+"${n.device} no longer offers ${n.from}; it now offers ${n.to}".toString() }.join('; ') +
+'. Tick "Use the new name" on the row and clone again.')
+Map kept2 = null
+try { kept2 = plat?.containsKey('keepDraft') ? migCall(plat, 'keepDraft', [doc: made.doc]) : null } catch (Exception ignored) { kept2 = null }
+String why = (stopped.message ?: stopped.code ?: 'the hub refused the copy') as String
+if (kept2?.ok == true) {
+return [ok: false, flagged: true, op: 'clone', code: 'MIGRATION_FLAGGED', phase: 'activate', renames: renames,
+message: ("Cloned as a draft to check, not on the hub: ${why}. It is in the editor's Drafts, marked Needs fixing." + offer).toString()]
+}
+return [ok: false, op: 'clone', code: (stopped.code as String) ?: 'MIGRATION_REFUSED', phase: 'activate', renames: renames,
+message: ('Not cloned: ' + why + offer).toString()]
 }
 String held = refused ?
 (" It is held for review rather than set up on the hub (${stopped.message ?: stopped.code ?: 'no reason given'}); " +
@@ -1656,7 +1668,7 @@ r = [ok: false, code: 'MIGRATION_THREW', message: e.message as String]
 }
 Map entry = [rmId: row.rmId, rmName: row.rmName, ok: r?.ok == true,
 code: r?.code, message: r?.message, phase: r?.phase, haiId: r?.haiId, heldReason: r?.heldReason, rmPrint: r?.rmPrint,
-testedAt: r?.testedAt, testedBy: r?.testedBy]
+testedAt: r?.testedAt, testedBy: r?.testedBy, renames: r?.renames, flagged: r?.flagged]
 if (entry.ok) done << entry else failed << entry
 }
 List notAttempted = rest.collect { Object ro ->
@@ -2240,6 +2252,11 @@ if (loc.ok != true) return loc
 doc.refs = rmRefsFor(doc, detailRule, hubVariableTypes, loc.locals)
 rmTypeVariableValues(doc)
 List behaviour = rmFaithful(doc, upgrades)
+((upgrades ?: []) as List).collect { it as String }.findAll { it.startsWith('rename:') && it.contains('>') }.each { String u ->
+String from = u.substring(7, u.indexOf('>'))
+String to = u.substring(u.indexOf('>') + 1)
+rmRenameCommand(doc.actions, from, to)
+}
 if (allRules != null && !allRules.isEmpty()) {
 Set live = (allRules.collect { rmBareId(((Map) it).id) } as Set)
 List dead = ((Map) doc.refs).keySet().findAll { String k ->
@@ -2293,6 +2310,13 @@ walk(m[f])
 doc.remove('refs')
 walk(doc)
 doc.refs = out
+}
+void rmRenameCommand(Object v, String from, String to) {
+if (v instanceof List) { ((List) v).each { rmRenameCommand(it, from, to) }; return }
+if (!(v instanceof Map)) return
+Map m = v
+if (m.type == 'command' && m.command == from) m.command = to
+m.values().each { Object x -> if (x instanceof List || x instanceof Map) rmRenameCommand(x, from, to) }
 }
 @Field static final String RM_LOCK_CODE_ATTR = 'lastCodeName'
 @Field static final Set RM_UPGRADES = ['restart', 'changeOnly', 'stopOnUnknown', 'hubPower'] as Set

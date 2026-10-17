@@ -3930,7 +3930,7 @@ durations.clear()
 corePersist(w)
 }
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = '72c0f8ecbaba5d86'
+@Field static final String RT_CHILD_BUILD = 'd7e50c9f5241b36c'
 @Field static final long RT_GRACE_MS = 30000L
 @Field static final long RT_CADENCE_MS = 60000L
 @Field static final long RT_RECOVERY_MS = 120000L
@@ -5210,6 +5210,13 @@ if (cmd == 'toggle') { cmd = d.currentValue('switch') == 'on' ? 'off' : 'on'; a 
 else if (cmd == 'alarmOff') cmd = 'off'
 else if (cmd == 'setColor') { d.setColor(rtColourArg(a, d.currentValue('level'))); return }
 if (!d.hasCommand(cmd)) throw new Exception("${cmd} is not a command offered by ${d.displayName}")
+if (a.any { it instanceof Number }) {
+List types = []
+try { types = ((d.supportedCommands?.find { it.name == cmd })?.parameters?.collect { (it?.type ?: '').toString().toUpperCase() } ?: []) } catch (Exception ignored) { types = [] }
+List out = []
+a.eachWithIndex { Object v, int i -> out << (v instanceof Number && i < types.size() && types[i] == 'STRING' ? new BigDecimal(v.toString()).stripTrailingZeros().toPlainString() : v) }
+a = out
+}
 d."${cmd}"(*a)
 }
 Object rtOnEvents(Map plat, List events) {

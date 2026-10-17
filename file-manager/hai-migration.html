@@ -92,6 +92,8 @@ var ROWS = [];
 var OPEN = {};
 // Upgrades ticked per rule before Copy. Unticked means the copy behaves as Rule Machine did.
 var UPG = {};
+// Commands a driver renamed, as the hub suggested them when a clone was refused: rmId -> [{from, to, device}].
+var RENAME = {};
 // Assess now: rules ticked for it, whether this Automation Map can take a request, and the one outstanding.
 var SEL = {};
 var ASSESS = {available: false, why: ''};
@@ -706,6 +708,12 @@ function detail(r) {
   if (hasCopy(r) && !isLive(r) && r.ops && r.ops.deleteClone && r.ops.deleteClone.available) links.push('<button type="button" class="link" data-del="' + esc(r.rmId) + '">Delete the HAI copy</button>');
   return '<div class="det">' +
     (reasons.length ? '<ul>' + reasons.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
+    (hasCopy(r) ? [] : (RENAME[r.rmId] || [])).map(function (n) {
+      var key = 'rename:' + n.from + '>' + n.to;
+      var on = !!(UPG[r.rmId] || {})[key];
+      return '<div><label><input type="checkbox" data-upg="' + esc(r.rmId) + '" data-key="' + esc(key) + '"' + (on ? ' checked' : '') + '> Use the new name: ' +
+        esc(n.device) + ' now offers ' + esc(n.to) + ' instead of ' + esc(n.from) + '</label></div>';
+    }).join('') +
     ups.map(function (b) {
       var on = !!(UPG[r.rmId] || {})[b.upgrade.key];
       return '<div><label><input type="checkbox" data-upg="' + esc(r.rmId) + '" data-key="' + esc(b.upgrade.key) + '"' + (on ? ' checked' : '') + '> ' + esc(b.upgrade.label) + '</label></div>';
@@ -880,6 +888,7 @@ function runAll(op, rules, where) {
   var done = 0;
   var failed = [];
   var started = Date.now();
+  var flagged = [];
   var names = {};
   rules.forEach(function (r) { names[r.rmId] = r.rmName; });
   WORKING = true;
@@ -906,6 +915,8 @@ function runAll(op, rules, where) {
         return esc(why) + ': ' + n.slice(0, 5).map(function (x) { return esc(x); }).join(', ') + (n.length > 5 ? ' and ' + (n.length - 5) + ' more' : '');
       });
       var said = (done ? (done === 1 && rules.length === 1 ? esc(rules[0].rmName || 'The rule') : plural(done, 'rule', 'rules')) + ' ' + w[0] + '.' + (w[1] ? ' Now ' + w[1] + '.' : '') : '') +
+        (flagged.length ? ' ' + plural(flagged.length, 'rule was', 'rules were') + ' cloned as drafts to check, marked Needs fixing in the editor: ' +
+          flagged.slice(0, 5).map(function (x) { return esc(x); }).join(', ') + (flagged.length > 5 ? ' and ' + (flagged.length - 5) + ' more' : '') + '.' : '') +
         (failed.length ? ' ' + failed.length + ' not done. ' + notDone.join('. ') + '.' : '');
       bar(failed.length ? 'err' : 'ok', said.trim() || 'Nothing was done.');
       if (op === 'clone') rules.forEach(function (r) { delete SEL[r.rmId]; });
@@ -916,20 +927,26 @@ function runAll(op, rules, where) {
     var body = queue.shift();
     // Done and not done counted apart, with what is left: "72 of 132 done" once counted refusals as done.
     // Time left from this run's own pace, so a person knows how long N rules take on their hub.
-    var left = rules.length - done - failed.length;
+    var left = rules.length - done - failed.length - flagged.length;
     var spent = (Date.now() - started) / 1000;
-    var each = done + failed.length ? spent / (done + failed.length) : 0;
+    var each = rules.length - left ? spent / (rules.length - left) : 0;
     var eta = each ? ' About ' + (left * each < 90 ? Math.max(1, Math.round(left * each)) + ' seconds' : Math.round(left * each / 60) + ' minutes') + ' left.' : '';
-    if (rules.length > 1) bar('work', (DOING[op] || 'Working on ') + who + '… ' + done + ' done, ' + failed.length + ' not done, ' +
+    if (rules.length > 1) bar('work', (DOING[op] || 'Working on ') + who + '… ' + done + ' done, ' + (flagged.length ? flagged.length + ' to check, ' : '') + failed.length + ' not done, ' +
       left + ' to go.' + eta);
     q('/migration/api/apply', body).then(function (out) {
       if (out && out.done instanceof Array) {
         done += out.done.length;
-        (out.failed || []).concat(out.notAttempted || []).forEach(function (f) { failed.push({name: f.rmName || names[f.rmId] || f.rmId, why: first(f.message || 'no reason given')}); });
+        (out.failed || []).forEach(function (f) { if (f.renames && f.renames.length) { RENAME[f.rmId] = f.renames; DET[f.rmId] = true; } });
+        (out.failed || []).concat(out.notAttempted || []).forEach(function (f) {
+          if (f.flagged) flagged.push(f.rmName || names[f.rmId] || f.rmId);
+          else failed.push({name: f.rmName || names[f.rmId] || f.rmId, why: first(f.message || 'no reason given')});
+        });
       } else if (out && out.ok === true) {
         done += 1;
       } else {
-        (body.rmIds || [body.rmId]).forEach(function (k) { failed.push({name: names[k] || k, why: first((out && out.message) || 'The hub did not say why.')}); });
+        if (out && out.renames && out.renames.length && body.rmId) { RENAME[body.rmId] = out.renames; DET[body.rmId] = true; }
+        if (out && out.flagged) flagged.push(names[body.rmId] || body.rmId);
+        else (body.rmIds || [body.rmId]).forEach(function (k) { failed.push({name: names[k] || k, why: first((out && out.message) || 'The hub did not say why.')}); });
       }
       next();
     }).catch(function (e) {

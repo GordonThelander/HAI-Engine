@@ -541,7 +541,7 @@ Object last = state.runtimeAnnouncedAt
 String when = last == null ? 'not yet' : runtimeClock().call(last as long)
 return "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT}). ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
 }
-@Field static final String ENGINE_APP_VERSION = '0.5.103-dev'
+@Field static final String ENGINE_APP_VERSION = '0.5.104-dev'
 @Field static final int ENGINE_MAX_PROPOSALS = 20
 @Field static final java.util.concurrent.ConcurrentHashMap ENGINE_DRAFT_INV = new java.util.concurrent.ConcurrentHashMap()
 @Field static final int ENGINE_MAX_ATTRIBUTES = 64
@@ -1494,6 +1494,35 @@ sendLocationEvent(name: RT_SWITCHED_EVENT, value: 'switched', isStateChange: tru
 data: groovy.json.JsonOutput.toJson([pairs: now]),
 descriptionText: "HAI: ${now.size()} Rule Machine rule${now.size() == 1 ? '' : 's'} switched over".toString())
 }
+List haiMigrationRenames(Map doc) {
+List out = []
+Map refs = (doc?.refs ?: [:])
+Set seen = [] as Set
+List cmds = []
+haiCollectCommands(doc?.actions, cmds)
+cmds.each { Map a ->
+((a.ref != null ? [a.ref] : []) + (a.refs instanceof List ? a.refs : [])).each { Object key ->
+Map r = refs.get(key)
+if (r?.kind != 'device' || !(a.command instanceof String)) return
+String k = "${r.id}:${a.command}".toString()
+if (!seen.add(k)) return
+def d = ((settings.runtimeAllowDevices ?: []) as List).find { it?.id?.toString() == rtBareId(r.id) }
+if (d == null || d.hasCommand(a.command as String)) return
+List names = (d.supportedCommands ?: []).collect { it.name as String }
+String from = a.command as String
+List near = names.findAll { String n -> n.length() >= 4 && (from.startsWith(n) || n.startsWith(from)) }
+if (near.size() == 1) out << [from: from, to: near[0], device: (r.name ?: d.displayName) as String]
+}
+}
+return out
+}
+void haiCollectCommands(Object v, List out) {
+if (v instanceof List) { ((List) v).each { haiCollectCommands(it, out) }; return }
+if (!(v instanceof Map)) return
+Map m = v
+if (m.type == 'command') out << m
+m.values().each { Object x -> if (x instanceof List || x instanceof Map) haiCollectCommands(x, out) }
+}
 Map haiMigrationCall(String name, Map arg) {
 Map hooks = [
 haiRuleOp: { Map c ->
@@ -1538,7 +1567,9 @@ if ((out.ok || unconfirmed) && rid) runIn(1, 'haiReconcileSoon', [overwrite: fal
 if (out.ok && !unconfirmed) return [ok: true]
 if (unconfirmed) return [ok: false, unconfirmed: true, code: (out.code ?: 'COMMIT_PENDING') as String]
 try { rtCandidateHeld(pp, c.candidateId, out) } catch (Exception ex) { log.warn "HAI Runtime: hold reason not kept: ${ex.message}" }
-return [ok: false, code: out.code, refused: out, doc: cand?.doc]
+List renames = []
+try { renames = haiMigrationRenames((Map) cand?.doc) } catch (Exception ex) { renames = [] }
+return [ok: false, code: out.code, refused: out, doc: cand?.doc, renames: renames]
 },
 rmPausedNow: { Object rmId ->
 Boolean paused = null
@@ -1547,6 +1578,20 @@ contentType: 'application/json', timeout: 10]) { resp ->
 if (resp?.status == 200) paused = rtRmPausedFrom(resp.data)
 }
 return paused
+},
+keepDraft: { Map c ->
+Map doc = c.doc
+List drafts = (filed('editorDrafts') ?: [])
+Map prior = drafts.find { ((Map) it).rule instanceof Map && ((Map) ((Map) it).rule).id == doc?.id }
+Map store = [drafts: drafts, draftSeq: state.editorDraftSeq ?: 0, proposals: filed('proposals') ?: [],
+proposalRules: filed('proposalRules') ?: [], outcome: filed('engineOutcome')]
+Map body = [name: ((doc?.name ?: 'Rule Machine copy') as String).take(80), rule: doc, needsFixing: true]
+if (prior?.id) body.id = prior.id
+Map saved = editorSave(groovy.json.JsonOutput.toJson(body), store, now())
+if (saved.status != 200) return [ok: false, message: (((Map) saved.body).message ?: 'The draft could not be saved.') as String]
+filedPut('editorDrafts', ((Map) saved.store).drafts)
+state.editorDraftSeq = ((Map) saved.store).draftSeq
+return [ok: true, draftId: ((Map) ((Map) saved.body).draft).id]
 },
 importRule : { Map c ->
 Map kept
@@ -5233,7 +5278,7 @@ vBlock(r, 'SCHEMA_ENUM', "${path}.kind", "'${ref.kind}' is not a reference kind"
 return
 }
 vFields(r, ref, "ref:${ref.kind}".toString(), path)
-if (ref.kind == 'device') vResolveDevice(r, ref, path, inv, !outsideEnable.contains(k))
+if (ref.kind == 'device') vResolveDevice(r, ref, path, inv, !outsideEnable.contains(k), vCommandsSentTo(doc, k as String))
 if (ref.kind == 'variable') vResolveVariable(r, ref, path, inv)
 if (ref.kind == 'mode' && !((Set) inv.modes).contains(ref.name)) {
 vBlock(r, 'REF_MISSING', path, "there is no mode called '${ref.name}' on this hub")
@@ -5254,7 +5299,20 @@ refs.keySet().each { Object key ->
 if (!used.contains(key)) vWarn(r, 'REF_UNUSED', "refs.${key}", "'${key}' is declared but never used")
 }
 }
-void vResolveDevice(Map r, Map ref, String path, Map inv, boolean onlyEnabled = false) {
+Set vCommandsSentTo(Map doc, String key) {
+Set out = [] as Set
+Closure walk
+walk = { Object v ->
+if (v instanceof List) { ((List) v).each { walk(it) }; return }
+if (!(v instanceof Map)) return
+Map m = v
+if (m.type == 'command' && m.command instanceof String && (m.ref == key || (m.refs instanceof List && ((List) m.refs).contains(key)))) out << m.command
+m.values().each { Object x -> if (x instanceof List || x instanceof Map) walk(x) }
+}
+walk([doc.actions, doc.onFailure, doc.onCancel])
+return out
+}
+void vResolveDevice(Map r, Map ref, String path, Map inv, boolean onlyEnabled = false, Set sent = null) {
 if (!vTick(r)) return
 if (!(ref.id instanceof String)) { vBlock(r, 'SCHEMA_MISSING', "${path}.id", 'a device reference needs an id'); return }
 if (ref.capabilities != null && !(ref.capabilities instanceof List)) {
@@ -5269,7 +5327,10 @@ return
 if (d.disabled == true) vWarn(r, 'REF_DISABLED', path, onlyEnabled ? "the device '${d.name}' is disabled on this hub; this rule only disables or enables it" : "${d.name} is disabled, so this step does nothing until it is enabled")
 if (d.disabled == null) vWarn(r, 'REF_AVAILABILITY_UNKNOWN', path, "the hub did not say whether '${d.name}' is enabled")
 if (d.variableName) vWarn(r, 'REF_CONNECTOR', path, "'${d.name}' is the connector for the hub variable '${d.variableName}'; a rule can use the variable itself")
+Set listed = d.commands instanceof Collection ? ((Collection) d.commands).collect { it as String } as Set : null
 ((ref.capabilities ?: []) as List).each { cap ->
+List needing = ((sent ?: []) as List).findAll { Object c -> ((List) (schemaOperation(c as String)?.requires ?: [])).contains(cap) }
+if (listed != null && !needing.isEmpty() && listed.containsAll(needing)) return
 if (!((d.capabilities ?: []) as Set).contains(cap)) {
 vBlock(r, 'REF_MISSING_CAPABILITY', path, "'${d.name}' does not have the ${cap} capability this rule needs")
 }
@@ -5352,7 +5413,7 @@ if (v instanceof Map) return
 String k = kinds[i].toString().toUpperCase()
 if (k in ['NUMBER', 'INTEGER', 'DECIMAL'] && !(v instanceof Number)) {
 vBlock(r, 'ARGS_DRIVER_TYPE', "${p}.args.${i}", "'${d.name}' expects a number here for ${a.command}")
-} else if (k == 'STRING' && !(v instanceof String)) {
+} else if (k == 'STRING' && !(v instanceof String) && !(v instanceof Number)) {
 vBlock(r, 'ARGS_DRIVER_TYPE', "${p}.args.${i}", "'${d.name}' expects text here for ${a.command}")
 } else if (k == 'INTEGER' && v instanceof Number && new BigDecimal(v.toString()).stripTrailingZeros().scale() > 0) {
 vBlock(r, 'ARGS_DRIVER_TYPE', "${p}.args.${i}", "'${d.name}' expects a whole number here for ${a.command}")
@@ -12179,7 +12240,7 @@ return [status: 202, body: body, payload: out.payload]
 }
 @Field static final String RT_ENGINE = 'HAI-1'
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = '72c0f8ecbaba5d86'
+@Field static final String RT_CHILD_BUILD = 'd7e50c9f5241b36c'
 @Field static final long RT_CADENCE_MS = 60000L
 @Field static final long RT_RECOVERY_MS = 120000L
 @Field static final long RT_CLAIM_MS = 600000L
@@ -12452,6 +12513,13 @@ if (cmd == 'toggle') { cmd = d.currentValue('switch') == 'on' ? 'off' : 'on'; a 
 else if (cmd == 'alarmOff') cmd = 'off'
 else if (cmd == 'setColor') { d.setColor(rtColourArg(a, d.currentValue('level'))); return }
 if (!d.hasCommand(cmd)) throw new Exception("${cmd} is not a command offered by ${d.displayName}")
+if (a.any { it instanceof Number }) {
+List types = []
+try { types = ((d.supportedCommands?.find { it.name == cmd })?.parameters?.collect { (it?.type ?: '').toString().toUpperCase() } ?: []) } catch (Exception ignored) { types = [] }
+List out = []
+a.eachWithIndex { Object v, int i -> out << (v instanceof Number && i < types.size() && types[i] == 'STRING' ? new BigDecimal(v.toString()).stripTrailingZeros().toPlainString() : v) }
+a = out
+}
 d."${cmd}"(*a)
 }
 List rtRunEntries(Map t) {
