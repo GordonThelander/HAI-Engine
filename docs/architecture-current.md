@@ -130,17 +130,20 @@ There are no child apps and no libraries: Automation Map is deliberately one fil
 
 ### 3.2 HAI Engine
 
-Three hub apps, each assembled from one entry file plus libraries:
+Four hub apps, each assembled from one entry file plus libraries:
 
 | App | Entry | Role | Built size (`dist/`) |
 |---|---|---|---|
-| **HAI Engine (Preview)** | `engine/app/hai_engine_app.groovy` | Parent. Settings page with the device picker (Approved devices), the editor and its signed API, the AI author, the MCP server, the rule endpoints, the Automation Map feed, and the runtime parent: registry, activation review, staging, the watchdog, the summary, rule backups. | about 720 KB |
-| **HAI Rule Container (Preview)** | `engine/m5/hai_rule_app.groovy` | One child per rule. Holds the rule's state, subscribes to what it needs, runs it. Compiled once and shared by every rule. | about 265 KB |
-| **HAI Migration (Preview)** | `engine/app/hai_migration_app.groovy` | Optional child of the Engine. Migration page and its API, decode reader, converter, migration steps. | about 220 KB |
+| **HAI Engine (DEV)** | `engine/app/hai_engine_app.groovy` | Parent. Settings page with the device picker (Approved devices), the editor and its signed API, the AI author's storage and requests, the MCP server, the rule endpoints, the Automation Map feed, and the runtime parent: registry, activation review, staging, the watchdog, the summary, rule backups. Checking runs in HAI Checker (0.5.115). | about 410 KB |
+| **HAI Checker (DEV)** | `engine/app/hai_checker_app.groovy` | Hidden child of the Engine, added by it (nobody installs it). Validator, simulator, proposal checks, the editor's Check, export and import, the MCP tools that check, the AI draft steps. Stateless; one call per request from the Engine, with the rule's own inventory slice; never calls back. See `docs/developer/architecture.md`. | about 420 KB |
+| **HAI Rule Container (DEV)** | `engine/m5/hai_rule_app.groovy` | One child per rule. Holds the rule's state, subscribes to what it needs, runs it. Compiled once and shared by every rule. | about 265 KB |
+| **HAI Migration (DEV)** | `engine/app/hai_migration_app.groovy` | Optional child of the Engine. Migration page and its API, decode reader, converter, migration steps. | about 220 KB |
 
 Pages are not in the Groovy. The editor (`engine/app/editor/editor.html`, about 850 KB), its fixed tables
 (`specs.json`, uploaded as `hai-editor-specs.json`), the AI guide (`hai-author-guide.txt`) and the migration
-page (`engine/app/migration/migration.html`, uploaded as `hai-migration.html`) live in File Manager. Each app
+page (`engine/app/migration/migration.html`, uploaded as `hai-migration.html`) live in File Manager, and so do the
+HAI Engine settings page's explanations (`engine/app/help/help.html`, uploaded as `hai-help.html`), and the Toolkit its
+Toolkit link opens (`docs/user/toolkit.html`, uploaded as `hai-toolkit.html`, opened at `/local/hai-toolkit.html`; not pinned). Each app
 embeds the SHA-256 of the page it was built with (`//#sha256` directives filled in by `assemble.py`) and
 refuses to serve a file whose hash differs. `engine/upload-editor-page.ps1` uploads them.
 

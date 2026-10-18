@@ -1,14 +1,16 @@
-# Installing the HAI preview, version 0.5.104-dev
+# Installing the HAI preview, version 0.5.116-dev
 
 HAI is a rule engine for Hubitat. This folder holds everything a preview tester needs. You do not need
 Python, a command line or a copy of the source code: only a web browser and your hub's own pages.
 
 What is in this folder:
 
-- `apps/` - three pieces of app code: `hai_engine_app.groovy` (HAI Engine), `hai_rule_app.groovy`
-  (HAI Rule Container, one per rule, added by HAI itself) and `hai_migration_app.groovy` (HAI Migration,
-  for moving Rule Machine rules; it does nothing until you turn it on from the HAI Engine page).
-- `file-manager/` - five files HAI's pages need, already named as the hub must hold them.
+- `apps/` - four pieces of app code: `hai_engine_app.groovy` (HAI Engine), `hai_rule_app.groovy`
+  (HAI Rule Container, one per rule, added by HAI itself), `hai_checker_app.groovy` (HAI Checker, which
+  checks and simulates rules for HAI Engine; HAI adds it itself, and there is nothing to set in it) and
+  `hai_migration_app.groovy` (HAI Migration, for moving Rule Machine rules; it does nothing until you turn it
+  on from the HAI Engine page).
+- `file-manager/` - seven files HAI's pages need, already named as the hub must hold them.
 - `VERSION` - the version these files belong to. Every file here must come from the same version.
 
 You need a Hubitat hub on firmware 2.4 or later. On a preview build the app names end in "(Preview)".
@@ -21,7 +23,7 @@ If you have Hubitat Package Manager installed:
 2. Under **Add a Custom Repository**, enter
    `https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/repository.json` and press **Save**.
 3. Back on the main page, press **Install**, then **Browse by Tags** or **Search**, and choose **HAI Engine (Preview)**.
-4. Press **Next**. Package Manager installs all three apps, turns on OAuth and puts the five files in File
+4. Press **Next**. Package Manager installs all four apps, turns on OAuth and puts the seven files in File
    Manager. HAI Migration stays off until you turn it on from the HAI Engine page.
 5. Carry on at step 5 below (Add HAI Engine). Updates then come through Package Manager like any other package.
 
@@ -38,7 +40,7 @@ Without Package Manager, install by hand with steps 1 to 5.
 
 ## 2. Add the app code
 
-Do this three times, once for each file in `apps/`.
+Do this four times, once for each file in `apps/`.
 
 1. On your hub, open **Apps Code** in the menu (under **Developer tools** on some firmware).
 2. Press **New App**.
@@ -50,10 +52,10 @@ Do this three times, once for each file in `apps/`.
 1. In **Apps Code**, open **HAI Engine**.
 2. Press **OAuth**, then **Enable OAuth in App**, then **Update**. Press **Save** again.
 
-HAI Engine needs this for its editor page. Do the same for **HAI Migration**. HAI Rule Container needs no
-OAuth.
+HAI Engine needs this for its editor page. Do the same for **HAI Migration**. HAI Rule Container and HAI
+Checker need no OAuth.
 
-## 4. Upload the five files
+## 4. Upload the seven files
 
 1. Open **Settings**, then **File Manager**.
 2. Upload each file from `file-manager/`. Keep the names exactly as they are:
@@ -62,6 +64,8 @@ OAuth.
    - `hai-author-guide.txt`
    - `hai-editor-specs.json`
    - `hai-am-capabilities.json`
+   - `hai-help.html`
+   - `hai-toolkit.html`
 
 HAI checks each file against the app code it came with. A file from another version is refused, and the
 page that needs it will not open.
@@ -94,16 +98,16 @@ Everything else in HAI works without a key.
 ## Updating to a new preview
 
 1. Download the new preview as in step 1.
-2. In **Apps Code**, open each of the three apps, select all the old code, paste the new code over it, and press **Save**.
-3. Upload the five files again in **File Manager**, replacing the old ones.
+2. In **Apps Code**, open each of the four apps, select all the old code, paste the new code over it, and press **Save**.
+3. Upload the seven files again in **File Manager**, replacing the old ones.
 
 Your rules, their history and your settings are kept.
 
 ## Uninstalling
 
 1. Open **Apps**, open **HAI Engine**, and press **Remove**. This removes every HAI rule and HAI Migration with it.
-2. In **Apps Code**, delete HAI Migration, HAI Rule Container and HAI Engine.
-3. In **File Manager**, delete the five `hai-` files above.
+2. In **Apps Code**, delete HAI Migration, HAI Rule Container, HAI Checker and HAI Engine.
+3. In **File Manager**, delete the seven `hai-` files above.
 
 HAI's nightly rule backups (`hai-backup-<date>.json`) stay in File Manager until you delete them.
 

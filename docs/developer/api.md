@@ -183,11 +183,10 @@ every subscriber hears every reply, so match on `id`.
   buttons in the editor (`rtRuleOp`): a rule that is not active or stopped answers `NOT_AVAILABLE`. Nothing
   activates, deactivates, changes or removes a rule this way, and no hub variable is set.
 - **`run` answers whether it ran.** `ok: true` means a run started, or was queued behind one that is still
-  going. When the rule declines the run, the reply is `ok: false` with `NOT_AVAILABLE` and a `message` saying
-  which of the five reasons it was: the rule is paused, the rule is stopped, it is already running and set to
-  ignore a new run, its queue is full, or it is already running as many times at once as it allows. This is
-  the one check a caller cannot make for itself, because pausing is not visible in `list`'s `state` - a paused
-  rule is still `active` there, with `paused: true` beside it.
+  going. A paused or stopped rule runs too, once: it stays paused or stopped, and only that run's waits are
+  listened for while it lasts. When the rule declines the run, the reply is `ok: false` with `NOT_AVAILABLE`
+  and a `message` saying which of the three reasons it was: it is already running and set to ignore a new run,
+  its queue is full, or it is already running as many times at once as it allows.
 - **Log:** each request is written to the hub's Logs page ("HAI Runtime: <from> asked to <op> <rule>: done") and to the engine's own log (`appApi`).
 - **Codes:** a request without the right token gets no reply at all, so `NO_TOKEN` and `WRONG_TOKEN` appear only
   in the log. Otherwise `API_OFF`, `UNKNOWN_OPERATION`, `NO_RULE`, `NOT_A_BOOLEAN`, `TOO_LARGE` (value over 1024 characters),
@@ -280,7 +279,7 @@ looks wrong, is worth more as a report than as a patch on the consumer's side.
 
 ## Automation Map feed
 
-`GET /apps/api/<HAI Engine app id>/automation-map?access_token=<token>`, served by **HAI Engine (Preview)**
+`GET /apps/api/<HAI Engine app id>/automation-map?access_token=<token>`, served by **HAI Engine (DEV)**
 with its access token. It is read-only: it builds the answer from the registry's rule documents and changes nothing.
 It is the one engine route that needs no audience secret (`aud`), because a sibling app already consumes it
 (`haiAudienceOk`). Automation Map does not call it: it reads the Engine's
@@ -292,7 +291,7 @@ address. An app calling the hub's own LAN IP on port 80 does not get through (th
 call returns 408); the loopback address on port 8080 is the hub's own web server. This applies to every
 endpoint on this page, and to a rule's own `http` step calling back into the same hub.
 
-Each HAI rule is a child app of type **HAI Rule Container (Preview)**, a child of HAI Engine (Preview), so its node id is its installed app id. Contract `hai.am/1`, in
+Each HAI rule is a child app of type **HAI Rule Container (DEV)**, a child of HAI Engine (DEV), so its node id is its installed app id. Contract `hai.am/1`, in
 Automation Map's own graph shape:
 
 ```
@@ -421,7 +420,7 @@ the file being uploaded to match. `nodes`, `edges` and `flows` are still correct
 <!-- hai-status:begin -->
 Of Rule Machine 5.1's **140 capabilities**, HAI has **implemented 140**: **140 tested** on the hub and 0 built but not yet tested. 0 are scoped but unbuilt. HAI's own 31 capabilities are counted separately.
 
-Every row, with its evidence, is in the parity tracker. These figures are generated from the same file as the hub's capability feed; do not edit them by hand.
+Every row, with its evidence, is in [`ideation/rm51_parity.md`](../../ideation/rm51_parity.md). These figures are generated from the same file as the hub's capability feed; do not edit them by hand.
 <!-- hai-status:end -->
 
   - `rm51` names the tracker row. `hai` lists the schema kinds the row names.

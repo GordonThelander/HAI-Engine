@@ -4,106 +4,298 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <title>Move rules to HAI</title>
 <style>
-:root{--bg:#f7f7f5;--fg:#1c1c1a;--dim:#6a6a63;--line:#dcdcd4;--card:#fff;--rm:#8a5a00;--hai:#1a5f3f;--warn:#9a2020;--off:#8a8a82;
-  --accent:#0D6A88;--accent2:#2f8aa6;--tile:#ecf2f5;--tile2:#d7e7ee;--accent-soft:rgba(13,106,136,.09);--on-accent:#fff;
-  --amber:#b4621a;--amber-soft:#fdf4e9;--amber-line:#efd2ad;
-  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;--mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-@media (prefers-color-scheme:dark){:root{--bg:#17171a;--fg:#e8e8e4;--dim:#9a9a92;--line:#33333a;--card:#1f1f24;--rm:#d9a441;--hai:#5fc79a;--warn:#e07070;--off:#6a6a72;
-  --accent:#5bb8d6;--accent2:#3f8fab;--tile:#232c33;--tile2:#2e4652;--accent-soft:rgba(91,184,214,.12);--on-accent:#0b1d24;
-  --amber:#e0a050;--amber-soft:rgba(224,160,80,.1);--amber-line:rgba(224,160,80,.4)}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 var(--sans);padding:20px 16px 48px}
-main{max-width:900px;margin:0 auto}
-h1{font-size:20px;margin:0 0 4px}
-h2{font-size:16px;margin:0}
-a{color:var(--accent)}
-button{font:inherit;padding:5px 11px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);cursor:pointer}
-button:disabled{cursor:not-allowed;opacity:.5}
-button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600}
-button.link{border:0;background:none;padding:0;color:var(--accent);text-decoration:underline;cursor:pointer}
-.top{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
-.sub{color:var(--dim);font-size:13px;margin:0;max-width:62ch}
-.hacts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.read{color:var(--dim);font-size:12px;margin:0 0 14px}
-.note{padding:8px 11px;border:1px solid var(--line);border-radius:7px;background:var(--card);margin:0 0 10px;font-size:13px}
-.note.err{border-color:var(--warn);color:var(--warn)}
-.sec{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin:0 0 14px}
-.sec .sh{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;margin-bottom:8px}
-.sec .n{font-family:var(--mono);font-size:12px;color:var(--dim);margin-left:6px;font-weight:400}
-.sec .none{color:var(--dim);font-size:13px;margin:2px 0}
-.msg{font-size:13px;margin:8px 0 0}
-.msg.err{color:var(--warn)}
-.batch{border-top:1px solid var(--line);padding-top:6px;margin-top:6px}
-.batch:first-of-type{border-top:0;margin-top:0;padding-top:0}
-.bh{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--dim);margin:2px 0 2px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
-.r{display:grid;grid-template-columns:22px 1fr auto;gap:2px 8px;align-items:start;padding:5px 0}
-.r input[type=checkbox]{margin:3px 0 0}
-.r .nm{font-weight:600;overflow-wrap:anywhere}
-.r .nm button.tg{border:0;background:none;padding:0 4px 0 0;color:var(--dim);font-size:11px;cursor:pointer}
-.r .why{grid-column:2/4;color:var(--dim);font-size:12.5px}
-.r .why.need{color:var(--rm)}
-.r .act{white-space:nowrap}
-.st{font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:1px 7px;border:1px solid currentColor;border-radius:99px;white-space:nowrap}
-.st.ok{color:var(--hai)}.st.no{color:var(--rm)}.st.empty{color:var(--off)}.st.live{color:var(--hai)}.st.paused{color:var(--accent)}
-.det{grid-column:2/4;font-size:12.5px;color:var(--fg);background:var(--bg);border-radius:6px;padding:7px 9px;margin-top:4px}
-.det ul{margin:2px 0 6px;padding-left:18px}
-.det .links{display:flex;flex-wrap:wrap;gap:4px 12px}
-.anyway{grid-column:2/4;font-size:12.5px}
-.foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
-.r>.st{justify-self:end;align-self:start}
-@media (max-width:560px){.r .act{grid-column:2/4;justify-self:start}}
-.find{margin:0 0 12px}
-.find input{width:100%;max-width:360px;box-sizing:border-box;font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
-.bar{position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:center;padding:9px 12px;border:1px solid var(--accent);border-radius:8px;background:var(--tile);color:var(--fg);font-weight:600;margin:0 0 12px}
-.bar[hidden]{display:none}
-.bar.ok{border-color:var(--hai);color:var(--hai);background:var(--card)}
-.bar.err{border-color:var(--warn);color:var(--warn);background:var(--card)}
-.bar .spin{width:16px;height:16px;flex:0 0 16px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.bar .spin{animation:none;border-color:var(--accent)}}
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --surface-2: #f2f4f7; --border: #e0e4ea; --border-strong: #c9d0da;
+  --text: #18202b; --muted: #566273; --faint: #8591a2;
+  --accent: #0d6a88; --accent-hover: #0a5a74; --accent-weak: #e2f0f5; --accent-text: #ffffff;
+  --ok: #1a7443; --ok-weak: #e3f3e9; --warn: #8f5500; --warn-weak: #fcf0da; --block: #b3261e; --block-weak: #fbeae8;
+  --ai: #6d28d9; --ai-weak: #f1ebfd; --ai-text: #ffffff;
+  --rm: #b45309; --rm-weak: #fdf1e3; --trial: #0d6a88; --trial-weak: #e2f0f5; --hai: #6d28d9; --hai-weak: #f1ebfd;
+  --risk: #9f1239; --risk-weak: #fdecef;
+  --radius: 10px; --radius-sm: 7px; --focus: #0d6a88; --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  --top-h: 64px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1217; --surface: #151a21; --surface-2: #1b2129; --border: #28303b; --border-strong: #3a4452;
+    --text: #e5e9ef; --muted: #a2acba; --faint: #788395;
+    --accent: #52bfd9; --accent-hover: #74cfe4; --accent-weak: #12303a; --accent-text: #061419;
+    --ok: #5cc68e; --ok-weak: #11281c; --warn: #efb457; --warn-weak: #2c2210; --block: #f08a80; --block-weak: #321614;
+    --ai: #b79cf7; --ai-weak: #261d3d; --ai-text: #170b33;
+    --rm: #f5a524; --rm-weak: #2c2210; --trial: #52bfd9; --trial-weak: #12303a; --hai: #b79cf7; --hai-weak: #261d3d;
+    --risk: #fb7185; --risk-weak: #3a1520;
+    --focus: #52bfd9; --shadow: 0 1px 3px rgba(0,0,0,.4);
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+[hidden] { display: none !important; }
+a { color: var(--accent); }
+.wrap { max-width: 1060px; margin: 0 auto; padding: 0 20px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--border-strong); background: var(--surface);
+  color: var(--text); border-radius: var(--radius-sm); padding: 6px 13px; min-height: 36px; font-weight: 560; font-size: 14px; cursor: pointer; white-space: nowrap; text-decoration: none; }
+.btn:hover { background: var(--surface-2); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.hai { background: var(--hai); border-color: var(--hai); color: var(--ai-text); }
+.btn.hai:hover { filter: brightness(1.1); }
+.btn.danger { background: var(--block); border-color: var(--block); color: #fff; }
+.btn.danger:hover { filter: brightness(1.08); }
+.btn.quiet-danger { color: var(--block); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.ghost:hover { background: var(--surface-2); color: var(--text); }
+.btn.small { min-height: 32px; padding: 4px 11px; font-size: 13.5px; }
+.btn.big { min-height: 46px; padding: 10px 22px; font-size: 16px; font-weight: 650; }
+.link { border: 0; background: none; padding: 0; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; font-size: inherit; }
+.top { position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--border); }
+.top-inner { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; min-height: var(--top-h); padding-top: 10px; padding-bottom: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 320px; }
+.brand-mark { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: var(--accent-text); font-size: 15px; font-weight: 700; }
+.brand h1 { font-size: 18px; font-weight: 650; letter-spacing: -.01em; margin: 0; line-height: 1.2; }
+.brand .read { font-size: 12.5px; color: var(--faint); }
+.top-acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.help-btn { width: 36px; height: 36px; border: 0; background: transparent; color: var(--accent); cursor: pointer; border-radius: 50%; display: grid; place-items: center; padding: 0; }
+.help-btn:hover { background: var(--accent-weak); }
+.safety { border-top: 1px solid var(--border); background: var(--surface-2); font-size: 13px; color: var(--muted); }
+.safety .wrap { display: flex; gap: 8px; align-items: center; padding-top: 5px; padding-bottom: 5px; }
+.safety svg { flex: none; color: var(--accent); }
+main.wrap { padding-top: 22px; padding-bottom: 60px; }
+.notes .note { padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin: 0 0 14px; }
+.notes .note.err { border-color: var(--block); background: var(--block-weak); color: var(--block); font-weight: 560; }
+.info { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); padding: 18px 20px 20px; margin: 0 0 18px; }
+.info-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.info-ttl { font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.info-pct { font-size: 15px; color: var(--muted); }
+.info-pct b { font-size: 26px; color: var(--hai); font-weight: 750; margin-right: 4px; }
+.info .sum { margin: 8px 0 0; font-size: 13.5px; color: var(--muted); }
+.seg { display: flex; height: 26px; border-radius: 13px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--border); }
+.seg > span { display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; min-width: 0; transition: width .6s ease; }
+.seg .rm { background: var(--rm); } .seg .trial { background: var(--trial); } .seg .hai { background: linear-gradient(90deg, var(--hai), #8b5cf6); }
+@media (prefers-color-scheme: dark) { .seg > span { color: #0b0f14; } }
+.stations { display: grid; grid-template-columns: 1fr 34px 1fr 34px 1fr; align-items: stretch; margin-top: 16px; }
+.station { position: relative; display: flex; gap: 12px; align-items: center; text-align: left; border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+  background: var(--surface); cursor: pointer; color: var(--text); }
+.station:hover { border-color: currentColor; }
+.station .pic { width: 52px; height: 52px; flex: 0 0 52px; border-radius: 14px; display: grid; place-items: center; }
+.station .num { font-size: 28px; font-weight: 780; line-height: 1; }
+.station .lbl { font-weight: 650; font-size: 14.5px; margin-top: 3px; }
+.station .hint { font-size: 12.5px; color: var(--muted); }
+.station.rm { border-top: 4px solid var(--rm); } .station.rm .pic { background: var(--rm-weak); color: var(--rm); } .station.rm .num { color: var(--rm); }
+.station.trial { border-top: 4px solid var(--trial); } .station.trial .pic { background: var(--trial-weak); color: var(--trial); } .station.trial .num { color: var(--trial); }
+.station.hai { border-top: 4px solid var(--hai); } .station.hai .pic { background: var(--hai-weak); color: var(--hai); } .station.hai .num { color: var(--hai); }
+.station .flag { position: absolute; top: -11px; right: 10px; background: var(--block); color: #fff; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 9px; box-shadow: var(--shadow); }
+@media (prefers-color-scheme: dark) { .station .flag { color: #0b0f14; } }
+.join { display: grid; place-items: center; color: var(--faint); }
+@media (max-width: 760px) {
+  .stations { grid-template-columns: 1fr; gap: 8px; }
+  .join { transform: rotate(90deg); height: 18px; }
+}
+.scene { display: grid; grid-template-columns: 1fr 13.6% 1fr 13.6% 1fr; align-items: start; margin-top: 14px; }
+.scene svg { display: block; width: 100%; height: auto; overflow: visible; }
+.scene .way { margin-top: 20%; }
+.scene .back { grid-column: 1 / -1; margin-top: -4px; }
+.scene .road-back { stroke-width: 4; }
+.scene .arrowhead-back { fill: var(--rm); }
+.scene .back-dots .flow { fill: var(--hai); r: 4.5; }
+.scene .back-pill { fill: var(--hai-weak); stroke: color-mix(in srgb, var(--hai) 40%, transparent); stroke-width: 1.5; }
+.scene .back-txt { font: 650 15px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: var(--text); }
+.scene .back-mini { display: none; }
+@media (max-width: 640px) {
+  .scene { grid-template-columns: 1fr; justify-items: center; }
+  .scene .pic { max-width: 260px; }
+  .scene .way { width: 80px; margin: 30px 0 34px; transform: rotate(90deg); }
+  .scene svg.back { display: none; }
+  .scene .back-mini { display: flex; gap: 10px; align-items: center; justify-content: center; margin: 14px 0 0; padding: 8px 14px; border: 1px solid var(--border);
+    border-radius: 999px; background: var(--surface-2); font-weight: 650; font-size: 14px; text-align: left; }
+  .scene .back-mini svg { flex: none; width: 30px; height: 30px; }
+}
+.scene .st { cursor: pointer; }
+.scene .st:hover .pad, .scene .st:focus .pad { stroke-width: 2.5; }
+.scene .st:focus { outline: none; }
+.scene .pad { stroke-width: 1.5; }
+.scene .rm-pad { fill: var(--rm-weak); stroke: color-mix(in srgb, var(--rm) 45%, transparent); }
+.scene .trial-pad { fill: var(--trial-weak); stroke: color-mix(in srgb, var(--trial) 45%, transparent); }
+.scene .hai-pad { fill: var(--hai-weak); stroke: color-mix(in srgb, var(--hai) 45%, transparent); }
+.scene .rm-card { fill: var(--surface); stroke: var(--rm); stroke-width: 2; filter: drop-shadow(0 2px 2px rgba(0,0,0,.12)); }
+.scene .trial-card { fill: var(--surface); stroke: var(--trial); stroke-width: 2; filter: drop-shadow(0 2px 2px rgba(0,0,0,.12)); }
+.scene .rm-ink { fill: var(--rm); } .scene .trial-ink { fill: var(--trial); }
+.scene .gear { fill: none; stroke: var(--rm); stroke-width: 7; stroke-dasharray: 5.4 3.5; }
+.scene .gear-hub { fill: var(--rm); }
+.scene .hold { fill: none; stroke: var(--trial); stroke-width: 2; stroke-dasharray: 7 5; }
+.scene .pause { fill: var(--trial); } .scene .pause-bar { fill: var(--surface); }
+.scene .roof { fill: none; stroke: var(--hai); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+.scene .house { fill: var(--surface); stroke: var(--hai); stroke-width: 3; }
+.scene .tick { fill: none; stroke: var(--ok); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+.scene .spark { fill: var(--hai); opacity: .7; }
+.scene .road { fill: none; stroke-width: 5; stroke-linecap: round; stroke-dasharray: 2 11; }
+.scene .arrowhead { fill: var(--trial); }
+.scene .s-rm { stop-color: var(--rm); } .scene .s-trial { stop-color: var(--trial); } .scene .s-hai { stop-color: var(--hai); }
+.scene .rm-dots .flow { fill: var(--rm); } .scene .trial-dots .flow { fill: var(--hai); }
+.scene .num { font: 800 38px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.scene .rm-txt { fill: var(--rm); } .scene .trial-txt { fill: var(--trial); } .scene .hai-txt { fill: var(--hai); }
+.scene .lbl { font: 700 17px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: var(--text); }
+.scene .hint { font: 400 13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: var(--muted); }
+.scene .flag { fill: var(--block); filter: drop-shadow(0 2px 3px rgba(0,0,0,.2)); }
+.scene .flag-txt { font: 700 14px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: #fff; }
+@media (prefers-color-scheme: dark) { .scene .flag-txt { fill: #0b0f14; } }
+@media (prefers-reduced-motion: reduce) { .scene animateMotion, .scene animateTransform { display: none; } }
+.next { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-left: 5px solid var(--accent);
+  border-radius: var(--radius); padding: 16px 18px; margin: 0 0 18px; box-shadow: var(--shadow); }
+.next.done { border-left-color: var(--hai); }
+.next .ico { font-size: 30px; line-height: 1; }
+.next .txt { flex: 1 1 340px; min-width: 0; }
+.next .ttl { font-size: 17px; font-weight: 700; margin: 0 0 2px; }
+.next .say { margin: 0; color: var(--muted); }
+.next .also { margin: 6px 0 0; font-size: 14px; }
+.next .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.toolbar { position: sticky; top: var(--top-sticky, 64px); z-index: 10; background: var(--bg); padding: 8px 0 10px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.search { flex: 1 1 240px; max-width: 380px; padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+.updating { font-size: 13px; color: var(--faint); display: inline-flex; gap: 6px; align-items: center; }
+.toolbar .tools { margin-left: auto; display: flex; gap: 6px; }
+.grp { background: var(--surface); border: 1px solid var(--border); border-left: 5px solid var(--c); border-radius: var(--radius); box-shadow: var(--shadow); margin: 0 0 12px; }
+.grp.manual { --c: var(--block); --cw: var(--block-weak); } .grp.risky { --c: var(--risk); --cw: var(--risk-weak); } .grp.ready { --c: var(--rm); --cw: var(--rm-weak); } .grp.trial { --c: var(--trial); --cw: var(--trial-weak); }
+.grp.hai { --c: var(--hai); --cw: var(--hai-weak); } .grp.staying { --c: var(--faint); --cw: var(--surface-2); }
+.gh { display: flex; align-items: center; gap: 12px; padding: 12px 14px; flex-wrap: wrap; }
+.gt { display: flex; align-items: center; gap: 12px; flex: 1 1 300px; min-width: 0; border: 0; background: none; padding: 0; cursor: pointer; text-align: left; color: var(--text); }
+.gt .gi { width: 38px; height: 38px; flex: 0 0 38px; border-radius: 10px; display: grid; place-items: center; background: var(--cw); color: var(--c); }
+.gt .gname { font-size: 16.5px; font-weight: 700; }
+.gt .gcount { display: inline-block; min-width: 28px; text-align: center; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--c); color: #fff; font-size: 13.5px; font-weight: 700; vertical-align: 2px; }
+@media (prefers-color-scheme: dark) { .gt .gcount { color: #0b0f14; } }
+.gt .gsay { display: block; font-size: 13.5px; color: var(--muted); }
+.gt .chev { margin-left: auto; color: var(--faint); transition: transform .15s; flex: none; }
+.grp.open .gt .chev { transform: rotate(90deg); }
+.gacts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.gbody { border-top: 1px solid var(--border); }
+.gsel { display: flex; gap: 8px; align-items: center; padding: 8px 14px; font-size: 13.5px; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.gsel label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.rows { list-style: none; margin: 0; padding: 0; }
+.row { display: grid; grid-template-columns: 26px 62px minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 11px 14px; border-top: 1px solid var(--border); }
+.rows .row:first-child { border-top: 0; }
+.row:hover { background: var(--surface-2); }
+.row .tick { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+.row .nm { font-weight: 650; font-size: 15.5px; overflow-wrap: anywhere; }
+.row .say { font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+.row.manual .say { color: var(--block); }
+.row.picked { background: var(--accent-weak); }
+.row .acts { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.row .more { grid-column: 3 / 5; }
+.track { display: flex; align-items: center; width: 62px; }
+.track i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border-strong); background: var(--surface); flex: 0 0 14px; }
+.track b { flex: 1 1 auto; height: 2px; background: var(--border-strong); }
+.track i.rm.at { background: var(--rm); border-color: var(--rm); } .track i.trial.at { background: var(--trial); border-color: var(--trial); } .track i.hai.at { background: var(--hai); border-color: var(--hai); }
+.track i.past { border-color: var(--faint); background: var(--faint); }
+.row.manual .track i.at { box-shadow: 0 0 0 3px var(--block-weak), 0 0 0 4px var(--block); }
+.det { margin-top: 6px; padding: 10px 12px; background: var(--surface-2); border-radius: var(--radius-sm); font-size: 14px; }
+.det ul { margin: 0 0 8px; padding-left: 18px; }
+.det .opts label { display: block; margin: 4px 0; }
+.det .links { display: flex; gap: 6px 16px; flex-wrap: wrap; margin-top: 6px; }
+.empty { padding: 34px 20px; text-align: center; color: var(--muted); }
+.empty .big { font-size: 34px; display: block; margin-bottom: 6px; }
+.selbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--surface); border-top: 2px solid var(--accent);
+  box-shadow: 0 -8px 24px rgba(16,24,40,.14); }
+.selbar-in { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
+.selcount { font-size: 15px; } .selcount b { font-size: 18px; }
+.selwarn { font-size: 13.5px; font-weight: 650; color: var(--risk); }
+.selacts { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+body.has-sel main.wrap { padding-bottom: 120px; }
+@media (max-width: 640px) {
+  .selbar-in { gap: 8px; }
+  .selacts { margin-left: 0; width: 100%; justify-content: flex-start; }
+  .selacts .btn { flex: 1 1 auto; }
+}
+.modal .pbwarn { margin: 0 0 10px; padding: 9px 12px; border-radius: var(--radius-sm); background: var(--warn-weak); color: var(--warn); font-weight: 560; }
+.foot { display: flex; gap: 12px; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 14px; font-size: 13.5px; color: var(--muted); }
+@media (max-width: 640px) {
+  .wrap { padding: 0 14px; }
+  .journey .hint { display: none; }
+  .stop .dot { width: 52px; height: 52px; font-size: 20px; }
+  .journey::before { top: 32px; }
+  .stop .arrow { top: 22px; }
+  .row { grid-template-columns: 22px 54px minmax(0, 1fr); }
+  .row .acts { grid-column: 3 / 4; justify-content: flex-start; }
+  .track { width: 54px; }
+  .bulk { margin-left: 0; }
+}
+.modal { position: fixed; inset: 0; z-index: 50; background: rgba(15, 23, 32, .5); display: flex; padding: 16px; overflow: auto; }
+.modal .box { margin: auto; width: min(620px, 100%); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.3); padding: 22px 24px; }
+.modal h2 { margin: 0 0 8px; font-size: 19px; display: flex; gap: 10px; align-items: center; }
+.modal p { margin: 0 0 10px; }
+.modal .list { margin: 8px 0 12px; padding-left: 20px; max-height: 32vh; overflow: auto; }
+.modal .list li { margin: 2px 0; }
+.modal .acts { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; }
+.modal.run .box { border: 2px solid var(--ai); }
+.prog { height: 12px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin: 12px 0 8px; border: 1px solid var(--border); }
+.prog > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--ai), var(--accent)); transition: width .6s ease; }
+.prog.busy > div { width: 35% !important; animation: slide 1.4s ease-in-out infinite; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+.runnow { font-weight: 650; overflow-wrap: anywhere; }
+.runmeta { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 14px; flex-wrap: wrap; }
+.res { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; margin: 8px 0; }
+.res h3 { margin: 0 0 4px; font-size: 15px; display: flex; gap: 8px; align-items: center; }
+.res.ok { border-left: 4px solid var(--ok); } .res.fix { border-left: 4px solid var(--warn); } .res.no { border-left: 4px solid var(--block); }
+.res ul { margin: 4px 0 0; padding-left: 20px; max-height: 24vh; overflow: auto; }
+.res .why { color: var(--muted); font-size: 13.5px; }
+.spin { width: 18px; height: 18px; flex: 0 0 18px; border: 3px solid var(--border-strong); border-top-color: var(--ai); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin, .prog.busy > div { animation: none; } }
+.help h3 { margin: 16px 0 6px; font-size: 15px; }
+.help .mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 6px 0 10px; text-align: center; font-size: 13.5px; }
+.help .mini div { border-radius: var(--radius-sm); padding: 10px 6px; font-weight: 600; }
+.help .mini .rm { background: var(--rm-weak); color: var(--rm); } .help .mini .trial { background: var(--trial-weak); color: var(--trial); } .help .mini .hai { background: var(--hai-weak); color: var(--hai); }
+.help textarea, .modal textarea { width: 100%; min-height: 220px; font: 12.5px/1.45 ui-monospace, Menlo, Consolas, monospace; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 8px; background: var(--surface-2); }
 </style>
 </head>
 <body>
-<main>
-<header class="top">
-  <div><h1>Move Rule Machine rules to HAI</h1>
-  <p class="sub">Optional. Rule Machine keeps running each rule until you cut it over, and you can roll back any time.</p></div>
-  <div class="hacts"><button type="button" id="scanAgain">Scan again</button><button type="button" id="notNow" class="link">Not now</button></div>
+<header class="top" id="top">
+  <div class="wrap top-inner">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">H</span>
+      <div><h1>Move your Rule Machine rules to HAI</h1><div class="read" id="read">Reading your rules…</div></div></div>
+    <div class="top-acts">
+      <button type="button" class="btn" id="openEditor">Open the editor</button>
+      <button type="button" class="btn" id="scanAgain" title="Ask Automation Map to read your Rule Machine rules again">Scan again</button>
+      <button type="button" class="help-btn" id="helpBtn" aria-label="How this works" title="How this works"><svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.3-2.8 4" fill="none" stroke="var(--surface)" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17.6" r="1.35" fill="var(--surface)"/></svg></button>
+      <button type="button" class="btn ghost" id="notNow">Close</button>
+    </div>
+  </div>
+  <div class="safety"><div class="wrap"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1 2 3.5v4C2 11 4.6 14 8 15c3.4-1 6-4 6-7.5v-4L8 1Zm-.9 9.6L4.6 8.1l1-1 1.5 1.5 3.3-3.3 1 1-4.3 4.3Z"/></svg>
+    <span>Your Rule Machine rules are never deleted. Rule Machine keeps running each rule until you switch it, and going back is one click.</span></div></div>
 </header>
-<p class="read" id="read"></p>
-<div class="find"><input type="search" id="find" placeholder="Search rules" aria-label="Search rules by name" autocomplete="off"></div>
-<div class="bar" id="bar" role="status" aria-live="polite" hidden></div>
-<div id="notes"></div>
-<section class="sec" id="sAssess" aria-labelledby="hAssess"></section>
-<section class="sec" id="sClone" aria-labelledby="hClone"></section>
-<section class="sec" id="sCut" aria-labelledby="hCut"></section>
-<section class="sec" id="sBack" aria-labelledby="hBack"></section>
+<main class="wrap">
+  <div class="notes" id="notes"></div>
+  <div id="journey"></div>
+  <div id="next"></div>
+  <div class="toolbar" id="toolbar">
+    <input type="search" class="search" id="find" placeholder="Search your rules" aria-label="Search rules by name" autocomplete="off">
+    <span class="updating" id="updating" hidden><span class="spin" aria-hidden="true"></span>Updating…</span>
+    <span class="tools"><button type="button" class="btn small ghost" id="openAll">Open all</button><button type="button" class="btn small ghost" id="closeAll">Fold all</button></span>
+  </div>
+  <div id="groups"><div class="grp staying"><div class="empty"><span class="spin" style="display:inline-block" aria-hidden="true"></span><br>Reading your rules from Automation Map…</div></div></div>
+  <div class="foot" id="foot"></div>
 </main>
-
+<div class="selbar" id="selbar" hidden></div>
+<div id="modal"></div>
 <script>
 var AUD = new URLSearchParams(location.search).get('aud') || '';
 var TOKEN = new URLSearchParams(location.search).get('access_token') || '';
 var ROWS = [];
-var OPEN = {};
-// Upgrades ticked per rule before Copy. Unticked means the copy behaves as Rule Machine did.
 var UPG = {};
-// Commands a driver renamed, as the hub suggested them when a clone was refused: rmId -> [{from, to, device}].
 var RENAME = {};
-// Assess now: rules ticked for it, whether this Automation Map can take a request, and the one outstanding.
-var SEL = {};
+var DRAFTED = {};
+var DRAFT_WHY = {};
+var SOURCE = null;
+var HAI_ISSUES = 'https://github.com/GordonThelander/HAI-Engine/issues/new';
 var ASSESS = {available: false, why: ''};
 var PENDING = null;
-
-// One press at a time. The app is single-threaded: a press sent while another is still being worked on
-// waits for the hub's gate, and back-to-back presses ran it out (120 s), so the page would not load. A press made
-// while one is outstanding is refused here, at once, with nothing sent. Reads (GET) still go through.
 var BUSY = false;
-
 function q(path, body) {
   if (body && BUSY) return Promise.resolve({ok: false, code: 'MIGRATION_PAGE_BUSY', message: 'The hub is still working on the last press. Try again when it answers.'});
   if (body) BUSY = true;
@@ -115,49 +307,13 @@ function q(path, body) {
   if (!body) return sent;
   return sent.then(function (out) { BUSY = false; return out; }, function (e) { BUSY = false; throw e; });
 }
-
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]; }); }
-
-var LIVE = {
-  rm: ['rm', 'Rule Machine', 'The Rule Machine rule is the one acting on your house.'],
-  hai: ['hai', 'HAI', 'The HAI copy is the one acting on your house.'],
-  both: ['both', 'Both at once', 'Both rules are running, so both will act. Switch over, or pause one of them.'],
-  neither: ['neither', 'Nothing running', 'Neither rule is running, so whatever this rule used to do, nothing is doing. Switch back to Rule Machine, or start the HAI copy.']
-};
-
-var LABELS = {
-  clone: 'Create a disabled HAI copy',
-  switchOver: 'Switch over to HAI',
-  switchBack: 'Switch back to Rule Machine',
-  deleteClone: 'Delete the HAI copy',
-  deleteOriginal: 'Delete the Rule Machine rule'
-};
-
-var PHASE = {none: 'not started', cloned: 'copy made, not live', switched: 'switched to HAI', reverted: 'switched back'};
-var HAI_STATE = {active: 'running', disabled: 'stopped', held: 'held, not on the hub', staging: 'being set up'};
-
-// Four verdicts, and the chip class says which kind of thing it is rather than how worried to be.
-// 'unassessed' deliberately shares the muted colour with 'neither': nobody looked is not a warning.
-var VERDICT = {
-  'ready': ['ready', 'Ready to copy'],
-  'needs-decision': ['decide', 'Needs a decision'],
-  'blocked': ['blocked', 'Cannot be read'],
-  'empty': ['unknown', 'Empty rule'],
-  'unassessed': ['unknown', 'Not assessed']
-};
-
-// The band is a word, never a number and never a percentage. The score exists to order rows and is not
-// shown: a figure on a row invites being read as a confidence, which it is not.
-var BAND = {simple: 'straightforward', moderate: 'some care needed', involved: 'involved', unknown: ''};
-
 function note(text, bad) {
   var d = document.createElement('div');
   d.className = 'note' + (bad ? ' err' : '');
   d.innerHTML = text;
   document.getElementById('notes').appendChild(d);
 }
-
-// How long ago an ISO time was, in words; '' when there is no time to judge.
 function ago(iso) {
   var t = Date.parse(iso || '');
   if (isNaN(t)) return '';
@@ -166,43 +322,18 @@ function ago(iso) {
     : m < 2880 ? Math.round(m / 60) + ' hour' + (Math.round(m / 60) === 1 ? '' : 's')
     : Math.round(m / 1440) + ' days';
 }
-
-
-// ---- Conversion report ---------------------------------------------------------------------------------
-// Built from the rows this page already has: the state read rebuilds every decoded rule in memory, writes
-// nothing, and keeps only the verdict. No new request, so nothing more for the hub to do.
-//
-// Ordered for a person deciding what to move: opening on what could not be rebuilt, and repeating one
-// sentence per rule, buries the answer. So it
-// leads with how many rules can move today, leaves test rules out unless asked, groups what is in the way by
-// what fixes it, says each repeated sentence once, and gives every rule one plain sentence and a colour.
-//
-// Everything from here to "report logic ends" reads only its arguments: engine/check-migration-report.js runs
-// it on invented rows, the way check-editor-page.js parses the page.
-
-// Test rules: left out of the report unless "Show test rules" is ticked, and never copied in bulk. A rule is a
-// test rule when its name matches one of these, or when its rebuild says it has no actions in Rule Machine (a draft).
-// One list, so a new naming habit is one line here.
 var TEST_RULE_NAMES = [
-  /^__/,              // probe and throwaway rules
-  /^_HAI /,           // HAI's own decoder and regression rules
+  /^__/,
+  /^_HAI /,
   /\(throwaway\)/i,
-  /\(probe/i          // "(probe)" and "(probe, keep)"
+  /\(probe/i
 ];
 var TEST_RULE_NO_ACTIONS = 'this rule has no actions in Rule Machine';
-
-// How many rules one bulk Copy may name: MIG_BATCH_MAX in engine/lib/hai_migration.groovy. The app copies that
-// many in one press and reports the rest as not reached, so the page offers exactly that many at a time.
 var REP_BATCH_MAX = 6;
-
-// What fixes each problem, matched on stable phrases of the reason text (a row carries the sentence, not a
-// code). First match wins; a reason nothing matches needs the person. `light` is the rule's traffic light when
-// this is the worst thing about it: 'wait' (amber) is HAI's side to resolve, 'you' (red) is the person's.
 var REP_FIXES = [
   {key: 'fix', light: 'wait', title: 'Fix in progress, nothing for you to do',
    hint: 'A fix for these is already under way. They can move once it ships.',
    say: 'Waiting on a fix that is already under way.', act: 'Nothing to do, wait for the fix',
-   // Empty while no fix is under way. Add a phrase of the reason here while one is.
    phrases: []},
   {key: 'measure', light: 'wait', title: 'Needs Rule Machine behaviour measured',
    hint: 'HAI will not guess how Rule Machine behaves here. Nothing for you to do; these can move once it is measured.',
@@ -218,7 +349,6 @@ var REP_FIXES = [
    phrases: []}
 ];
 var REP_YOU = REP_FIXES[REP_FIXES.length - 1];
-// The plain sentence for a 'Needs you' rule, by what is in the way. First match wins.
 var REP_YOU_SAY = [
   ['not allowed to use', 'Uses a device HAI may not use yet: select it in HAI Engine\'s devices.'],
   ['disabled on this hub', 'Can be copied, but uses a disabled device: enable it before switching over.'],
@@ -231,7 +361,6 @@ var REP_YOU_SAY = [
   ['no mapping for', 'Uses something HAI cannot copy yet.']
 ];
 var REP_LIGHTS = [['ok', 'ready'], ['wait', 'after a fix'], ['you', 'need you'], ['none', 'not read yet']];
-
 function repTestName(n) { return TEST_RULE_NAMES.some(function (p) { return p.test(n || ''); }); }
 function repIsTest(r) {
   if (repTestName(r.rmName)) return true;
@@ -248,9 +377,6 @@ function repYouSay(text) {
   for (var i = 0; i < REP_YOU_SAY.length; i++) if (String(text).indexOf(REP_YOU_SAY[i][0]) >= 0) return REP_YOU_SAY[i][1];
   return null;
 }
-
-// Everything that stands between a rule and its move, each with what fixes it. Coupling ('rules') is not here:
-// it decides the order rules move in, not whether one can.
 function repIssues(r) {
   var out = [];
   var add = function (text, fix, w) {
@@ -260,7 +386,6 @@ function repIssues(r) {
   else if (r.rebuild && r.rebuild.ok === false) add(r.rebuild.message || 'HAI cannot rebuild this rule.');
   (r.warnings || []).forEach(function (w) {
     if (w.kind === 'rules') return;
-    // A held copy, a changed rule, a copy whose last run went wrong: each one the person's.
     add(w.message, w.blocking ? null : REP_YOU, w);
   });
   if (!out.length && (r.verdict === 'needs-decision' || r.verdict === 'blocked')) {
@@ -268,14 +393,10 @@ function repIssues(r) {
   }
   return out;
 }
-
-// One rule's traffic light and plain sentence: green ready, amber only HAI's side in the way, red needs you.
 function repLight(r, issues) {
   if (r.unread) return {light: 'none', say: 'Not read by Automation Map yet.'};
   if (!r.verdict || r.verdict === 'unassessed') return {light: 'none', say: 'Not assessed yet.'};
   if (r.verdict === 'empty') return {light: 'wait', say: 'Empty rule: it has no actions in Rule Machine.'};
-  // A disabled device does not stop a copy, only that rule's Switch over, so it does not colour the rule: counting it
-  // made the headline disagree with the rows (HAI, 17 October). Its next step still says to enable the device.
   var counted = issues.filter(function (x) { return !(x.w && x.w.kind === 'disabled'); });
   var mine = counted.filter(function (x) { return x.fix.light === 'you'; });
   if (mine.length) return {light: 'you', say: (mine[0].fix === REP_YOU && repYouSay(mine[0].text)) || mine[0].fix.say};
@@ -285,14 +406,10 @@ function repLight(r, issues) {
   if (r.haiId) return {light: 'ok', say: 'Copied to HAI, not switched over yet.'};
   return {light: 'ok', say: 'Ready to copy.'};
 }
-
-// The one next step for a rule, a short verb phrase that says what needs to be done.
-// `by` is the rules that reach into it, if any.
 function repNames(w, fallback) {
   var n = (w && w.names) || [];
   return n.length ? n.slice(0, 2).join(' and ') + (n.length > 2 ? ' and others' : '') : fallback;
 }
-// The specific thing a refusal names, when it is short enough to say in the step: a quoted name, or a short reason.
 function repWhat(text) {
   var q = /'([^']{1,32})'/.exec(text);
   if (q) return q[1];
@@ -304,8 +421,6 @@ function repWhat(text) {
 function repNext(r, issues, light, by) {
   if (light === 'none') return 'Assess it';
   var kind = function (k) { return issues.filter(function (x) { return x.w && x.w.kind === k; })[0]; };
-  // "then copy" only when nothing else stands in the way: a rule that also needs a second change, or waits on a
-  // fix, cannot be copied after the first one, so the step says what comes next instead.
   var then = function (chosen, done) {
     var rest = issues.filter(function (x) { return x !== chosen && !(x.w && x.w.blocking === false); });
     if (!rest.length) return done;
@@ -331,7 +446,6 @@ function repNext(r, issues, light, by) {
     if (off) return (r.haiId ? 'Enable ' : 'Copy now; enable ') + repNames(off.w, 'its device') + ' before switching over';
     return 'Keep it in Rule Machine for now';
   }
-  // A disabled device no longer colours the rule (repLight), so its step is said here too.
   var off0 = kind('disabled');
   if (light === 'wait') return off0 && !r.haiId ? 'Enable ' + repNames(off0.w, 'its device') + ' before switching over, then wait for the fix' : 'Nothing to do, wait for the fix';
   if (off0 && r.phase !== 'switched') return (r.haiId ? 'Enable ' : 'Copy now; enable ') + repNames(off0.w, 'its device') + ' before switching over';
@@ -345,20 +459,16 @@ function repNext(r, issues, light, by) {
   if (options) return copy ? 'Copy, check its options, then switch over' : 'Check its options, then switch over';
   return copy ? 'Copy, then switch over' : 'Switch over';
 }
-
 function repAdd(map, key, name) { (map[key] = map[key] || []).push(name); }
-// How many rules a section covers. A rule with two sentences in one section is one rule, not two.
 function repRuleCount(items) {
   var seen = {};
   items.forEach(function (x) { x[1].forEach(function (n) { seen[n] = true; }); });
   return Object.keys(seen).length;
 }
-// [text, [rule names]], the sentence said by most rules first.
 function repPairs(map) {
   return Object.keys(map).map(function (k) { return [k, map[k]]; })
     .sort(function (a, b) { return b[1].length - a[1].length || (a[0] < b[0] ? -1 : 1); });
 }
-
 function reportData(rows, showTests, ticked) {
   var tests = rows.filter(repIsTest);
   var shown = showTests ? rows : rows.filter(function (r) { return !repIsTest(r); });
@@ -369,23 +479,17 @@ function reportData(rows, showTests, ticked) {
   shown.forEach(function (r) {
     var issues = r.unread ? [] : repIssues(r);
     var l = repLight(r, issues);
-    // Which other rules reach into this one. One line per rule reached into, not one per link.
-    // A caller that only sets this rule's Private Boolean (pbOnlyNames, from rmCoupling's inboundPbOnly) does not
-    // hold up its move: HAI's copy keeps its own delays and Private Boolean through a restart, and switch-over
-    // retargeting is being built. So that link is left out of the move order and said once under Worth knowing.
     var who = {};
     var clean = function (n) { return String(n).replace(/\s*\(Rule[- ][^)]*\)\s*$/, ''); };
     (r.warnings || []).forEach(function (w) {
       if (w.kind !== 'rules') return;
       var pb = {};
-      // pbOnlyNames, not pbNames: a caller that also runs, pauses or cancels this rule keeps its move order.
       (w.pbOnlyNames || []).forEach(function (n) { pb[clean(n)] = true; });
       (w.names || []).forEach(function (n) {
         var nm = clean(n);
         if (!showTests && repTestName(nm)) return;
         if (pb[nm]) { if (!r.unread) repAdd(d.pbOnly, nm, r.rmName); } else who[nm] = true;
       });
-      // A Private Boolean caller missing from names is still only a Private Boolean caller.
       Object.keys(pb).forEach(function (nm) {
         if ((showTests || !repTestName(nm)) && !(w.names || []).some(function (n) { return clean(n) === nm; }) && !r.unread) repAdd(d.pbOnly, nm, r.rmName);
       });
@@ -396,9 +500,6 @@ function reportData(rows, showTests, ticked) {
     if (r.unread) { d.unread.push(r.rmName); return; }
     if (l.light === 'ok' && r.phase === 'switched') d.moved++;
     else if (l.light === 'ok' && r.haiId) d.copied++;
-    // Copy all ready: not yet copied, offered by the app, and never a test rule whatever the toggle says.
-    // A rule with an upgrade ticked on its row is copied from that row: the bulk Copy keeps Rule Machine's behaviour
-    // (the app takes upgrades on a single Copy only), so it would quietly drop the choice.
     if (l.light === 'ok' && !r.haiId && !repIsTest(r) && r.ops && r.ops.clone && r.ops.clone.available) {
       (ticked && ticked[r.rmId] ? d.readyTicked : d.ready).push(r);
     }
@@ -414,16 +515,13 @@ function reportData(rows, showTests, ticked) {
   d.skipped = repPairs(d.skipped);
   d.reach = repPairs(d.reach);
   d.pbOnly = repPairs(d.pbOnly);
-  // The rules reached into most are said one by one; the rest wait behind one line.
   d.reachTop = d.reach.filter(function (x, i) { return i < 3 && x[1].length >= 2; });
   if (!d.reachTop.length) d.reachTop = d.reach.slice(0, 1);
   d.reachRest = d.reach.slice(d.reachTop.length);
   d.notYet = d.lights.wait.length + d.lights.you.length + d.lights.none.length;
   return d;
 }
-
 function repPlural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
-// The first sentence of a reason; the rest waits behind "more".
 function repSplit(text) {
   var m = /^(.*?[.!?])\s+(.+)$/.exec(String(text));
   return m && m[1].length >= 25 ? [m[1], m[2]] : [String(text), ''];
@@ -440,7 +538,6 @@ function repHeadline(d) {
       d.moved ? repPlural(d.moved, 'rule has', 'rules have') + ' already moved.' : '',
       d.copied ? repPlural(d.copied, 'rule is', 'rules are') + ' copied and waiting for you to switch over.' : ''
     ].filter(Boolean),
-    // On the page the key says the other counts; these two lines say what the key cannot.
     soon: n('wait') ? n('wait') + ' more after a fix already in progress. Nothing for you to do.' : '',
     done: [d.moved ? d.moved + ' already moved' : '', d.copied ? d.copied + ' copied, not switched over' : ''].filter(Boolean).join(', ')
   };
@@ -448,21 +545,17 @@ function repHeadline(d) {
 function repReachLine(x) {
   return x[0] + ' is reached into by ' + repPlural(x[1].length, 'other rule', 'other rules') + '; move it last.';
 }
-// Said of the rules listed only: the same caller may run another rule's actions, and then it is in Move order there.
 function repPbLine(x) {
   return x[0] + ' only sets the Private Boolean of ' + (x[1].length === 1 ? 'this rule, so it doesn\'t hold it up.' : 'these ' + x[1].length + ' rules, so it doesn\'t hold them up.');
 }
 var REP_REACH_WHY = 'Move a rule before the rules that reach into it, and they go on commanding its paused Rule Machine copy: nothing errors, the link just stops working.';
-// The next step for each section as a whole, beside its count.
 var REP_ACTS = {ok: 'Copy, then switch over', wait: 'Nothing to do, wait for the fix', you: 'One change each', none: 'Assess them',
   unread: 'Assess them', differs: 'Check its options when you copy', skipped: 'Nothing to do', reach: 'Switch these over last', pb: 'Nothing to do'};
 var REP_LIGHT_TITLES = {ok: 'Ready', wait: 'After a fix', you: 'Needs you', none: 'Not read yet'};
-
 function reportText(d) {
   var h = repHeadline(d);
   var L = ['Conversion report, ' + new Date().toLocaleString(), '', h.count + ' ' + h.rest + '.'].concat(h.lines);
   if (d.tests) L.push(d.showTests ? 'Test rules are included (' + d.tests + ').' : repPlural(d.tests, 'test rule is', 'test rules are') + ' left out.');
-  // The rules that can go, first: a person reads this to know what can move, not what cannot.
   if (d.lights.ok.length) {
     L.push('', 'READY TO MOVE (' + d.lights.ok.length + ')');
     d.lights.ok.forEach(function (x) { L.push('- ' + x.r.rmName + ': ' + x.say + ' Next: ' + x.next + '.'); });
@@ -496,15 +589,6 @@ function reportText(d) {
   }
   return L.join('\n');
 }
-// ---- report logic ends ----
-
-// ---- Flow logic ----------------------------------------------------------------------------------------
-// The guided flow, four steps (17 October: the ten were confusing): Check, Choose, Copy, Switch over.
-// Everything from here to "flow logic ends" reads only its arguments and the report logic above, so
-// engine/check-migration-flow.js runs it on invented rows. Progress is read from the rows (the ledger's phases);
-// the page keeps nothing of its own but the selection. There is no plan to approve: pressing Copy is the approval,
-// and Switch back sits on every rule on HAI, so rolling back is not a step.
-
 var FLOW_STEPS = [
   {n: 1, title: 'Check', what: 'Automation Map reads every Rule Machine rule, HAI works out what each copy needs, and rules that command each other are put into rounds. All of it happens on its own.'},
   {n: 2, title: 'Choose', what: 'Tick the rules to move now, or a whole round. Anything that stops a copy shows here.'},
@@ -518,8 +602,6 @@ var FLOW_NEXT = {
   3: 'You switch the copies over when you are ready. Rule Machine runs them until then.',
   4: 'Watch the rules on HAI. If one misbehaves, switch it back. Then choose the next ones.'
 };
-
-// Where a rule has got: none, held (a copy refused by the hub), copied, switched or reverted.
 function flowStage(r) {
   if (!r.haiId || r.haiMissing) return 'none';
   if (r.haiState === 'held') return 'held';
@@ -527,7 +609,6 @@ function flowStage(r) {
   if (r.phase === 'reverted') return 'reverted';
   return 'copied';
 }
-// A badge only for a copy someone said they tried for real (recorded before the test step was dropped).
 function flowBadge(r, me) {
   if (!r.haiId || r.haiMissing || !r.testedAt) return null;
   return {cls: 'tested', text: 'tested by ' + (!r.testedBy || r.testedBy === 'you' || r.testedBy === me ? 'you' : r.testedBy)};
@@ -537,14 +618,12 @@ function flowCounts(rows) {
   rows.forEach(function (r) { c[flowStage(r)]++; });
   return c;
 }
-// Each rule's light and next step, from the conversion report's own classification.
 function flowLights(rows) {
   var d = reportData(rows, true);
   var of = {};
   ['ok', 'wait', 'you', 'none'].forEach(function (k) { d.lights[k].forEach(function (x) { of[x.r.rmId] = {light: k, say: x.say, next: x.next}; }); });
   return {d: d, of: of};
 }
-// The rounds with their rows, lights and stages, and the next thing to do in each.
 function flowRounds(plan, rows, of) {
   var byId = {};
   rows.forEach(function (r) { byId[r.rmId] = r; });
@@ -571,8 +650,6 @@ function flowRoundNext(rs, of, c) {
   var s = parts.join('; ');
   return s ? s.charAt(0).toUpperCase() + s.slice(1) + '.' : 'Nothing to do in this round yet.';
 }
-// Choosing a rule keeps dependents together: every rule that commands it (all the way up) must move with it or
-// before it; the rules it commands may follow later. Both are offered, never added silently.
 function flowDeps(links, sel) {
   var inSel = function (id) { return !!sel[id]; };
   var before = {}, after = {};
@@ -589,9 +666,6 @@ function flowDeps(links, sel) {
   });
   return {before: Object.keys(before).sort(), after: Object.keys(after).sort()};
 }
-// What stops the rules named being copied: migPrereqs in engine/lib/hai_migration.groovy, for a selection the page
-// holds. A disabled device is not one: the copy is made with it, and only that rule's Switch over waits for it.
-// `ids` null means every row.
 function flowPrereqs(rows, ids) {
   var dev = {}, vars = {}, mode = [];
   var add = function (m, k, n) { m[k] = m[k] || []; if (m[k].indexOf(n) < 0) m[k].push(n); };
@@ -610,14 +684,12 @@ function flowPrereqs(rows, ids) {
   return {items: out, devices: Object.keys(dev).length, variables: Object.keys(vars).length,
           settings: mode.length ? 1 : 0, blocking: Object.keys(dev).length + Object.keys(vars).length + (mode.length ? 1 : 0)};
 }
-// The rows selected, in plan order; those on which an operation is available now; and those it is not, with why.
 function flowSelected(rows, sel) { return rows.filter(function (r) { return sel[r.rmId]; }); }
 function flowCan(rs, op) { return rs.filter(function (r) { return r.ops && r.ops[op] && r.ops[op].available; }); }
 function flowCannot(rs, op) {
   return rs.filter(function (r) { return !(r.ops && r.ops[op] && r.ops[op].available); })
     .map(function (r) { return {r: r, why: ((r.ops || {})[op] || {}).why || 'Not available on this rule.'}; });
 }
-// Which steps are done, for the ticks on the overview, and the first one that is not.
 function flowProgress(x) {
   var sel = flowSelected(x.rows, x.sel);
   var st = sel.map(flowStage);
@@ -633,248 +705,492 @@ function flowProgress(x) {
   for (var i = 1; i <= FLOW_LAST; i++) if (!done[i]) { now = i; break; }
   return {done: done, now: now};
 }
-// ---- flow logic ends ----
-
-// ---- The page -------------------------------------------------------------------------------------------
-// One page, four sections, in the order a rule moves through them (17 October): Assess shows the rules in
-// batches and which can be cloned, Clone makes paused HAI copies of the ticked ones, Cut over pauses the Rule
-// Machine rule and makes its copy live, and Rollback undoes that. A rule appears in one section only: the one its
-// state puts it in. Nothing else is on the screen.
-
 var PLAN = null;
 var LINKS = {};
 var PROVIDER = null;
-var ME = '';
-var CUT = {};
-var MSG = {};
+var PICK = {};
 var DET = {};
 var WORKING = false;
+var LOADING = false;
 var FIND = '';
 var FIRST = true;
-var BAR_TIMER = null;
-
-// The one status bar: what is happening now, then how it went (17 October: a plain "Working…" looked hung).
-function bar(kind, text) {
-  var b = document.getElementById('bar');
-  clearTimeout(BAR_TIMER);
-  if (!kind) { b.hidden = true; return; }
-  b.className = 'bar' + (kind === 'ok' ? ' ok' : kind === 'err' ? ' err' : '');
-  b.innerHTML = (kind === 'work' ? '<span class="spin" aria-hidden="true"></span>' : '') + '<span>' + text + '</span>';
-  b.hidden = false;
-  if (kind === 'ok') BAR_TIMER = setTimeout(function () { bar(null); }, 10000);
-}
-// Search by rule name, in every section at once; ticks are kept whatever is shown.
-function shown(r) { return !FIND || String(r.rmName || '').toLowerCase().indexOf(FIND) >= 0; }
-function noMatch() { return '<p class="none">No rule matches “' + esc(FIND) + '”.</p>'; }
-
+var SHOW_TESTS = false;
+var ENV = '';
+function isTestRule(r) { return ENV === 'DEV' && repTestName(String(r.rmName || '')); }
 function hasCopy(r) { return !!r.haiId && !r.haiMissing; }
 function isLive(r) { return hasCopy(r) && (r.phase === 'switched' || r.live === 'hai' || r.live === 'both'); }
 function power(r) { return (r.warnings || []).filter(function (w) { return w.kind === 'hubPower'; })[0] || null; }
-function canClone(r) { return !r.unread && r.verdict !== 'empty' && !!(r.ops && r.ops.clone && r.ops.clone.available); }
+function warn(r, k) { return (r.warnings || []).filter(function (w) { return w.kind === k; })[0] || null; }
+function canOp(r, op) { return !!(r.ops && r.ops[op] && r.ops[op].available); }
+function opWhy(r, op) { return (r.ops && r.ops[op] && r.ops[op].why) || ''; }
+function canClone(r) { return !r.unread && r.verdict !== 'empty' && canOp(r, 'clone'); }
 function upgList(r) { var u = UPG[r.rmId] || {}; return Object.keys(u).filter(function (k) { return u[k]; }); }
-function cloneReady(r) { return canClone(r) && (!power(r) || !!(UPG[r.rmId] || {}).hubPower); }
-// The first sentence of a reason, so a row carries one short line.
 function first(text) { var t = String(text || ''); var m = /^(.*?[.!?])(\s|$)/.exec(t); return m ? m[1] : t; }
 function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
-
-function assessStatus(r) {
-  if (r.verdict === 'empty') return {cls: 'empty', word: 'Empty rule', why: 'It has no actions in Rule Machine.'};
-  if (r.unread) return {cls: 'no', word: 'Can’t clone', why: 'Not read by Automation Map yet: press Scan again.'};
-  if (canClone(r)) return {cls: 'ok', word: 'Can clone', why: null};
-  var why = (r.ops && r.ops.clone && r.ops.clone.why) || (r.verdictReasons || [])[0] || 'HAI cannot copy this rule.';
-  return {cls: 'no', word: 'Can’t clone', why: first(why)};
+function cloneWords(t) {
+  return String(t == null ? '' : t).replace(/\b([Cc])op(y|ies|ied|ying)\b/g, function (m, c, end) {
+    return (c === 'C' ? 'C' : 'c') + 'lon' + ({y: 'e', ies: 'es', ied: 'ed', ying: 'ing'})[end];
+  });
 }
-
-function cutStatus(r) {
-  var off = (r.warnings || []).filter(function (w) { return w.kind === 'disabled'; })[0];
-  if (off) return 'Enable ' + (off.names || []).join(', ') + ' first.';
-  if (r.ops && r.ops.switchOver && r.ops.switchOver.available) return null;
-  return first((r.ops && r.ops.switchOver && r.ops.switchOver.why) || 'This copy cannot go live yet.');
+function byName(a, b) { return String(a.rmName || '').localeCompare(String(b.rmName || ''), undefined, {sensitivity: 'base'}); }
+function byPlan(a, b) { return (Number(a.round) || 999) - (Number(b.round) || 999) || byName(a, b); }
+function editorAt(id) { return LINKS.editor ? LINKS.editor + '#rule=' + encodeURIComponent(id) : null; }
+function hubPowerWord(r) { var p = power(r); return /shut/.test((p && p.message) || '') ? 'shuts down' : 'reboots'; }
+function stage(r) { return isLive(r) ? 'hai' : hasCopy(r) ? 'trial' : 'rm'; }
+function look(r) {
+  var s = stage(r);
+  var ids = r.rmId;
+  if (s === 'hai') {
+    var w = warn(r, 'watch');
+    if (w) return {g: 'manual', s: s, say: first(w.message), act: ['Back to Rule Machine', 'back', '']};
+    if (r.live === 'both') return {g: 'manual', s: s, say: 'Both rules are running, so both act. Switch back, or pause the Rule Machine rule.', act: ['Back to Rule Machine', 'back', '']};
+    return {g: 'hai', s: s, say: 'Running on HAI. The Rule Machine rule is paused.', act: ['Back to Rule Machine', 'back', '']};
+  }
+  if (s === 'trial') {
+    if (r.haiState === 'held') return {g: 'manual', s: s, say: first((warn(r, 'refused') || {}).message || 'The hub would not put the clone on.') + ' Clone it again once that is fixed.', act: canOp(r, 'clone') ? ['Clone again', 'clone', 'primary'] : null};
+    if (warn(r, 'drift')) return {g: 'manual', s: s, say: 'Changed in Rule Machine since it was cloned, so the clone does what the rule used to. Delete the clone, then clone it again.', act: ['Delete the clone', 'delete', 'quiet-danger']};
+    var off = warn(r, 'disabled');
+    if (off) return {g: 'manual', s: s, say: 'Cloned. Before it can switch over, enable ' + (off.names || []).join(', ') + ' in Devices.', act: LINKS.devices ? ['Open Devices', 'devices', ''] : null};
+    if (!canOp(r, 'switchOver')) return {g: 'manual', s: s, say: first(opWhy(r, 'switchOver') || 'This clone cannot switch over yet.'), act: null};
+    return {g: 'trial', s: s, say: 'Cloned to HAI and paused. Rule Machine still runs it, so nothing has changed yet.', act: ['Switch to HAI', 'switch', 'hai']};
+  }
+  if (DRAFTED[String(ids)]) {
+    var why = DRAFT_WHY[String(ids)];
+    return {g: 'manual', s: s, kind: 'draft', say: 'The hub would not accept the clone' + (why ? ': ' + first(why).replace(/[.]$/, '') + '.' : '.') + ' It is in the editor\'s Drafts to fix.',
+            act: ['Fix in the editor', 'fix', 'primary']};
+  }
+  if (r.verdict === 'empty') return {g: 'staying', s: s, say: 'Nothing to clone: it has no actions in Rule Machine.', act: null};
+  if (r.unread) return {g: 'manual', s: s, say: 'Automation Map has not read this rule yet. Scan again.', act: ['Scan again', 'scan', '']};
+  if (canClone(r) && power(r)) return {g: 'risky', s: s, kind: 'power', say: 'This rule ' + hubPowerWord(r) + ' the hub, and its clone would too.', act: ['Clone anyway…', 'anyway', '']};
+  var nc = warn(r, 'notCloned');
+  if (canClone(r) && nc) return {g: 'manual', s: s, kind: 'notCloned', say: 'Not cloned: ' + first(nc.message).replace(/^./, function (c) { return c.toLowerCase(); }) + ' Fix that in Rule Machine, then clone it again.', act: ['Clone again', 'clone', '']};
+  if (canClone(r)) return {g: 'ready', s: s, say: 'Ready to clone. Rule Machine runs it until you switch it.', act: ['Clone', 'clone', 'primary']};
+  var blocks = (r.warnings || []).filter(function (w) { return w.blocking === true; });
+  var reason = opWhy(r, 'clone') || (r.verdictReasons || [])[0] || 'HAI cannot clone this rule yet.';
+  if (blocks.length) return {g: 'manual', s: s, say: first(reason), act: LINKS.engine ? ['Open HAI Engine', 'engine', ''] : null};
+  return {g: 'staying', s: s, kind: 'cant', say: 'HAI cannot clone this yet: ' + first(reason).replace(/^./, function (c) { return c.toLowerCase(); }), act: ['Tell HAI', 'tell', '']};
 }
-
-function batchesOf(rows) {
-  var by = {};
-  rows.forEach(function (r) { var k = r.round ? String(r.round) : 'other'; (by[k] = by[k] || []).push(r); });
-  return Object.keys(by).sort(function (a, b) { return a === 'other' ? 1 : b === 'other' ? -1 : Number(a) - Number(b); })
-    .map(function (k) { return {key: k, title: k === 'other' ? 'Other rules' : 'Batch ' + k, rows: by[k]}; });
+var GROUPS = [
+  ['ready', 'Available to clone'],
+  ['manual', 'Requires some manual intervention'],
+  ['risky', 'Risky rules that require your permission'],
+  ['trial', 'On trial in HAI'],
+  ['hai', 'Running on HAI'],
+  ['staying', 'Staying in Rule Machine']
+];
+var GSAY = {
+  ready: 'A clone is made paused. Rule Machine keeps running the rule, so nothing in your house changes.',
+  manual: 'Each needs something from you first. The row says what, and its button takes you there.',
+  risky: 'These could have serious consequences, such as rebooting the hub. Clone them only if you mean to.',
+  trial: 'Switching pauses the Rule Machine rule and starts the clone. Try a few at a time and watch them.',
+  hai: 'Back to Rule Machine pauses the clone and starts the Rule Machine rule again.',
+  staying: 'Empty rules have nothing to clone; the rest use something HAI cannot clone yet. Tell HAI about them and they can come later.'
+};
+function visible() { return ROWS.filter(function (r) { return SHOW_TESTS || !isTestRule(r); }); }
+function counts(rows) {
+  var c = {ready: 0, manual: 0, risky: 0, trial: 0, hai: 0, staying: 0, all: rows.length, rm: 0, onTrial: 0, onHai: 0,
+           at: {rm: {ready: 0, manual: 0, risky: 0, staying: 0}, trial: {manual: 0, trial: 0}, hai: {manual: 0, hai: 0}}};
+  rows.forEach(function (r) {
+    var l = look(r);
+    c[l.g]++;
+    if (l.s === 'rm') c.rm++; else if (l.s === 'trial') c.onTrial++; else c.onHai++;
+    var at = c.at[l.s];
+    at[l.g] = (at[l.g] || 0) + 1;
+  });
+  return c;
 }
-
-function detail(r) {
-  if (!DET[r.rmId]) return '';
-  var reasons = (r.verdictReasons || []).slice(0, 3);
-  var ups = ((r.rebuild && r.rebuild.behaviour) || []).filter(function (b) { return b.upgrade && b.key !== 'hubPower' && !hasCopy(r); });
-  var links = ['<a href="/installedapp/configure/' + encodeURIComponent(r.rmId) + '" target="_blank" rel="noopener">Open in Rule Machine</a>'];
-  if (hasCopy(r) && LINKS.editor) links.push('<a href="' + esc(LINKS.editor + '#rule=' + encodeURIComponent(r.haiId)) + '" target="_blank" rel="noopener">Open the HAI copy</a>');
-  if (hasCopy(r) && !isLive(r) && r.ops && r.ops.deleteClone && r.ops.deleteClone.available) links.push('<button type="button" class="link" data-del="' + esc(r.rmId) + '">Delete the HAI copy</button>');
-  return '<div class="det">' +
-    (reasons.length ? '<ul>' + reasons.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
-    (hasCopy(r) ? [] : (RENAME[r.rmId] || [])).map(function (n) {
+function groupRows(rows, g) {
+  return rows.filter(function (r) {
+    if (FIND && String(r.rmName || '').toLowerCase().indexOf(FIND) < 0) return false;
+    return look(r).g === g;
+  }).sort(byName);
+}
+var MANY = [
+  {op: 'clone', ok: function (r) { var l = look(r); return !!(l.act && l.act[1] === 'clone') || l.kind === 'power'; },
+   bar: function (n) { return 'Clone ' + n; }, all: function (n) { return n > 1 ? 'Clone all ' + n : 'Clone'; }, cls: 'primary'},
+  {op: 'switchOver', ok: function (r) { return stage(r) === 'trial' && canOp(r, 'switchOver'); },
+   bar: function (n) { return 'Switch ' + n + ' to HAI'; }, all: function (n) { return n > 1 ? 'Switch all ' + n + ' to HAI' : 'Switch to HAI'; }, cls: 'hai'},
+  {op: 'switchBack', ok: function (r) { return stage(r) === 'hai' && canOp(r, 'switchBack'); },
+   bar: function (n) { return n + ' back to Rule Machine'; }, all: function (n) { return n > 1 ? 'All ' + n + ' back to Rule Machine' : 'Back to Rule Machine'; }, cls: ''},
+  {op: 'deleteClone', ok: function (r) { return stage(r) === 'trial' && canOp(r, 'deleteClone'); },
+   bar: function (n) { return 'Delete ' + plural(n, 'clone', 'clones'); }, all: function (n) { return n > 1 ? 'Delete all ' + n + ' clones' : 'Delete the clone'; }, cls: 'quiet-danger'},
+  {op: 'tell', ok: function (r) { return look(r).kind === 'cant'; },
+   bar: function (n) { return 'Tell HAI about ' + n; }, all: function (n) { return n > 1 ? 'Tell HAI about all ' + n : 'Tell HAI'; }, cls: ''}
+];
+function many(op) { return MANY.filter(function (m) { return m.op === op; })[0]; }
+function tickable(r) { return MANY.some(function (m) { return m.ok(r); }); }
+var PANEL_OPS = {ready: ['clone'], risky: ['clone'], trial: ['deleteClone', 'switchOver'], hai: ['switchBack'], staying: ['tell']};
+var OPEN = null;
+function trackHtml(s) {
+  var at = {rm: 0, trial: 1, hai: 2}[s];
+  return '<span class="track" aria-label="' + ({rm: 'In Rule Machine', trial: 'On trial in HAI', hai: 'Running on HAI'})[s] + '">' +
+    ['rm', 'trial', 'hai'].map(function (k, i) { return (i ? '<b></b>' : '') + '<i class="' + k + (i === at ? ' at' : i < at ? ' past' : '') + '"></i>'; }).join('') + '</span>';
+}
+function scene(c) {
+  var dots = function (id, n, secs) {
+    var out = '', dur = secs || 2.6;
+    for (var i = 0; i < n; i++) out += '<circle r="5" class="flow"><animateMotion dur="' + dur + 's" begin="-' + (i * dur / n).toFixed(2) + 's" repeatCount="indefinite" rotate="auto"><mpath href="#' + id + '"/></animateMotion></circle>';
+    return out;
+  };
+  var card = function (x, y, cls) {
+    return '<g transform="translate(' + x + ' ' + y + ')"><rect width="104" height="70" rx="11" class="' + cls + '-card"/>' +
+      '<rect x="14" y="15" width="56" height="8" rx="4" class="' + cls + '-ink"/><rect x="14" y="31" width="76" height="6" rx="3" class="' + cls + '-ink" opacity=".55"/>' +
+      '<rect x="14" y="44" width="64" height="6" rx="3" class="' + cls + '-ink" opacity=".55"/><circle cx="84" cy="19" r="6" class="' + cls + '-ink"/></g>';
+  };
+  var label = function (x, n, name, hint, cls) {
+    return '<text x="' + x + '" y="206" class="num ' + cls + '-txt" text-anchor="middle">' + n + '</text>' +
+      '<text x="' + x + '" y="231" class="lbl" text-anchor="middle">' + name + '</text>' +
+      '<text x="' + x + '" y="251" class="hint" text-anchor="middle">' + hint + '</text>';
+  };
+  var flowing = c.ready > 0 || c.onTrial > 0;
+  var returning = c.onHai > 0;
+  var flag = function (x, n) {
+    return n ? '<g transform="translate(' + x + ' 6)"><rect x="-62" y="-4" width="124" height="28" rx="14" class="flag"/><text y="15" text-anchor="middle" class="flag-txt">' + n + ' need' + (n === 1 ? 's' : '') + ' you</text></g>' : '';
+  };
+  var parts = function (list, none) {
+    var out = list.filter(function (x) { return x[0]; }).map(function (x) { return x[0] + ' ' + x[1]; });
+    return out.length ? out.join(' · ') : none;
+  };
+  var svg = function (box, cls, inner) { return '<svg class="' + cls + '" viewBox="' + box + '" aria-hidden="true">' + inner + '</svg>'; };
+  var defs = '<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><marker id="ah" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="arrowhead"/></marker>' +
+    '<linearGradient id="g1" x1="0" x2="1"><stop offset="0" class="s-rm"/><stop offset="1" class="s-trial"/></linearGradient>' +
+    '<linearGradient id="g2" x1="0" x2="1"><stop offset="0" class="s-trial"/><stop offset="1" class="s-hai"/></linearGradient>' +
+    '<linearGradient id="g3" x1="1" x2="0"><stop offset="0" class="s-hai"/><stop offset=".5" class="s-trial"/><stop offset="1" class="s-rm"/></linearGradient>' +
+    '<marker id="ahb" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="arrowhead-back"/></marker>' +
+    '<radialGradient id="glow"><stop offset="0" class="s-hai" stop-opacity=".35"/><stop offset="1" class="s-hai" stop-opacity="0"/></radialGradient></defs></svg>';
+  return '<div class="scene" role="img" aria-label="' + c.rm + ' rules in Rule Machine, ' + c.onTrial + ' on trial in HAI, ' + c.onHai + ' running on HAI">' + defs +
+    svg('55 0 240 262', 'pic', '<g class="st" data-open="rm" tabindex="0"><rect x="60" y="14" width="230" height="160" rx="22" class="pad rm-pad"/>' +
+      card(98, 70, 'rm') + card(110, 58, 'rm') + card(122, 46, 'rm') +
+      '<g transform="translate(246 46)"><g><circle r="17" class="gear"/><circle r="7" class="gear-hub"/>' +
+      '<animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="9s" repeatCount="indefinite"/></g></g>' +
+      flag(176, c.at.rm.manual) +
+      label(175, c.rm, 'In Rule Machine', parts([[c.at.rm.ready, 'ready'], [c.at.rm.manual, 'to fix'], [c.at.rm.risky, 'risky'], [c.at.rm.staying, 'staying']], 'Running as today'), 'rm') + '</g>') +
+    svg('290 50 136 60', 'way', '<path id="p1" d="M296 96 C 340 60, 380 60, 418 96" class="road" stroke="url(#g1)" marker-end="url(#ah)"/>' + (flowing ? '<g class="dots rm-dots">' + dots('p1', 3) + '</g>' : '')) +
+    svg('385 0 240 262', 'pic', '<g class="st" data-open="trial" tabindex="0"><rect x="390" y="14" width="230" height="160" rx="22" class="pad trial-pad"/>' +
+      '<rect x="420" y="40" width="170" height="112" rx="16" class="hold"/>' + card(442, 70, 'trial') + card(466, 58, 'trial') +
+      '<g transform="translate(578 46)"><circle r="17" class="pause"/><rect x="-6" y="-8" width="4" height="16" rx="1.5" class="pause-bar"/><rect x="2" y="-8" width="4" height="16" rx="1.5" class="pause-bar"/></g>' +
+      flag(505, c.at.trial.manual) +
+      label(505, c.onTrial, 'On trial in HAI', parts([[c.at.trial.trial, 'ready to switch'], [c.at.trial.manual, 'need you']], 'Cloned, paused; Rule Machine runs them'), 'trial') + '</g>') +
+    svg('620 50 136 60', 'way', '<path id="p2" d="M626 96 C 670 60, 710 60, 748 96" class="road" stroke="url(#g2)" marker-end="url(#ah)"/>' + (flowing ? '<g class="dots trial-dots">' + dots('p2', 3) + '</g>' : '')) +
+    svg('715 0 240 262', 'pic', '<g class="st" data-open="hai" tabindex="0"><rect x="720" y="14" width="230" height="160" rx="22" class="pad hai-pad"/>' +
+      '<circle cx="835" cy="100" r="76" fill="url(#glow)"/>' +
+      '<path d="M780 98 L835 52 L890 98" class="roof"/><rect x="792" y="94" width="86" height="64" rx="8" class="house"/>' +
+      '<path d="M815 126 l14 14 l28 -30" class="tick"/>' +
+      '<path d="M906 52 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3z" class="spark"/><path d="M766 64 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z" class="spark"/>' +
+      flag(835, c.at.hai.manual) +
+      label(835, c.onHai, 'Running on HAI', c.at.hai.manual ? parts([[c.at.hai.hai, 'running well'], [c.at.hai.manual, 'need you']], '') : 'Rule Machine\'s rule paused', 'hai') + '</g>') +
+    svg('0 0 1000 96', 'back', '<path id="p3" d="M879 14 C 866 66, 700 74, 500 74 S 134 66, 121 14" class="road road-back" stroke="url(#g3)" marker-end="url(#ahb)"/>' +
+      (returning ? '<g class="dots back-dots">' + dots('p3', 4, 6) + '</g>' : '') +
+      '<rect x="232" y="58" width="536" height="34" rx="17" class="back-pill"/>' +
+      '<text x="500" y="80" text-anchor="middle" class="back-txt">↩ Revert back to Rule Machine with one click, at any time</text>') +
+    '<p class="back-mini"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path d="M24 6 C 30 18, 22 26, 14 26 S 4 20, 6 9" class="road road-back" stroke="url(#g3)" marker-end="url(#ahb)"/></svg>' +
+      '<span>Revert back to Rule Machine with one click, at any time</span></p>' +
+    '</div>';
+}
+function renderJourney(c) {
+  var el = document.getElementById('journey');
+  if (!ROWS.length) { el.innerHTML = ''; return; }
+  var total = c.rm + c.onTrial + c.onHai || 1;
+  var moved = Math.round(100 * c.onHai / total);
+  var w = function (n) { return (100 * n / total).toFixed(2) + '%'; };
+  var seg = function (cls, n, word) { return n ? '<span class="' + cls + '" style="width:' + w(n) + '" title="' + n + ' ' + word + '">' + (n / total > 0.08 ? n + ' ' + word : '') + '</span>' : ''; };
+  el.innerHTML = '<div class="info"><div class="info-top"><span class="info-ttl">Your move to HAI</span>' +
+    '<span class="info-pct"><b>' + moved + '%</b>of ' + plural(total, 'rule', 'rules') + ' running on HAI</span></div>' +
+    '<div class="seg">' + seg('hai', c.onHai, 'on HAI') + seg('trial', c.onTrial, 'on trial') + seg('rm', c.rm, 'in Rule Machine') + '</div>' +
+    '<p class="sum">' + plural(total, 'rule', 'rules') + ' = ' + c.rm + ' in Rule Machine + ' + c.onTrial + ' on trial + ' + c.onHai + ' on HAI' +
+    (ROWS.filter(isTestRule).length && !SHOW_TESTS ? ' (HAI\'s own test rules not counted)' : '') + '</p>' +
+    scene(c) + '</div>';
+}
+function nextStep(c) {
+  var mins = function (n, each) { var m = Math.max(1, Math.round(n * each / 60)); return plural(m, 'minute', 'minutes'); };
+  var needs = c.manual ? '<p class="also"><button type="button" class="link" data-open="manual">' + plural(c.manual, 'rule needs', 'rules need') + ' some manual intervention</button> before ' + (c.manual === 1 ? 'it' : 'they') + ' can move.</p>' : '';
+  if (c.ready) return {ico: '📋', ttl: plural(c.ready, 'rule is', 'rules are') + ' able to be cloned into HAI',
+    say: 'HAI makes a paused clone of each. Rule Machine keeps running them, so nothing in your house changes. About ' + mins(c.ready, 7) + '; it runs on the hub, so you can close this page.',
+    btn: [c.ready > 1 ? 'Clone all ' + c.ready : 'Clone it', 'copyAll', 'primary big'], more: ['Choose which', 'ready'], extra: needs};
+  if (c.trial) return {ico: '🔁', ttl: plural(c.trial, 'clone is', 'clones are') + ' ready to switch over',
+    say: 'Switching pauses the Rule Machine rule and starts its HAI clone. Try a few, watch them for a day, then do the rest. Back to Rule Machine is one click.',
+    btn: ['Choose clones to switch', 'open:trial', 'hai big'], extra: needs};
+  if (c.manual) return {ico: '🛠', ttl: plural(c.manual, 'rule needs', 'rules need') + ' some manual intervention', say: 'Each says what it needs and has a button that takes you there.', btn: ['Show them', 'open:manual', 'primary big']};
+  if (c.risky) return {ico: '⚠️', ttl: plural(c.risky, 'risky rule waits', 'risky rules wait') + ' for your permission', say: 'They reboot or shut down the hub. Clone them only if you mean to.', btn: ['Show them', 'open:risky', 'big']};
+  if (c.onHai) return {ico: '🎉', done: true, ttl: 'Every rule that can move is running on HAI',
+    say: c.staying ? plural(c.staying, 'rule stays', 'rules stay') + ' in Rule Machine: ' + (c.staying === 1 ? 'it is' : 'they are') + ' empty or use something HAI cannot clone yet.' : 'Nothing is left in Rule Machine.'};
+  if (c.all) return {ico: '📝', ttl: 'Nothing to move yet', say: 'None of your rules can be cloned as they are. Each says why.'};
+  return null;
+}
+function renderNext(c) {
+  var el = document.getElementById('next');
+  var n = ROWS.length ? nextStep(c) : null;
+  if (!n) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="next' + (n.done ? ' done' : '') + '"><span class="ico" aria-hidden="true">' + n.ico + '</span>' +
+    '<div class="txt"><p class="ttl">' + esc(n.ttl) + '</p><p class="say">' + esc(n.say) + '</p>' + (n.extra || '') + '</div>' +
+    (n.btn ? '<div class="acts">' + (n.more ? '<button type="button" class="btn" data-open="' + n.more[1] + '">' + esc(n.more[0]) + '</button>' : '') +
+      '<button type="button" class="btn ' + n.btn[2] + '" data-next="' + n.btn[1] + '"' + (WORKING ? ' disabled' : '') + '>' + esc(n.btn[0]) + '</button></div>' : '') + '</div>';
+}
+var ICON = {
+  manual: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M22.7 19 13.6 9.9c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4Z"/></svg>',
+  risky: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2 1 21h22L12 2Zm1 15h-2v-2h2v2Zm0-4h-2V9h2v4Z"/></svg>',
+  ready: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1Zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 16H8V7h11v14Z"/></svg>',
+  trial: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM10 16H8V8h2v8Zm6 0h-2V8h2v8Z"/></svg>',
+  hai: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3 2 12h3v8h14v-8h3L12 3Zm-1.2 14-3.5-3.5 1.4-1.4 2.1 2.1 4.8-4.8 1.4 1.4-6.2 6.2Z"/></svg>',
+  staying: '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm5 11H7v-2h10v2Z"/></svg>'
+};
+var CHEV = '<svg class="chev" width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="m6.2 3.2-1.1 1.1L8.8 8l-3.7 3.7 1.1 1.1L11 8z"/></svg>';
+function groupHtml(g, rows) {
+  var key = g[0];
+  var open = !!OPEN[key] || !!FIND;
+  var ticks = rows.filter(tickable);
+  var picked = ticks.filter(function (r) { return PICK[r.rmId]; });
+  var acts = (PANEL_OPS[key] || []).map(function (op) {
+    var m = many(op);
+    var ok = rows.filter(m.ok);
+    if (!ok.length) return '';
+    var cls = key === 'risky' ? '' : m.cls;
+    var label = key === 'risky' ? (ok.length > 1 ? 'Clone all ' + ok.length + ' anyway…' : 'Clone anyway…') : m.all(ok.length);
+    return '<button type="button" class="btn small ' + cls + '" data-bulk="' + op + '" data-grp="' + key + '"' + (WORKING ? ' disabled' : '') + '>' + esc(label) + '</button>';
+  }).join('');
+  var h = '<section class="grp ' + key + (open ? ' open' : '') + '"><div class="gh">' +
+    '<button type="button" class="gt" data-toggle="' + key + '" aria-expanded="' + open + '"><span class="gi">' + ICON[key] + '</span>' +
+    '<span><span class="gname">' + g[1] + '</span><span class="gcount">' + rows.length + '</span><span class="gsay">' + esc(GSAY[key]) + '</span></span>' + CHEV + '</button>' +
+    (acts ? '<div class="gacts">' + acts + '</div>' : '') + '</div>';
+  if (open) {
+    h += '<div class="gbody">' + (ticks.length > 1 ? '<div class="gsel"><label><input type="checkbox" data-pickall="' + key + '"' + (picked.length === ticks.length ? ' checked' : '') + '> Select all ' + ticks.length + '</label>' +
+      (picked.length ? '<span>' + picked.length + ' selected here</span>' : '') + '</div>' : '') +
+      '<ul class="rows">' + rows.map(rowHtml).join('') + '</ul></div>';
+  }
+  return h + '</section>';
+}
+function rowHtml(r) {
+  var l = look(r);
+  var tick = tickable(r) ? '<input type="checkbox" class="tick" data-pick="' + esc(r.rmId) + '"' + (PICK[r.rmId] ? ' checked' : '') + ' aria-label="Select ' + esc(r.rmName) + '">' : '<span></span>';
+  var act = l.act ? '<button type="button" class="btn small ' + l.act[2] + '" data-act="' + l.act[1] + '" data-id="' + esc(r.rmId) + '"' + (WORKING ? ' disabled' : '') + '>' + esc(l.act[0]) + '</button>' : '';
+  var more = '<button type="button" class="btn small ghost" data-more="' + esc(r.rmId) + '" aria-expanded="' + !!DET[r.rmId] + '">' + (DET[r.rmId] ? 'Less' : 'More') + '</button>';
+  return '<li class="row ' + l.g + (PICK[r.rmId] ? ' picked' : '') + '">' + tick + trackHtml(l.s) +
+    '<div><div class="nm">' + esc(r.rmName) + '</div><div class="say">' + esc(cloneWords(l.say)) + '</div></div>' +
+    '<div class="acts">' + act + more + '</div>' + (DET[r.rmId] ? '<div class="more">' + detailHtml(r, l) + '</div>' : '') + '</li>';
+}
+function detailHtml(r, l) {
+  var reasons = (r.verdictReasons || []).slice(0, 4);
+  var full = (r.warnings || []).map(function (w) { return w.message; }).filter(Boolean);
+  var why = [];
+  [l.say].concat(full, reasons).forEach(function (x) { if (x && why.indexOf(x) < 0) why.push(x); });
+  var opts = '';
+  if (!hasCopy(r)) {
+    (RENAME[r.rmId] || []).forEach(function (n) {
       var key = 'rename:' + n.from + '>' + n.to;
-      var on = !!(UPG[r.rmId] || {})[key];
-      return '<div><label><input type="checkbox" data-upg="' + esc(r.rmId) + '" data-key="' + esc(key) + '"' + (on ? ' checked' : '') + '> Use the new name: ' +
-        esc(n.device) + ' now offers ' + esc(n.to) + ' instead of ' + esc(n.from) + '</label></div>';
-    }).join('') +
-    ups.map(function (b) {
-      var on = !!(UPG[r.rmId] || {})[b.upgrade.key];
-      return '<div><label><input type="checkbox" data-upg="' + esc(r.rmId) + '" data-key="' + esc(b.upgrade.key) + '"' + (on ? ' checked' : '') + '> ' + esc(b.upgrade.label) + '</label></div>';
-    }).join('') +
-    '<div class="links">' + links.join('') + '</div></div>';
+      opts += '<label><input type="checkbox" data-upg="' + esc(r.rmId) + '" data-key="' + esc(key) + '"' + ((UPG[r.rmId] || {})[key] ? ' checked' : '') + '> Use the new name: ' +
+        esc(n.device) + ' now offers ' + esc(n.to) + ' instead of ' + esc(n.from) + '</label>';
+    });
+    ((r.rebuild && r.rebuild.behaviour) || []).filter(function (x) { return x.upgrade && x.upgrade.key !== 'hubPower'; }).forEach(function (x) {
+      opts += '<label><input type="checkbox" data-upg="' + esc(r.rmId) + '" data-key="' + esc(x.upgrade.key) + '"' + ((UPG[r.rmId] || {})[x.upgrade.key] ? ' checked' : '') + '> ' + esc(x.upgrade.label) + '</label>';
+    });
+  }
+  var links = ['<a href="/installedapp/configure/' + encodeURIComponent(r.rmId) + '" target="_blank" rel="noopener">Open in Rule Machine</a>'];
+  if (hasCopy(r) && editorAt(r.haiId)) links.push('<a href="' + esc(editorAt(r.haiId)) + '" target="_blank" rel="noopener">Open the HAI clone in the editor</a>');
+  if (DRAFTED[String(r.rmId)] && editorAt('rm:' + r.rmId)) links.push('<a href="' + esc(editorAt('rm:' + r.rmId)) + '" target="_blank" rel="noopener">Open the draft in the editor</a>');
+  if (hasCopy(r) && !isLive(r) && canOp(r, 'deleteClone') && !(l.act && l.act[1] === 'delete')) links.push('<button type="button" class="link" data-act="delete" data-id="' + esc(r.rmId) + '">Delete the HAI clone</button>');
+  if (r.repairNote) why.push(r.repairNote);
+  return '<div class="det">' + (why.length > 1 ? '<ul>' + why.slice(1).map(function (x) { return '<li>' + esc(cloneWords(x)) + '</li>'; }).join('') + '</ul>' : '') +
+    (opts ? '<div class="opts"><b>Options for the clone</b>' + opts + '</div>' : '') + '<div class="links">' + links.join('') + '</div></div>';
 }
-
-function nameCell(r) {
-  return '<span class="nm"><button type="button" class="tg" data-det="' + esc(r.rmId) + '" aria-expanded="' + (DET[r.rmId] ? 'true' : 'false') +
-    '" aria-label="Details">' + (DET[r.rmId] ? '▼' : '▶') + '</button>' + esc(r.rmName) + '</span>';
-}
-
-function msgHtml(key) { var m = MSG[key]; return m ? '<p class="msg' + (m[1] ? ' err' : '') + '">' + m[0] + '</p>' : ''; }
-
-function renderAssess(all) {
-  var el = document.getElementById('sAssess');
-  var can = all.filter(canClone).length;
-  var rows = all.filter(shown);
-  var h = '<div class="sh"><h2 id="hAssess">1. Assess<span class="n">' + can + ' of ' + all.length + ' can clone</span></h2></div>';
-  if (!all.length) { el.innerHTML = h + '<p class="none">Every rule has an HAI copy.</p>'; return; }
-  if (!rows.length) { el.innerHTML = h + noMatch(); return; }
-  h += batchesOf(rows).map(function (b) {
-    var ok = b.rows.filter(cloneReady);
-    var all = ok.length && ok.every(function (r) { return SEL[r.rmId]; });
-    return '<div class="batch"><div class="bh">' +
-      (ok.length ? '<input type="checkbox" data-batch="' + esc(b.key) + '"' + (all ? ' checked' : '') + ' aria-label="Tick all in ' + esc(b.title) + '">' : '') +
-      esc(b.title) + ' <span class="n">' + b.rows.length + '</span></div>' +
-      b.rows.map(function (r) {
-        var s = assessStatus(r);
-        var p = power(r);
-        var tick = cloneReady(r) ? '<input type="checkbox" data-sel="' + esc(r.rmId) + '"' + (SEL[r.rmId] ? ' checked' : '') + ' aria-label="Tick ' + esc(r.rmName) + '">' : '<span></span>';
-        return '<div class="r">' + tick + nameCell(r) + '<span class="st ' + s.cls + '">' + s.word + '</span>' +
-          (s.why ? '<span class="why">' + esc(s.why) + '</span>' : '') +
-          (p && canClone(r) ? '<label class="anyway"><input type="checkbox" data-anyway="' + esc(r.rmId) + '"' + ((UPG[r.rmId] || {}).hubPower ? ' checked' : '') + '> ' +
-            'Clone it anyway: this rule ' + (/shut/.test(p.message || '') ? 'shuts down' : 'reboots') + ' the hub, and the copy will too</label>' : '') +
-          detail(r) + '</div>';
-      }).join('') + '</div>';
-  }).join('');
-  el.innerHTML = h;
-}
-
-function renderClone(rows) {
-  var el = document.getElementById('sClone');
-  var ticked = rows.filter(function (r) { return SEL[r.rmId] && cloneReady(r); });
-  el.innerHTML = '<div class="sh"><h2 id="hClone">2. Clone</h2></div>' +
-    '<div class="foot"><button type="button" class="primary" id="cloneGo"' + (ticked.length && !WORKING ? '' : ' disabled') + '>Clone ' + ticked.length + '</button>' +
-    '<span class="sub">' + (ticked.length ? 'The copies land paused. Rule Machine keeps running.' : 'Tick rules in Assess to clone them.') + '</span></div>' +
-    msgHtml('clone');
-}
-
-function renderCut(all) {
-  var el = document.getElementById('sCut');
-  var n = all.filter(function (r) { return !cutStatus(r) && CUT[r.rmId]; }).length;
-  var rows = all.filter(shown);
-  var ok = rows.filter(function (r) { return !cutStatus(r); });
-  var h = '<div class="sh"><h2 id="hCut">3. Cut over<span class="n">' + plural(all.length, 'copy', 'copies') + ' paused on HAI</span></h2>' +
-    (all.length ? '<button type="button" id="cutDel"' + (n && !WORKING ? '' : ' disabled') + '>Delete ' + n + '</button> ' +
-                  '<button type="button" class="primary" id="cutGo"' + (n && !WORKING ? '' : ' disabled') + '>Cut over ' + n + '</button>' : '') + '</div>';
-  if (!all.length) { el.innerHTML = h + '<p class="none">Nothing cloned yet.</p>' + msgHtml('cut'); return; }
-  if (!rows.length) { el.innerHTML = h + noMatch() + msgHtml('cut'); return; }
-  var allOn = ok.length && ok.every(function (r) { return CUT[r.rmId]; });
-  h += (ok.length > 1 ? '<div class="bh"><input type="checkbox" id="cutAll"' + (allOn ? ' checked' : '') + ' aria-label="Tick every copy shown"> Every copy' + (FIND ? ' shown' : '') + '</div>' : '') +
-    rows.map(function (r) {
-      var why = cutStatus(r);
-      var tick = why ? '<span></span>' : '<input type="checkbox" data-cut="' + esc(r.rmId) + '"' + (CUT[r.rmId] ? ' checked' : '') + ' aria-label="Tick ' + esc(r.rmName) + '">';
-      return '<div class="r">' + tick + nameCell(r) + '<span class="st paused">Paused on HAI</span>' +
-        (why ? '<span class="why need">' + esc(why) + '</span>' : '') + detail(r) + '</div>';
-    }).join('');
-  el.innerHTML = h + msgHtml('cut');
-}
-
-function renderBack(all) {
-  var el = document.getElementById('sBack');
-  var rows = all.filter(shown);
-  var h = '<div class="sh"><h2 id="hBack">4. Rollback<span class="n">' + plural(all.length, 'rule', 'rules') + ' live on HAI</span></h2></div>';
-  if (!all.length) { el.innerHTML = h + '<p class="none">No rule is live on HAI yet.</p>' + msgHtml('back'); return; }
-  if (!rows.length) { el.innerHTML = h + noMatch() + msgHtml('back'); return; }
-  h += batchesOf(rows).map(function (b) {
-    return '<div class="batch"><div class="bh">' + esc(b.title) +
-      (b.rows.length > 1 ? ' <button type="button" class="link" data-backbatch="' + esc(b.key) + '">Roll back all ' + b.rows.length + '</button>' : '') + '</div>' +
-      b.rows.map(function (r) {
-        var can = r.ops && r.ops.switchBack && r.ops.switchBack.available;
-        return '<div class="r"><span></span>' + nameCell(r) + '<span class="act"><span class="st live">Live on HAI</span> ' +
-          '<button type="button" data-back="' + esc(r.rmId) + '"' + (can && !WORKING ? '' : ' disabled') + '>Roll back</button></span>' +
-          (can ? '' : '<span class="why need">' + esc(first(r.ops && r.ops.switchBack && r.ops.switchBack.why)) + '</span>') + detail(r) + '</div>';
-      }).join('') + '</div>';
-  }).join('');
-  el.innerHTML = h + msgHtml('back');
-}
-
 function render() {
-  var assessRows = ROWS.filter(function (r) { return !hasCopy(r); });
-  var cutRows = ROWS.filter(function (r) { return hasCopy(r) && !isLive(r); });
-  var liveRows = ROWS.filter(isLive);
-  // Ticks only for rules still in the section they were ticked in.
-  Object.keys(SEL).forEach(function (k) { if (!assessRows.some(function (r) { return r.rmId === k && cloneReady(r); })) delete SEL[k]; });
-  Object.keys(CUT).forEach(function (k) { if (!cutRows.some(function (r) { return r.rmId === k && !cutStatus(r); })) delete CUT[k]; });
-  renderAssess(assessRows);
-  renderClone(assessRows);
-  renderCut(cutRows);
-  renderBack(liveRows);
-  wire();
+  var rows = visible();
+  var c = counts(rows);
+  if (!OPEN) { OPEN = {}; OPEN[c.ready ? 'ready' : c.trial ? 'trial' : c.manual ? 'manual' : c.risky ? 'risky' : c.hai ? 'hai' : 'staying'] = true; }
+  renderJourney(c);
+  renderNext(c);
+  document.getElementById('updating').hidden = !LOADING;
+  var keep = {};
+  var html = GROUPS.map(function (g) {
+    var rs = groupRows(rows, g[0]);
+    rs.forEach(function (r) { keep[r.rmId] = true; });
+    return rs.length ? groupHtml(g, rs) : '';
+  }).join('');
+  Object.keys(PICK).forEach(function (k) { if (!keep[k]) delete PICK[k]; });
+  document.getElementById('groups').innerHTML = html || '<div class="grp staying"><div class="empty"><span class="big" aria-hidden="true">' + (FIND ? '🔍' : '✓') + '</span>' +
+    (FIND ? 'No rule matches “' + esc(FIND) + '”.' : 'No Rule Machine rules to show.') + '</div></div>';
+  var nTest = ENV === 'DEV' ? ROWS.filter(isTestRule).length : 0;
+  document.getElementById('foot').innerHTML = '<span>' + (SOURCE && SOURCE.detail && SOURCE.detail.appVersion ? 'Read by Automation Map ' + esc(SOURCE.detail.appVersion) + '.' : '') + '</span>' +
+    (nTest ? '<label><input type="checkbox" id="showTests"' + (SHOW_TESTS ? ' checked' : '') + '> Show HAI\'s own test rules (' + nTest + ')</label>' : '');
+  renderBar(rows);
+  stick();
 }
-
-function wire() {
-  var all = function (sel, f) { Array.prototype.forEach.call(document.querySelectorAll(sel), f); };
-  all('[data-det]', function (b) { b.onclick = function () { var k = b.getAttribute('data-det'); DET[k] = !DET[k]; render(); }; });
-  all('[data-sel]', function (b) { b.onchange = function () { var k = b.getAttribute('data-sel'); if (b.checked) SEL[k] = true; else delete SEL[k]; render(); }; });
-  all('[data-batch]', function (b) {
-    b.onchange = function () {
-      var key = b.getAttribute('data-batch');
-      ROWS.forEach(function (r) { if (!hasCopy(r) && shown(r) && (r.round ? String(r.round) : 'other') === key && cloneReady(r)) { if (b.checked) SEL[r.rmId] = true; else delete SEL[r.rmId]; } });
+function picked(rows) { return rows.filter(function (r) { return PICK[r.rmId]; }); }
+function renderBar(rows) {
+  var el = document.getElementById('selbar');
+  var sel = picked(rows);
+  document.body.classList.toggle('has-sel', sel.length > 0);
+  if (!sel.length) { el.hidden = true; el.innerHTML = ''; return; }
+  var btns = MANY.map(function (m) {
+    var n = sel.filter(m.ok).length;
+    return n ? '<button type="button" class="btn ' + m.cls + '" data-bar="' + m.op + '"' + (WORKING ? ' disabled' : '') + '>' + esc(m.bar(n)) + '</button>' : '';
+  }).join('');
+  var risky = sel.filter(function (r) { return look(r).kind === 'power'; }).length;
+  el.hidden = false;
+  el.innerHTML = '<div class="wrap selbar-in"><span class="selcount"><b>' + sel.length + '</b> selected</span>' +
+    (risky ? '<span class="selwarn">⚠️ ' + plural(risky, 'risky rule', 'risky rules') + '</span>' : '') +
+    '<span class="selacts">' + btns + '<button type="button" class="btn ghost" id="selClear">Clear</button></span></div>';
+}
+function goTo(g) {
+  OPEN = OPEN || {};
+  var want = g === 'rm' ? 'ready' : g;
+  if (FIND && !groupRows(visible(), want).length && !(g === 'rm' && groupRows(visible(), 'manual').length)) {
+    FIND = '';
+    document.getElementById('find').value = '';
+  }
+  OPEN[want] = true;
+  if (g === 'rm') OPEN.manual = true;
+  render();
+  var el = document.querySelector('.grp.' + (g === 'rm' ? (document.querySelector('.grp.ready') ? 'ready' : 'manual') : g));
+  if (el) window.scrollTo({top: el.getBoundingClientRect().top + window.scrollY - document.getElementById('top').offsetHeight - 70, behavior: 'smooth'});
+}
+function stick() { document.documentElement.style.setProperty('--top-sticky', document.getElementById('top').offsetHeight + 'px'); }
+window.addEventListener('resize', stick);
+function modal(html, cls) {
+  var m = document.getElementById('modal');
+  if (!html) { m.innerHTML = ''; return null; }
+  m.innerHTML = '<div class="modal' + (cls ? ' ' + cls : '') + '" role="dialog" aria-modal="true"><div class="box">' + html + '</div></div>';
+  return m.firstChild;
+}
+function namesList(rules) {
+  var top = rules.slice(0, 12).map(function (r) { return '<li>' + esc(r.rmName || r.rmId) + '</li>'; });
+  if (rules.length > 12) top.push('<li>and ' + (rules.length - 12) + ' more</li>');
+  return '<ul class="list">' + top.join('') + '</ul>';
+}
+function ask(o, yes) {
+  var el = modal('<h2>' + (o.danger ? '⚠️ ' : '') + esc(o.title) + '</h2><p>' + o.text + '</p>' + (o.after || '') + (o.rules ? namesList(o.rules) : '') +
+    '<div class="acts"><button type="button" class="btn" id="mNo">' + esc(o.no || 'Cancel') + '</button><button type="button" class="btn ' + (o.danger ? 'danger' : o.cls || 'primary') + '" id="mYes">' + esc(o.yes) + '</button></div>');
+  var close = function () { modal(null); document.removeEventListener('keydown', key); };
+  var key = function (e) { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', key);
+  el.onclick = function (e) { if (e.target === el) close(); };
+  document.getElementById('mNo').onclick = close;
+  document.getElementById('mYes').onclick = function () { close(); yes(); };
+  document.getElementById('mYes').focus();
+}
+var DOING = {clone: 'Cloning', deleteClone: 'Deleting the HAI clones of', switchOver: 'Switching to HAI', switchBack: 'Moving back to Rule Machine'};
+var EACH = {clone: 7, deleteClone: 8, switchOver: 6, switchBack: 6};
+function progress(op, total, handled, startedAt, nowAt, current) {
+  var spent = Math.max(0, ((nowAt || Date.now()) - startedAt) / 1000);
+  var each = handled ? spent / handled : EACH[op] || 7;
+  var left = Math.max(0, Math.round((total - handled) * each - (handled ? 0 : spent)));
+  var pct = total ? Math.round(100 * handled / total) : 0;
+  var when = left < 60 ? 'about ' + Math.max(5, Math.round(left / 5) * 5) + ' seconds left' : 'about ' + plural(Math.round(left / 60), 'minute', 'minutes') + ' left';
+  var el = document.getElementById('runBox');
+  if (!el) {
+    modal('<div id="runBox"><h2><span class="spin" aria-hidden="true"></span><span id="runTtl"></span></h2><div class="prog" id="runBar"><div></div></div>' +
+      '<p class="runnow" id="runNow"></p><div class="runmeta"><span id="runCount"></span><span id="runLeft"></span></div>' +
+      '<p class="say" style="color:var(--muted);margin-top:10px">' + (op === 'clone' || op === 'deleteClone' ? 'This runs on the hub: you can close this page and come back.' : 'Please keep this page open until it finishes.') + '</p>' +
+      '<div class="acts"><button type="button" class="btn" id="runStop"' + (op === 'clone' || op === 'deleteClone' ? '' : ' hidden') + '>Stop after this rule</button></div></div>', 'run');
+    document.getElementById('runStop').onclick = function () { this.disabled = true; this.textContent = 'Stopping after this rule…'; q('/migration/api/job/stop', {}); };
+  }
+  document.getElementById('runTtl').textContent = (DOING[op] || 'Working on') + ' ' + plural(total, 'rule', 'rules');
+  var barEl = document.getElementById('runBar');
+  barEl.className = 'prog' + (handled ? '' : ' busy');
+  barEl.firstChild.style.width = pct + '%';
+  document.getElementById('runNow').textContent = current ? 'Now: ' + current : '';
+  document.getElementById('runCount').textContent = handled + ' of ' + total + ' done · ' + pct + '%';
+  document.getElementById('runLeft').textContent = handled < total ? when : 'finishing';
+}
+var WORDS = {
+  clone: ['Cloned to HAI, paused', 'Rule Machine keeps running them until you switch them.'],
+  deleteClone: ['HAI clones deleted', 'The Rule Machine rules are unchanged and still running.'],
+  switchOver: ['Switched to HAI', 'The Rule Machine rules are paused and the HAI clones are running.'],
+  switchBack: ['Back on Rule Machine', 'The HAI clones are paused and the Rule Machine rules are running again.']
+};
+function showResult(op, done, flagged, failed, stopped) {
+  var w = WORDS[op];
+  var groups = {}, order = [];
+  failed.forEach(function (f) {
+    var why = cloneWords(String(f.why || 'The hub did not say why').replace(/[.!?]+$/, ''));
+    if (!groups[why]) { groups[why] = []; order.push(why); }
+    groups[why].push(f);
+  });
+  var li = function (x, link) { return '<li>' + esc(x.name) + (link ? ' · <a href="' + esc(link) + '" target="_blank" rel="noopener">' + (op === 'clone' && link.indexOf('rm%3A') >= 0 ? 'Fix in the editor' : 'Open') + '</a>' : '') + '</li>'; };
+  var word = {clone: 'cloned', deleteClone: 'deleted', switchOver: 'switched to HAI', switchBack: 'back on Rule Machine'}[op];
+  var bits = [];
+  if (done.length) bits.push(done.length + ' ' + word);
+  if (flagged.length) bits.push(plural(flagged.length, 'draft', 'drafts') + ' to fix');
+  if (failed.length) bits.push(failed.length + (op === 'clone' ? ' not cloned' : ' not done'));
+  var head = (failed.length || flagged.length ? (done.length ? '✅ ' : '⚠️ ') : '✅ ') + (bits.join(' · ') || 'Nothing was done');
+  var h = '<h2>' + head + (stopped ? ' (stopped)' : '') + '</h2>';
+  if (done.length) h += '<div class="res ok"><h3>' + esc(w[0]) + ': ' + done.length + '</h3><div class="why">' + esc(w[1]) + '</div><ul>' + done.map(function (x) { return li(x); }).join('') + '</ul></div>';
+  if (flagged.length) h += '<div class="res fix"><h3>🛠 Drafts to fix: ' + flagged.length + '</h3><div class="why">The hub would not accept these clones as they are. Each is in the editor\'s Drafts with what to fix.</div><ul>' +
+    flagged.map(function (x) { return li(x, editorAt('rm:' + x.id)); }).join('') + '</ul></div>';
+  order.forEach(function (why) {
+    h += '<div class="res no"><h3>' + (op === 'clone' ? 'Not cloned' : 'Not done') + ': ' + groups[why].length + '</h3><div class="why">' + esc(why) + '</div><ul>' + groups[why].map(function (x) { return li(x); }).join('') + '</ul></div>';
+  });
+  var next = op === 'clone' && (flagged.length || failed.length) ? ['Show what needs me', 'manual'] : op === 'clone' && done.length ? ['Show the clones', 'trial']
+    : op === 'switchOver' && done.length ? ['Show rules on HAI', 'hai'] : null;
+  modal(h + '<div class="acts"><button type="button" class="btn" id="resClose">Close</button>' +
+    (next ? '<button type="button" class="btn primary" id="resNext">' + next[0] + '</button>' : '') + '</div>', 'run');
+  document.getElementById('resClose').onclick = function () { modal(null); };
+  if (next) document.getElementById('resNext').onclick = function () { modal(null); PICK = {}; goTo(next[1]); };
+}
+function settle(op, ids, refused) {
+  (refused || []).forEach(function (x) {
+    var r = rowOf(x.id);
+    if (r && x.code && String(x.code).indexOf('RM_') === 0 && !warn(r, 'notCloned')) r.warnings = (r.warnings || []).concat([{kind: 'notCloned', names: [], blocking: false, message: x.why || x.message || ''}]);
+  });
+  ROWS.forEach(function (r) {
+    if (ids.indexOf(r.rmId) < 0) return;
+    if (op === 'deleteClone') { r.haiId = null; r.phase = 'none'; }
+    if (op === 'switchOver') r.phase = 'switched';
+    if (op === 'switchBack') { r.phase = 'reverted'; r.live = 'rm'; }
+  });
+}
+function runJob(op, rules) {
+  WORKING = true;
+  var ups = {};
+  if (op === 'clone') rules.forEach(function (r) { var u = upgList(r); if (u.length) ups[r.rmId] = u; });
+  progress(op, rules.length, 0, Date.now(), Date.now(), null);
+  render();
+  q('/migration/api/run', {op: op, rmIds: rules.map(function (r) { return r.rmId; }), upgrades: ups}).then(function (out) {
+    if (!out || out.ok !== true) {
+      if (out && out.code === 'MIGRATION_JOB_RUNNING') { watchJob(); return; }
+      WORKING = false;
+      showResult(op, [], [], [{name: 'The run', why: (out && out.message) || 'The hub did not start the run'}]);
       render();
-    };
-  });
-  all('[data-anyway]', function (b) {
-    b.onchange = function () { var k = b.getAttribute('data-anyway'); UPG[k] = UPG[k] || {}; UPG[k].hubPower = b.checked; if (!b.checked) delete SEL[k]; render(); };
-  });
-  all('[data-upg]', function (b) {
-    b.onchange = function () { var k = b.getAttribute('data-upg'); UPG[k] = UPG[k] || {}; UPG[k][b.getAttribute('data-key')] = b.checked; };
-  });
-  all('[data-cut]', function (b) { b.onchange = function () { var k = b.getAttribute('data-cut'); if (b.checked) CUT[k] = true; else delete CUT[k]; render(); }; });
-  var cutAll = document.getElementById('cutAll');
-  if (cutAll) cutAll.onchange = function () {
-    ROWS.forEach(function (r) { if (hasCopy(r) && !isLive(r) && !cutStatus(r) && shown(r)) { if (cutAll.checked) CUT[r.rmId] = true; else delete CUT[r.rmId]; } });
-    render();
-  };
-  var cg = document.getElementById('cloneGo');
-  if (cg) cg.onclick = function () { runAll('clone', ROWS.filter(function (r) { return SEL[r.rmId] && cloneReady(r); }), 'clone'); };
-  var cu = document.getElementById('cutGo');
-  if (cu) cu.onclick = function () { runAll('switchOver', ROWS.filter(function (r) { return CUT[r.rmId]; }), 'cut'); };
-  // Bulk delete of the ticked copies (17 October). The Rule Machine rules are not touched.
-  var cd = document.getElementById('cutDel');
-  if (cd) cd.onclick = function () {
-    var picked = ROWS.filter(function (r) { return CUT[r.rmId]; });
-    if (picked.length && window.confirm('Delete ' + plural(picked.length, 'HAI copy', 'HAI copies') + '? The Rule Machine rules are not changed.')) {
-      runAll('deleteClone', picked, 'cut');
-      picked.forEach(function (r) { delete CUT[r.rmId]; });
+      return;
     }
-  };
-  all('[data-back]', function (b) { b.onclick = function () { var k = b.getAttribute('data-back'); runAll('switchBack', ROWS.filter(function (r) { return r.rmId === k; }), 'back'); }; });
-  all('[data-backbatch]', function (b) {
-    b.onclick = function () {
-      var key = b.getAttribute('data-backbatch');
-      runAll('switchBack', ROWS.filter(function (r) { return isLive(r) && shown(r) && (r.round ? String(r.round) : 'other') === key; }), 'back');
-    };
-  });
-  all('[data-del]', function (b) {
-    b.onclick = function () {
-      var k = b.getAttribute('data-del');
-      var r = ROWS.filter(function (x) { return x.rmId === k; })[0];
-      if (r && window.confirm('Delete the HAI copy of ' + (r.rmName || 'this rule') + '? The Rule Machine rule is not changed.')) runAll('deleteClone', [r], 'cut');
-    };
-  });
+    watchJob();
+  }, function () { watchJob(); });
 }
-
-// Every press goes through the existing apply route: a rule with an option ticked on its own (the app takes options
-// on a single copy only), the rest in batches the app's cap allows, one after another (the app is single-threaded).
-var WORDS = {clone: ['cloned', 'paused on HAI'], switchOver: ['cut over', 'live on HAI'], switchBack: ['rolled back', 'back on Rule Machine'], deleteClone: ['deleted', '']};
-function runAll(op, rules, where) {
+function watchJob() {
+  WORKING = true;
+  var names = {};
+  ROWS.forEach(function (r) { names[r.rmId] = r.rmName; });
+  var tick = function () {
+    q('/migration/api/job').then(function (out) {
+      var v = out && out.job;
+      if (!v) { WORKING = false; modal(null); load(); return; }
+      if (v.state === 'running') {
+        progress(v.op, v.total || 0, v.handled || 0, v.startedAt || Date.now(), v.now, names[(v.ids || [])[v.handled || 0]] || null);
+        setTimeout(tick, 2500);
+        return;
+      }
+      var done = [], flagged = [], failed = [], doneIds = [];
+      (v.results || []).forEach(function (x) {
+        var item = {id: x.rmId, name: x.rmName || names[x.rmId] || x.rmId, why: first(x.message || ''), code: x.code, message: x.message};
+        if (x.ok) { done.push(item); doneIds.push(x.rmId); }
+        else if (x.flagged) flagged.push(item);
+        else failed.push(item);
+        if (x.renames && x.renames.length) { RENAME[x.rmId] = x.renames; DET[x.rmId] = true; }
+      });
+      if (v.state === 'stopped') (v.ids || []).slice(v.handled || 0).forEach(function (k) { failed.push({id: k, name: names[k] || k, why: 'Not reached: the run was stopped'}); });
+      WORKING = false;
+      settle(v.op, doneIds, v.op === 'clone' ? failed : null);
+      PICK = {};
+      showResult(v.op, done, flagged, failed, v.state === 'stopped');
+      render();
+      load();
+    }, function () { setTimeout(tick, 5000); });
+  };
+  tick();
+}
+function runAll(op, rules) {
   if (!rules.length || WORKING) return;
+  rules = rules.slice().sort(byPlan);
+  if ((op === 'clone' || op === 'deleteClone') && rules.length > 1) { runJob(op, rules); return; }
   var queue = [];
   var plain = [];
   rules.forEach(function (r) {
@@ -885,118 +1201,255 @@ function runAll(op, rules, where) {
     var ids = plain.slice(i, i + REP_BATCH_MAX);
     queue.push(ids.length === 1 ? {rmId: ids[0], op: op} : {op: op, rmIds: ids});
   }
-  var done = 0;
-  var failed = [];
-  var started = Date.now();
-  var flagged = [];
   var names = {};
   rules.forEach(function (r) { names[r.rmId] = r.rmName; });
+  var had = {};
+  rules.forEach(function (r) { had[r.rmId] = hasCopy(r); });
+  var done = [], flagged = [], failed = [], lost = [];
+  var item = function (k, why, code, message) { return {id: k, name: names[k] || k, why: why, code: code, message: message}; };
+  var refused = function (k, message, code) {
+    if (message === 'The hub did not answer with a result.') { lost.push(k); return; }
+    if (op === 'clone' && !had[k] && /already an HAI copy/i.test(String(message || ''))) { done.push(item(k)); return; }
+    failed.push(item(k, first(message || 'The hub did not say why.'), code, message));
+  };
+  var started = Date.now();
   WORKING = true;
-  delete MSG[where];
-  var who = rules.length === 1 ? esc(rules[0].rmName || 'this rule') : plural(rules.length, 'rules', 'rules');
-  var DOING = {clone: 'Cloning ', switchOver: 'Cutting over ', switchBack: 'Rolling back ', deleteClone: 'Deleting the HAI copy of '};
-  bar('work', (DOING[op] || 'Working on ') + who + '…');
   render();
   var next = function () {
+    var handled = done.length + flagged.length + failed.length;
+    progress(op, rules.length, handled, started, Date.now(), queue.length ? names[queue[0].rmId || queue[0].rmIds[0]] : null);
+    if (!queue.length && lost.length) {
+      var askAbout = lost; lost = [];
+      q('/migration/api/state').then(function (st) {
+        var byId = {};
+        ((st && st.rows) || []).forEach(function (r) { byId[r.rmId] = r; });
+        askAbout.forEach(function (k) {
+          var r = byId[k];
+          var ok = r && (op === 'clone' ? hasCopy(r) : op === 'deleteClone' ? !hasCopy(r) : op === 'switchOver' ? r.phase === 'switched' : r.phase !== 'switched');
+          if (ok) done.push(item(k)); else failed.push(item(k, 'The hub did not answer. Reload the page to see where this rule is'));
+        });
+        next();
+      }).catch(function () { askAbout.forEach(function (k) { failed.push(item(k, 'The hub did not answer. Reload the page to see where this rule is')); }); next(); });
+      return;
+    }
     if (!queue.length) {
       WORKING = false;
-      var w = WORDS[op];
-      // Grouped by reason, a few names each: one line per reason, not one per rule (17 October: a wall of red
-      // repeating the same reason for 76 rules).
-      var groups = {};
-      var order = [];
-      failed.forEach(function (f) {
-        f.why = String(f.why).replace(/[.!?]+$/, '');
-        if (!groups[f.why]) { groups[f.why] = []; order.push(f.why); }
-        groups[f.why].push(f.name);
-      });
-      var notDone = order.map(function (why) {
-        var n = groups[why];
-        return esc(why) + ': ' + n.slice(0, 5).map(function (x) { return esc(x); }).join(', ') + (n.length > 5 ? ' and ' + (n.length - 5) + ' more' : '');
-      });
-      var said = (done ? (done === 1 && rules.length === 1 ? esc(rules[0].rmName || 'The rule') : plural(done, 'rule', 'rules')) + ' ' + w[0] + '.' + (w[1] ? ' Now ' + w[1] + '.' : '') : '') +
-        (flagged.length ? ' ' + plural(flagged.length, 'rule was', 'rules were') + ' cloned as drafts to check, marked Needs fixing in the editor: ' +
-          flagged.slice(0, 5).map(function (x) { return esc(x); }).join(', ') + (flagged.length > 5 ? ' and ' + (flagged.length - 5) + ' more' : '') + '.' : '') +
-        (failed.length ? ' ' + failed.length + ' not done. ' + notDone.join('. ') + '.' : '');
-      bar(failed.length ? 'err' : 'ok', said.trim() || 'Nothing was done.');
-      if (op === 'clone') rules.forEach(function (r) { delete SEL[r.rmId]; });
-      if (op === 'switchOver') rules.forEach(function (r) { delete CUT[r.rmId]; });
+      settle(op, done.map(function (x) { return x.id; }), op === 'clone' ? failed : null);
+      PICK = {};
+      showResult(op, done, flagged, failed, false);
+      render();
       load();
       return;
     }
     var body = queue.shift();
-    // Done and not done counted apart, with what is left: "72 of 132 done" once counted refusals as done.
-    // Time left from this run's own pace, so a person knows how long N rules take on their hub.
-    var left = rules.length - done - failed.length - flagged.length;
-    var spent = (Date.now() - started) / 1000;
-    var each = rules.length - left ? spent / (rules.length - left) : 0;
-    var eta = each ? ' About ' + (left * each < 90 ? Math.max(1, Math.round(left * each)) + ' seconds' : Math.round(left * each / 60) + ' minutes') + ' left.' : '';
-    if (rules.length > 1) bar('work', (DOING[op] || 'Working on ') + who + '… ' + done + ' done, ' + (flagged.length ? flagged.length + ' to check, ' : '') + failed.length + ' not done, ' +
-      left + ' to go.' + eta);
     q('/migration/api/apply', body).then(function (out) {
       if (out && out.done instanceof Array) {
-        done += out.done.length;
+        out.done.forEach(function (d) { done.push(item(d.rmId)); });
         (out.failed || []).forEach(function (f) { if (f.renames && f.renames.length) { RENAME[f.rmId] = f.renames; DET[f.rmId] = true; } });
         (out.failed || []).concat(out.notAttempted || []).forEach(function (f) {
-          if (f.flagged) flagged.push(f.rmName || names[f.rmId] || f.rmId);
-          else failed.push({name: f.rmName || names[f.rmId] || f.rmId, why: first(f.message || 'no reason given')});
+          if (f.flagged) flagged.push(item(f.rmId)); else refused(f.rmId, f.message || 'no reason given', f.code);
         });
       } else if (out && out.ok === true) {
-        done += 1;
+        done.push(item(body.rmId));
       } else {
         if (out && out.renames && out.renames.length && body.rmId) { RENAME[body.rmId] = out.renames; DET[body.rmId] = true; }
-        if (out && out.flagged) flagged.push(names[body.rmId] || body.rmId);
-        else (body.rmIds || [body.rmId]).forEach(function (k) { failed.push({name: names[k] || k, why: first((out && out.message) || 'The hub did not say why.')}); });
+        if (out && out.flagged) flagged.push(item(body.rmId));
+        else (body.rmIds || [body.rmId]).forEach(function (k) { refused(k, out && out.message, out && out.code); });
       }
       next();
-    }).catch(function (e) {
-      (body.rmIds || [body.rmId]).forEach(function (k) { failed.push({name: names[k] || k, why: first(e.message || 'The hub did not answer.')}); });
-      next();
-    });
+    }).catch(function () { (body.rmIds || [body.rmId]).forEach(function (k) { lost.push(k); }); next(); });
   };
   next();
 }
-
-function load() {
-  document.getElementById('notes').innerHTML = '';
-  var slow = null;
-  if (FIRST) {
-    bar('work', 'Reading your rules from Automation Map…');
-    slow = setTimeout(function () { if (FIRST) bar('work', 'Still reading your rules. Large hubs can take up to a minute.'); }, 20000);
+function rowOf(id) { return ROWS.filter(function (r) { return r.rmId === id; })[0]; }
+function openEditor(url) {
+  if (!url) { note('The editor link is not ready yet. Reload the page.', true); return; }
+  var w = window.open(url, 'haiEditor');
+  if (w) { try { w.focus(); } catch (e) {  } }
+}
+function pbCallersLeft(rules) {
+  var clean = function (n) { return String(n || '').replace(/\s*\(Rule[- ][^)]*\)\s*$/, '').trim(); };
+  var byNm = {};
+  ROWS.forEach(function (x) { byNm[clean(x.rmName)] = x; });
+  var going = {};
+  rules.forEach(function (r) { going[r.rmId] = true; });
+  var out = [];
+  rules.forEach(function (r) {
+    var set = [];
+    (r.warnings || []).forEach(function (w) {
+      if (w.kind !== 'rules') return;
+      (w.pbNames || []).forEach(function (n) {
+        var c = byNm[clean(n)];
+        if (c && !going[c.rmId] && stage(c) !== 'hai' && set.indexOf(clean(c.rmName)) < 0) set.push(clean(c.rmName));
+      });
+    });
+    if (set.length) out.push({rule: clean(r.rmName), by: set});
+  });
+  return out;
+}
+function pbWarnHtml(list) {
+  if (!list.length) return '';
+  var names = function (a) { return a.length === 1 ? a[0] : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; };
+  return list.slice(0, 6).map(function (x) {
+    return '<p class="pbwarn">⚠️ ' + esc(x.rule) + '\'s private boolean is set by ' + esc(names(x.by)) + ', which ' + (x.by.length === 1 ? 'is' : 'are') +
+      ' still in Rule Machine. Switch ' + (x.by.length === 1 ? 'that one' : 'those') + ' too.</p>';
+  }).join('') + (list.length > 6 ? '<p class="pbwarn">And ' + plural(list.length - 6, 'more rule', 'more rules') + ' like these.</p>' : '');
+}
+function confirmRun(op, rules) {
+  if (!rules.length || WORKING) return;
+  var n = rules.length;
+  var one = n === 1 ? '“' + esc(rules[0].rmName) + '”' : plural(n, 'rule', 'rules');
+  if (op === 'clone') return ask({title: 'Clone ' + (n === 1 ? 'this rule' : n + ' rules') + ' into HAI?', yes: n === 1 ? 'Clone' : 'Clone ' + n,
+    text: 'HAI makes a paused clone of ' + one + '. Rule Machine keeps running ' + (n === 1 ? 'it' : 'them') + ', so nothing in your house changes.' + (n > 1 ? ' About ' + plural(Math.max(1, Math.round(n * 7 / 60)), 'minute', 'minutes') + '.' : ''),
+    rules: n > 1 ? rules : null}, function () { runAll(op, rules); });
+  if (op === 'switchOver') return ask({title: 'Switch ' + (n === 1 ? 'this rule' : n + ' rules') + ' to HAI?', yes: n === 1 ? 'Switch to HAI' : 'Switch ' + n + ' to HAI', cls: 'hai',
+    text: 'Rule Machine pauses ' + one + ' and the HAI ' + (n === 1 ? 'clone starts' : 'clones start') + '. HAI checks the pause before it starts anything, and ' + (n === 1 ? 'the clone takes the' : 'each clone takes its') + ' Rule Machine rule\'s private boolean. Back to Rule Machine is one click, any time.',
+    after: pbWarnHtml(pbCallersLeft(rules)), rules: n > 1 ? rules : null}, function () { runAll(op, rules); });
+  if (op === 'switchBack') return ask({title: 'Back to Rule Machine?', yes: n === 1 ? 'Back to Rule Machine' : 'Move ' + n + ' back', cls: 'primary',
+    text: 'The HAI ' + (n === 1 ? 'clone of ' + one + ' pauses' : 'clones of ' + one + ' pause') + ' and Rule Machine runs ' + (n === 1 ? 'it' : 'them') + ' again. The clones are kept, so you can switch again later.',
+    rules: n > 1 ? rules : null}, function () { runAll(op, rules); });
+  if (op === 'deleteClone') return ask({title: 'Delete ' + (n === 1 ? 'the HAI clone?' : n + ' HAI clones?'), yes: n === 1 ? 'Delete the clone' : 'Delete ' + n + ' clones', danger: true,
+    text: 'The HAI ' + (n === 1 ? 'clone of ' + one + ' is' : 'clones are') + ' deleted, with any draft made for ' + (n === 1 ? 'it' : 'them') + '. This cannot be undone. Your Rule Machine rules are not changed and keep running.',
+    rules: n > 1 ? rules : null}, function () { runAll(op, rules); });
+}
+function cloneWithRisky(rules) {
+  var risky = rules.filter(function (r) { return look(r).kind === 'power'; });
+  if (!risky.length) return confirmRun('clone', rules);
+  var n = rules.length;
+  ask({title: n === risky.length ? 'Clone ' + plural(n, 'rule', 'rules') + ' that restart the hub?' : 'Clone ' + n + ' rules, ' + risky.length + ' of them risky?', danger: true,
+    yes: n === 1 ? 'Clone it anyway' : 'Clone ' + n + ' anyway',
+    text: (risky.length === 1 ? '“' + esc(risky[0].rmName) + '” ' + hubPowerWord(risky[0]) + ' the hub, and its HAI clone will too' : 'These rules reboot or shut down the hub, and their HAI clones will too') +
+      ' once you switch ' + (risky.length === 1 ? 'it' : 'them') + ' over. The clones are made paused, so nothing happens until then. Clone ' + (risky.length === 1 ? 'it' : 'them') + ' only if you mean to.',
+    rules: risky.length > 1 ? risky : null},
+    function () { risky.forEach(function (r) { UPG[r.rmId] = UPG[r.rmId] || {}; UPG[r.rmId].hubPower = true; }); runAll('clone', rules); });
+}
+function act(kind, id) {
+  var r = rowOf(id);
+  if (!r) return;
+  if (kind === 'clone') return confirmRun('clone', [r]);
+  if (kind === 'switch') return confirmRun('switchOver', [r]);
+  if (kind === 'back') return confirmRun('switchBack', [r]);
+  if (kind === 'delete') return confirmRun('deleteClone', [r]);
+  if (kind === 'fix') return openEditor(editorAt('rm:' + r.rmId));
+  if (kind === 'engine') return window.open(LINKS.engine, '_blank', 'noopener');
+  if (kind === 'devices') return window.open(LINKS.devices, '_blank', 'noopener');
+  if (kind === 'scan') return assess();
+  if (kind === 'tell') return tellHai([r]);
+  if (kind === 'anyway') return cloneWithRisky([r]);
+}
+function bulk(op, g) {
+  var m = many(op);
+  if (!m) return;
+  runMany(op, groupRows(visible(), g).filter(m.ok));
+}
+function barRun(op) {
+  var m = many(op);
+  if (m) runMany(op, picked(visible()).filter(m.ok));
+}
+function runMany(op, rules) {
+  if (!rules.length) return;
+  if (op === 'tell') return tellHai(rules);
+  if (op === 'clone') return cloneWithRisky(rules);
+  confirmRun(op, rules);
+}
+function anonymise(t) {
+  return String(t || '').replace(/'[^']*'|"[^"]*"|“[^”]*”|‘[^’]*’/g, '"…"').replace(/https?:\/\/\S+/g, '(address)')
+    .replace(/\b\d{1,3}(\.\d{1,3}){3}\b/g, '(address)').replace(/\b\d{2,}\b/g, 'N');
+}
+function tellText(rules) {
+  var src = (SOURCE && SOURCE.detail) || {};
+  var lines = ['Rule Machine rules HAI cannot clone yet (' + rules.length + ').', '', 'Automation Map: ' + (src.appVersion || 'unknown') + ', channel ' + (src.channel || 'unknown') + '.', ''];
+  rules.forEach(function (r, i) {
+    lines.push('Rule ' + String.fromCharCode(65 + (i % 26)) + (i >= 26 ? Math.floor(i / 26) : '') + ':');
+    [opWhy(r, 'clone')].concat(r.verdictReasons || []).filter(function (x, j, a) { return x && a.indexOf(x) === j; }).forEach(function (w) { lines.push('- ' + anonymise(w)); });
+    lines.push('');
+  });
+  lines.push('Rule, device, variable and mode names, numbers and addresses were removed before sending.');
+  return lines.join('\n');
+}
+function tellHai(rules) {
+  modal('<h2>Tell HAI about ' + plural(rules.length, 'rule', 'rules') + '</h2><p>This is everything that will be sent. Names, numbers and addresses are taken out. Change anything you like, then open GitHub and press Submit there.</p>' +
+    '<textarea id="tellText"></textarea><div class="acts"><button type="button" class="btn" id="tellNo">Cancel</button><button type="button" class="btn primary" id="tellGo">Open GitHub</button></div>');
+  document.getElementById('tellText').value = tellText(rules);
+  document.getElementById('tellNo').onclick = function () { modal(null); };
+  document.getElementById('tellGo').onclick = function () {
+    window.open(HAI_ISSUES + '?title=' + encodeURIComponent('Migration: rules HAI cannot clone') + '&body=' + encodeURIComponent(document.getElementById('tellText').value.slice(0, 6000)), '_blank', 'noopener');
+    modal(null);
+  };
+}
+function showHelp() {
+  var el = modal('<div class="help"><h2>How moving rules works</h2>' +
+    '<div class="mini"><div class="rm">In Rule Machine</div><div class="trial">On trial in HAI</div><div class="hai">Running on HAI</div></div>' +
+    '<p>Each rule moves along this track, one step at a time, and only when you press.</p>' +
+    '<h3>1. Clone</h3><p>HAI makes a <b>paused</b> clone. Rule Machine keeps running the rule, so nothing in your house changes. If the hub will not accept a clone as it is, it goes to the editor\'s Drafts, marked Needs fixing, with what to fix.</p>' +
+    '<h3>2. Switch to HAI</h3><p>The Rule Machine rule is paused, HAI checks it really is, and only then starts the clone, with the Rule Machine rule\'s private boolean. Switch a few, watch them, then do the rest.</p>' +
+    '<h3>3. Back to Rule Machine, any time</h3><p>One click pauses the clone and starts the Rule Machine rule again. Your Rule Machine rules are never deleted.</p>' +
+    '<h3>Technical</h3><p style="color:var(--muted);font-size:14px">Rules come from Automation Map\'s scan file in File Manager (the newest scan of either channel). Each clone is converted into an HAI rule document, checked by the same validator the editor uses, and installed as its own HAI Rule Container app, stopped. A clone the hub refuses (a device lacking a command, a missing variable) is kept as an editor draft. Switching pauses the Rule Machine rule through Rule Machine\'s own interface and confirms the pause before starting the clone; if the pause cannot be confirmed, Rule Machine stays in charge. A rule that reboots or shuts down the hub is cloned only after you say so. Cloning or deleting many rules runs as a job on the hub, a few rules per step, and this page only watches. A step in an HAI rule that acts on another rule (its private boolean, run, pause, resume, cancel) acts on that rule\'s HAI clone once it is switched over, and on the Rule Machine rule until then.</p>' +
+    '<div class="acts"><button type="button" class="btn primary" id="helpClose">Got it</button></div></div>');
+  document.getElementById('helpClose').onclick = function () { modal(null); };
+  el.onclick = function (e) { if (e.target === el) modal(null); };
+}
+document.addEventListener('click', function (e) {
+  var t = e.target.closest('button, [data-open]');
+  if (!t) return;
+  if (t.hasAttribute('data-open')) return goTo(t.getAttribute('data-open'));
+  if (t.hasAttribute('data-toggle')) { var g = t.getAttribute('data-toggle'); OPEN[g] = !OPEN[g]; render(); return; }
+  if (t.hasAttribute('data-act')) return act(t.getAttribute('data-act'), t.getAttribute('data-id'));
+  if (t.hasAttribute('data-more')) { var k = t.getAttribute('data-more'); DET[k] = !DET[k]; render(); return; }
+  if (t.hasAttribute('data-bulk')) return bulk(t.getAttribute('data-bulk'), t.getAttribute('data-grp'));
+  if (t.hasAttribute('data-bar')) return barRun(t.getAttribute('data-bar'));
+  if (t.id === 'selClear') { PICK = {}; render(); return; }
+  if (t.id === 'openAll' || t.id === 'closeAll') { OPEN = {}; if (t.id === 'openAll') GROUPS.forEach(function (x) { OPEN[x[0]] = true; }); render(); return; }
+  if (t.hasAttribute('data-next')) {
+    var n = t.getAttribute('data-next');
+    if (n === 'copyAll') return confirmRun('clone', visible().filter(function (r) { return look(r).g === 'ready'; }));
+    if (n.indexOf('open:') === 0) goTo(n.slice(5));
   }
+});
+document.addEventListener('keydown', function (e) {
+  var t = e.target.closest && e.target.closest('g[data-open]');
+  if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); goTo(t.getAttribute('data-open')); }
+});
+document.addEventListener('change', function (e) {
+  var t = e.target;
+  if (t.hasAttribute('data-pick')) { var k = t.getAttribute('data-pick'); if (t.checked) PICK[k] = true; else delete PICK[k]; render(); return; }
+  if (t.hasAttribute('data-pickall')) { var g = t.getAttribute('data-pickall'); groupRows(visible(), g).filter(tickable).forEach(function (r) { if (t.checked) PICK[r.rmId] = true; else delete PICK[r.rmId]; }); render(); return; }
+  if (t.id === 'showTests') { SHOW_TESTS = t.checked; render(); return; }
+  if (t.hasAttribute('data-upg')) { var u = t.getAttribute('data-upg'); UPG[u] = UPG[u] || {}; UPG[u][t.getAttribute('data-key')] = t.checked; }
+});
+function load() {
+  LOADING = !FIRST;
+  if (!FIRST) document.getElementById('updating').hidden = false;
+  var slow = FIRST ? setTimeout(function () { if (FIRST) document.getElementById('rows').innerHTML = '<li class="empty"><span class="spin" style="display:inline-block" aria-hidden="true"></span><br>Still reading your rules. Large hubs can take up to a minute.</li>'; }, 20000) : null;
   q('/migration/api/state').then(function (out) {
     clearTimeout(slow);
+    LOADING = false;
+    document.getElementById('notes').innerHTML = '';
     if (!out || out.ok !== true) {
-      bar('err', 'Your rules could not be read. ' + esc((out && out.message) || 'The hub did not say why.'));
+      note('<b>Your rules could not be read.</b> ' + esc((out && out.message) || 'The hub did not say why.'), true);
+      document.getElementById('updating').hidden = true;
+      if (FIRST) document.getElementById('rows').innerHTML = '<li class="empty">Nothing to show until your rules can be read.</li>';
       return;
     }
-    if (FIRST) { FIRST = false; bar(null); }
+    var wasFirst = FIRST;
+    FIRST = false;
     show(out);
-  }).catch(function (e) { clearTimeout(slow); bar('err', 'Your rules could not be read. ' + esc(e.message || 'The hub did not answer.')); });
-}
-
-// Before the first answer: the four sections with their titles, so the page has its shape and does not look hung.
-function skeleton() {
-  [['sAssess', 'hAssess', '1. Assess'], ['sClone', 'hClone', '2. Clone'], ['sCut', 'hCut', '3. Cut over'], ['sBack', 'hBack', '4. Rollback']].forEach(function (x) {
-    document.getElementById(x[0]).innerHTML = '<div class="sh"><h2 id="' + x[1] + '">' + x[2] + '</h2></div><p class="none">Loading…</p>';
+    if (wasFirst && out.job && out.job.state === 'running' && !WORKING) watchJob();
+  }).catch(function (e) {
+    clearTimeout(slow);
+    LOADING = false;
+    document.getElementById('updating').hidden = true;
+    note('<b>Your rules could not be read.</b> ' + esc(e.message || 'The hub did not answer.'), true);
   });
 }
-
-// One short line for what was read; the provider's own note only when it says something is wrong.
-function readLine(out) {
-  var p = out.provider || {};
-  var age = ago(p.generatedAt);
-  var bits = [];
-  if (age) bits.push('Rules read ' + age + ' ago');
-  var v = /Automation Map (\d+\.\d+\.\d+)/.exec((out.notes || []).join(' '));
-  if (v) bits.push('by Automation Map ' + v[1]);
-  document.getElementById('read').textContent = bits.length ? bits.join(' ') + '.' : '';
-  var loud = {absent: 1, incompatible: 1, broken: 1, stale: 1};
-  if (loud[p.state] && (out.notes || [])[0]) note(esc(out.notes[0]), true);
-}
-
 function show(out) {
   ROWS = out.rows || [];
+  SOURCE = out.source || null;
+  DRAFTED = {};
+  (out.drafted || []).forEach(function (k) { DRAFTED[String(k)] = true; });
+  DRAFT_WHY = out.draftWhy || {};
+  ENV = String(out.environment || '').toUpperCase();
+  if (ENV !== 'DEV') SHOW_TESTS = false;
   if (out.plan) PLAN = out.plan;
   if (out.links) LINKS = out.links;
   if (out.provider) PROVIDER = out.provider;
@@ -1005,12 +1458,15 @@ function show(out) {
   readLine(out);
   render();
 }
-
-// ---- Scan again ------------------------------------------------------------------------------------------
-// One POST: the Migration app asks Automation Map to scan. Then this page reads the app's small answer record
-// every 3 seconds, and only while a request is outstanding.
+function readLine(out) {
+  var p = out.provider || {};
+  var age = ago(p.generatedAt);
+  var v = /Automation Map (\d+\.\d+\.\d+)/.exec((out.notes || []).join(' '));
+  document.getElementById('read').textContent = (age ? 'Rules read ' + age + ' ago' : 'Rules read') + (v ? ' by Automation Map ' + v[1] : '') + '.';
+  var loud = {absent: 1, incompatible: 1, broken: 1, stale: 1};
+  if (loud[p.state] && (out.notes || [])[0]) note(esc(cloneWords(out.notes[0])), true);
+}
 function scanMsg(t) { var b = document.getElementById('scanAgain'); b.textContent = t || 'Scan again'; b.disabled = !!t; }
-
 function assess() {
   if (PENDING) return;
   if (!ASSESS.available) { note(esc(ASSESS.why || 'Automation Map cannot scan for HAI yet.'), true); return; }
@@ -1021,14 +1477,7 @@ function assess() {
     note('<b>The scan did not start.</b> ' + esc((out && out.message) || 'The hub did not say why.'), true);
   }).catch(function (e) { scanMsg(''); note('<b>The scan could not be sent.</b> ' + esc(e.message), true); });
 }
-
-function watch(a) {
-  a.seenAt = Date.now();
-  PENDING = a;
-  scanMsg('Scanning…');
-  setTimeout(poll, 3000);
-}
-
+function watch(a) { a.seenAt = Date.now(); PENDING = a; scanMsg('Scanning…'); setTimeout(poll, 3000); }
 function poll() {
   if (!PENDING) return;
   q('/migration/api/assess').then(function (out) {
@@ -1053,16 +1502,15 @@ function poll() {
     setTimeout(poll, 3000);
   }).catch(function () { setTimeout(poll, 3000); });
 }
-
 document.getElementById('scanAgain').onclick = assess;
+document.getElementById('openEditor').onclick = function () { openEditor(LINKS.editor); };
+document.getElementById('helpBtn').onclick = showHelp;
 document.getElementById('find').oninput = function () { FIND = this.value.trim().toLowerCase(); if (!FIRST) render(); };
-// Migration is optional: this just leaves the page. A tab the page did not open cannot close itself, so it goes
-// back, or to the hub's apps.
 document.getElementById('notNow').onclick = function () {
-  try { window.close(); } catch (e) { /* not ours to close */ }
+  try { window.close(); } catch (e) {  }
   setTimeout(function () { if (history.length > 1) history.back(); else location.href = '/installedapp/list'; }, 150);
 };
-skeleton();
+stick();
 load();
 </script>
 </body>

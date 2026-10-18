@@ -1,18 +1,19 @@
 # How HAI is built
 
-Applies to HAI Engine version 0.5.87. The wider picture, with Automation Map, is in
+Applies to HAI Engine version 0.5.116. The wider picture, with Automation Map, is in
 [architecture-current.md](../architecture-current.md).
 
 ## The apps
 
-HAI is one parent app, one child app per rule, and an optional migration app. Authoring and running live in
-the same parent, so there is one device picker and one permission.
+HAI is one parent app, one child app per rule, a hidden checker child, and an optional migration app. Authoring
+and running live in the same parent, so there is one device picker and one permission.
 
 | App | Role | Reachable from outside the hub |
 |---|---|---|
-| HAI Engine (Preview) | The editor, the in-hub AI assistant and the MCP server; and the runtime: the list of rules on the hub, activation, and the device, variable and mode permissions. | Its OAuth endpoints, with its access token: `/editor`, `/editor/api/*`, `/mcp`, the rule end points `/endpoint/*`, and the read-only Automation Map feed `/automation-map`. Every route carries an audience secret (`aud`) except the feed (`haiAudienceOk`). |
-| HAI Rule Container (Preview) | One child app per rule. It subscribes to what the rule needs, runs it, and keeps its run history. A rule keeps firing while the engine is being deployed. | No. |
-| HAI Migration (Preview) | Optional. One child app of the engine holding Rule Machine migration: the migration page, Automation Map's decode (`hai_ham`), the converter (`hai_rm_map`) and the steps (`hai_migration`). It asks the engine for what only the engine holds through three parent methods, `haiMigrationFacts`, `haiMigrationRecord` and `haiMigrationCall`; the engine never calls it. The engine keeps `hai_ham` too, for the authoring rule index. | Its own OAuth endpoints, with its own access token: `/migration` and `/migration/api/*` (`state`, `apply`, `assess`, `plan`, `dryrun`). Its token reaches nothing else, so there is no audience secret. |
+| HAI Engine (DEV) | The editor, the in-hub AI assistant and the MCP server; and the runtime: the list of rules on the hub, activation, and the device, variable and mode permissions. | Its OAuth endpoints, with its access token: `/editor`, `/editor/api/*`, `/mcp`, the rule end points `/endpoint/*`, and the read-only Automation Map feed `/automation-map`. Every route carries an audience secret (`aud`) except the feed (`haiAudienceOk`). |
+| HAI Rule Container (DEV) | One child app per rule. It subscribes to what the rule needs, runs it, and keeps its run history. A rule keeps firing while the engine is being deployed. | No. |
+| HAI Checker (DEV) | Since 0.5.115. The engine's hidden child that checks: the validator, the simulator, the proposal checks, the editor's Check, export and import, the MCP tools that check or describe, and the AI Rule Assistant's draft steps (`lib/hai_checker.groovy`). The engine adds it itself (on Done, or on its first check after an upgrade) and keeps its id in state; nobody installs or opens it. Stateless and not singleThreaded; it never calls the engine. The engine makes one call per request, `checkerRun(req)`, with the rule and that rule's inventory slice. | No. |
+| HAI Migration (DEV) | Optional. One child app of the engine holding Rule Machine migration: the migration page, Automation Map's decode (`hai_ham`), the converter (`hai_rm_map`) and the steps (`hai_migration`). It asks the engine for what only the engine holds through three parent methods, `haiMigrationFacts`, `haiMigrationRecord` and `haiMigrationCall`; the engine never calls it. The engine keeps `hai_ham` too, for the authoring rule index. | Its own OAuth endpoints, with its own access token: `/migration` and `/migration/api/*` (`state`, `apply`, `assess`, `plan`, `dryrun`). Its token reaches nothing else, so there is no audience secret. |
 
 **The migration contract.** HAI Migration (`engine/app/hai_migration_app.groovy`) calls the Engine through
 `haiMigrationFacts`, `haiMigrationRecord` and `haiMigrationCall`. The call's ops are `haiRuleOp`,
@@ -88,12 +89,33 @@ never decides any of these for itself.
 3. **The check before every send:** the rule app checks the device is still allowed just before sending, in
    the same execution (`rtChildAllowed`).
 
-**Where validation lives.** Rules are validated in the engine, in the activation review (`rtReview`), before
-anything is staged. The Rule Container does not carry `hai_validator`. Its commit loads only the staged
+**Where validation lives.** Rules are validated for the engine by HAI Checker, in the activation review
+(`rtReview`, through the runtime port's `checker`), before anything is staged. The Rule Container does not carry `hai_validator`. Its commit loads only the staged
 document whose hash matches the one the engine stamped, with every device still on the allow-list. The
 simulator still validates on every load through the core's `validate` port.
 
 There is no "test devices only" fence, no commissioning of locks and sirens, and no per-send approval.
+
+## HAI Checker: the call between the engine and its checker
+
+Since 0.5.115 (to bring the engine under the hub's advisory size: 747 KB shrunk
+before, about 410 KB after; the checker is about 422 KB):
+
+- **One call per request.** `checkerCall(req)` in the engine finds the child by the id kept in state (one lookup by
+  id; the child list is read only when there is no id) and calls `checkerRun(req)` once. The ops are `check`,
+  `export`, `import` (the editor), `review` (rtReview's validation and scenarios), `mcp` (describe, render, propose),
+  `dryRun` (Migration's Test step) and `draftStart`, `draftSend`, `draftReply` (the AI Rule Assistant).
+- **What crosses.** The rule and the inventory the engine already read for it: the rule's own devices for a Check,
+  a review or a dry run, never the whole hub unless the operation already read it (MCP describe, a draft).
+- **Never back.** The checker reads nothing on the hub, stores nothing and calls nothing in the engine. The AI request
+  is still sent by the engine (`asynchttpPost`, answered in `engineReply`), which stores the session, so a draft
+  reaches the editor through the same polling as before.
+- **Build identity.** Both apps carry `CHECKER_BUILD` (`//#buildid` in `hai_checker.groovy`, over the checker's
+  sources). The engine sends it with every call and the checker refuses another, so a checker from another release
+  is said in plain words (`CHECKER_MISMATCH`) instead of failing on a changed signature. Deploy `checker`, then
+  `engine`; an `engine` deploy warns when the checker on the hub (`-CheckerAppCodeId`) is another build.
+- **Op names are not method names.** The hub build keeps any library method whose name appears in its code, strings
+  included, so an op named after the function it runs would pull the checker back into the engine.
 
 ## Running a rule
 
@@ -151,7 +173,10 @@ The hub is a constrained device. What HAI does to stay small:
 | `engine/lib/` | Shared libraries: schema, validator, logic, core, simulator, runtime adapter, timeline, bundle, editor, authoring, migration |
 | `engine/app/hai_engine_app.groovy` | HAI Engine, including the runtime |
 | `engine/app/hai_migration_app.groovy` | HAI Migration |
+| `engine/app/hai_checker_app.groovy`, `engine/lib/hai_checker.groovy` | HAI Checker, the engine's hidden child that validates and simulates |
+| `engine/app/help/help.html` | The HAI Engine settings page's explanations, uploaded to File Manager as `hai-help.html`; the engine pins its SHA-256 and shows each part in its place |
+| `docs/user/toolkit.html` | The Toolkit, uploaded to File Manager as `hai-toolkit.html`; the settings page's Toolkit link opens `/local/hai-toolkit.html`. Not pinned: it is a plain page the engine never reads |
 | `engine/app/editor/editor.html` | The editor page, uploaded to File Manager as `hai-editor.html`. The engine embeds only its SHA-256 at build time |
 | `engine/m5/hai_rule_app.groovy` | HAI Rule Container, one per rule |
 | `engine/deploy-hub.ps1` | The reviewed deployment script: backup, optimistic lock, read-back and hash check |
-| `dist/` | The three shrunk apps Hubitat Package Manager installs |
+| `dist/` | The shrunk apps Hubitat Package Manager installs (HAI Checker's from the next `make-dist.py` run) |

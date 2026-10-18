@@ -1081,14 +1081,14 @@ not tell you the command will wait for anyone. It will simply run.
 | Copy and paste actions | Copy, and Paste after this, in a block's menu |
 
 <!-- hai-status:begin -->
-Of Rule Machine 5.1's **140 capabilities**, HAI has **implemented 140**: **140 tested** on the hub and 0 built but not yet tested. 0 are scoped but unbuilt. HAI's own 18 capabilities are counted separately.
+Of Rule Machine 5.1's **140 capabilities**, HAI has **implemented 140**: **140 tested** on the hub and 0 built but not yet tested. 0 are scoped but unbuilt. HAI's own 31 capabilities are counted separately.
 
 What HAI has not built yet:
 
 | Feature | Why not yet |
 |---|---|
 
-These figures are generated from the same file as the hub's capability feed; do not edit them by hand.
+Every row, with its evidence, is in [`ideation/rm51_parity.md`](../ideation/rm51_parity.md). These figures are generated from the same file as the hub's capability feed; do not edit them by hand.
 <!-- hai-status:end -->
 
 ## Appendix: Quick start

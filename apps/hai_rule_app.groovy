@@ -91,7 +91,7 @@ name: ((Map) rec.doc)?.name, paused: rec.paused == true]
 def uninstalled() {
 unschedule()
 unsubscribe()
-try { removeAllInUseGlobalVar() } catch (Exception e) { }
+if (state.usesHubVars != false) { try { removeAllInUseGlobalVar() } catch (Exception e) { } }
 }
 Map ruleRetainedDoc(String epoch) {
 Map rt = state.rt
@@ -217,15 +217,15 @@ saveState : { Map m -> state.rt = m },
 execId : { Object u -> "${now()}-${UUID.randomUUID()}".toString() },
 selfId : { Object u -> app.id?.toString() },
 variable : { Object name -> def g = getGlobalVar(name as String); g == null ? null : [g.value, g.type?.toString()] },
-setVariable : { List a -> setGlobalVar(a[0] as String, a[1]) },
+setVariable : { List a -> if (setGlobalVar(a[0] as String, a[1]) == false) throw new Exception("the hub refused to set the variable ${a[0]}".toString()) },
 announceInvoke: { Map call ->
 sendLocationEvent(name: RT_INVOKE_EVENT, value: call.target as String, isStateChange: true, displayed: false,
-data: groovy.json.JsonOutput.toJson([from: call.from, run: call.run, depth: call.depth, caller: call.caller, input: call.input]),
+data: groovy.json.JsonOutput.toJson([from: call.from, run: call.run, depth: call.depth, caller: call.caller, input: call.input, key: ruleKey()]),
 descriptionText: "HAI rule ${call.from} runs ${call.target}".toString())
 },
 announceControl: { Map call ->
 sendLocationEvent(name: RT_CONTROL_EVENT, value: call.target as String, isStateChange: true, displayed: false,
-data: groovy.json.JsonOutput.toJson([op: call.op, value: call.value, from: call.from, depth: call.depth]),
+data: groovy.json.JsonOutput.toJson([op: call.op, value: call.value, from: call.from, depth: call.depth, key: ruleKey()]),
 descriptionText: "HAI rule ${call.from}: ${call.op} ${call.target}".toString())
 },
 log : { Map line -> line.level == 'warn' ? log.warn(line.text as String) : log.info(line.text as String) },
@@ -233,7 +233,7 @@ setMode : { Object mode -> location.setMode(mode as String) },
 setHsm : { Object op -> sendLocationEvent(name: 'hsmSetArm', value: op as String) },
 announceReturn: { Map call ->
 sendLocationEvent(name: RT_RETURN_EVENT, value: call.rule as String, isStateChange: true, displayed: false,
-data: groovy.json.JsonOutput.toJson([run: call.run, value: call.value, how: call.how]),
+data: groovy.json.JsonOutput.toJson([run: call.run, value: call.value, how: call.how, key: ruleKey()]),
 descriptionText: "HAI rule answered ${call.rule}".toString())
 },
 announceCommitted: { Map n ->
@@ -243,7 +243,7 @@ descriptionText: "HAI rule ${n.ruleId} committed version ${n.epoch}".toString())
 },
 announcePaused: { Map call ->
 sendLocationEvent(name: RT_PAUSED_EVENT, value: call.rule as String, isStateChange: true, displayed: false,
-data: groovy.json.JsonOutput.toJson([paused: call.paused == true]),
+data: groovy.json.JsonOutput.toJson([paused: call.paused == true, key: ruleKey()]),
 descriptionText: "HAI rule ${call.rule} ${call.paused ? 'paused' : 'resumed'}".toString())
 },
 rmAction : { Map call -> RMUtils.sendAction((List) call.ids, call.action as String, app.label, '5.0') },
@@ -262,6 +262,7 @@ return res
 useVariables: { Object names ->
 removeAllInUseGlobalVar()
 if (names) addInUseGlobalVar((List) names)
+state.usesHubVars = names ? true : false
 },
 net : { Map req -> ruleNet(req) },
 file : { Map req -> ruleFile(req) },
@@ -385,28 +386,41 @@ String type = null
 try { type = getGlobalVar(name)?.type?.toString() } catch (Exception e) { type = null }
 rtOnEvents(rulePlat(), [rtVariableEvent(name, evt.value, type, at, evt.id)])
 }
+String ruleKey() {
+try { return parent?.haiRuleKey() as String } catch (Exception e) { return null }
+}
+boolean ruleKeyOk(Map call, String what) {
+String want = ruleKey()
+if (want != null && call?.key == want) return true
+log.warn "HAI rule ${state.rt?.ruleId}: ignored a ${what} that did not come from an HAI rule"
+return false
+}
 def haiInvoked(evt) {
 if (evt.value != state.rt?.ruleId) return
 Map call = [:]
 try { call = new groovy.json.JsonSlurper().parseText(evt.data as String) } catch (Exception e) { call = [:] }
+if (!ruleKeyOk(call, 'request to run')) return
 rtOnInvoke(rulePlat(), evt.value as String, call)
 }
 def haiControlled(evt) {
 if (evt.value != state.rt?.ruleId) return
 Map call = [:]
 try { call = new groovy.json.JsonSlurper().parseText(evt.data as String) } catch (Exception e) { call = [:] }
+if (!ruleKeyOk(call, 'control request')) return
 rtOnControl(rulePlat(), evt.value as String, call)
 }
 def haiReturned(evt) {
 if (evt.value != state.rt?.ruleId) return
 Map d = [:]
 try { d = new groovy.json.JsonSlurper().parseText(evt.data as String) } catch (Exception e) { d = [:] }
+if (!ruleKeyOk(d, 'returned value')) return
 rtOnReturn(rulePlat(), evt.value as String, d)
 }
 def haiRulePausedEvent(evt) {
 if (evt.value == state.rt?.ruleId) return
 Map d = [:]
 try { d = new groovy.json.JsonSlurper().parseText(evt.data as String) } catch (Exception e) { d = [:] }
+if (!ruleKeyOk(d, 'pause notice')) return
 Long at = null
 try { at = evt.date?.getTime() } catch (Exception e) { at = null }
 rtOnRulePaused(rulePlat(), evt.value as String, d.paused, evt.id, at)
@@ -414,6 +428,7 @@ rtOnRulePaused(rulePlat(), evt.value as String, d.paused, evt.id, at)
 def haiRmSwitched(evt) {
 Map d = [:]
 try { d = new groovy.json.JsonSlurper().parseText(evt.data as String) } catch (Exception e) { return }
+if (!ruleKeyOk(d, 'switched-over list')) return
 rtOnSwitched(rulePlat(), (d.pairs instanceof Map ? d.pairs : [:]))
 }
 void renameVariable(String oldName, String newName) {
@@ -981,10 +996,15 @@ return v.toString()
 'openShade': ['open'], 'closeShade': ['close'], 'openValve': ['open'], 'closeValve': ['close'],
 'adjustHeatingSetpoint': ['setHeatingSetpoint'], 'adjustCoolingSetpoint': ['setCoolingSetpoint'],
 ]
+@Field static final List HAI_OWN_FILES = [
+'hai-(editor|migration|help|toolkit)[.]html', 'hai-editor-specs[.]json', 'hai-author-guide[.]txt', 'hai-am-(capabilities|state)[.]json',
+'hai-engine-[0-9]+-[a-z0-9_]+[.]json', 'hai-backup-[0-9]{8}[.]json', 'ham-decode(-detail)?(-dev)?[.]json',
+]
 String schemaFileProblem(Object name) {
 String n = name == null ? '' : name.toString()
 if (!(n ==~ /[A-Za-z0-9][A-Za-z0-9._-]{0,63}/)) return "'${n}' is not a file name: letters, digits, dots, dashes and underscores, up to 64".toString()
-if (n.toLowerCase().startsWith('hai-') || n.toLowerCase().startsWith('hai_')) return "'${n}' is one of HAI's own files".toString()
+String low = n.toLowerCase()
+if (HAI_OWN_FILES.any { String p -> low ==~ p }) return "'${n}' is one of HAI's own files".toString()
 return null
 }
 String schemaUrlHost(Object url) {
@@ -1520,8 +1540,8 @@ if (node?.value instanceof String) out << (node.value as String)
 return out.unique()
 }
 String coreConsider(Map w, Map rec, Map cause, int depth) {
-if (rec.disabled) return 'disabled'
-if (!coreAdmissible(rec)) {
+if (rec.disabled && cause.once != true) return 'disabled'
+if (!coreAdmissible(rec) && cause.once != true) {
 coreLog(w, 'notAdmitted', [rule: rec.id, why: rec.paused ? 'paused' : 'disabled', cause: cause.kind])
 return rec.paused ? 'paused' : 'disabled'
 }
@@ -1847,7 +1867,7 @@ coreStep(w, run)
 boolean coreRunLive(Map w, Map run) {
 if (!(run.status in ['running', 'waiting'])) return false
 Map rec = w.rules.get(run.rule)
-if (rec == null || rec.disabled) return false
+if (rec == null || (rec.disabled && !coreOnce(run))) return false
 if (run.superseded || (run.epoch as int) != (rec.epoch as int)) return false
 return true
 }
@@ -2070,8 +2090,11 @@ coreLog(w, 'waiting', [run: rid, kind: 'later', token: token, ms: ms])
 String coreRunNow(Map w, String ruleId, Object by) {
 Map rec = w.rules.get(ruleId)
 if (rec == null) return 'noRule'
-return coreConsider(w, rec, [kind: 'manual', by: by], 0)
+Map cause = [kind: 'manual', by: by]
+if (!coreAdmissible(rec)) cause.once = true
+return coreConsider(w, rec, cause, 0)
 }
+boolean coreOnce(Map run) { return ((Map) run?.cause)?.once == true }
 void coreRunActions(Map w, String ruleId, String from, int depth) {
 Map rec = w.rules.get(ruleId)
 if (rec == null) return
@@ -2194,7 +2217,7 @@ Map rec = w.rules.get(run.rule)
 coreLog(w, 'runEnded', [run: run.id, rule: run.rule, how: how])
 if (run.background == true) return
 if (((Map) run.cause)?.caller instanceof Map) coreSendAnswer(w, ((Map) run.cause).caller, [value: run.returned, how: how])
-if (run.later == null && !rec.queue.isEmpty() && coreAdmissible(rec)) {
+if (run.later == null && !rec.queue.isEmpty() && (coreAdmissible(rec) || ((Map) rec.queue[0]).once == true)) {
 Map next = rec.queue.remove(0)
 coreStartRun(w, rec, next, 0)
 }
@@ -2348,7 +2371,7 @@ if (out.value == LOGIC_TRUE) coreWake(w, run, (String) pending.token, 'predicate
 }
 boolean coreHoldWhilePaused(Map w, Map run, String token, String kind, String why) {
 Map rec = w.rules.get(run.rule)
-if (rec == null || !rec.paused || ((Map) rec.doc).pauseMode != 'hold') return false
+if (rec == null || !rec.paused || ((Map) rec.doc).pauseMode != 'hold' || coreOnce(run)) return false
 if (!(run.held instanceof Map)) {
 run.held = [kind: kind, token: token, why: why]
 coreLog(w, 'held', [run: run.id, kind: kind])
@@ -2435,7 +2458,7 @@ String kind = a.repeatKind as String
 String why = null
 if (st.stopped == true) why = 'stopped'
 else if (a.times != null && (st.pass as int) >= (a.times as int)) why = 'times'
-else if (!first && rec.paused && doc.pauseMode != 'hold') why = 'paused'
+else if (!first && rec.paused && doc.pauseMode != 'hold' && !coreOnce(run)) why = 'paused'
 else if (kind == 'while' || (kind == 'until' && !first)) {
 Map out = logicEvaluate((Map) a.condition) { Map node, String p -> coreLeaf(w, doc, node, run.recovering == true, run.cause, run) }
 coreLog(w, 'decision', [run: run.id, path: st.path, value: out.value, trace: out.trace])
@@ -2549,7 +2572,7 @@ Map rec = w.rules.get(run.rule)
 Map doc = rec.doc
 String why = g.stopped == true ? 'stopped' : g.n != null && (g.tick as int) >= (g.n as int) ? 'done' :
 g.n == null && (g.tick as int) >= LIMIT_REPEAT_PASSES * 2 ? 'limit' :
-(g.tick as int) > 0 && rec.paused && doc.pauseMode != 'hold' ? 'paused' : null
+(g.tick as int) > 0 && rec.paused && doc.pauseMode != 'hold' && !coreOnce(run) ? 'paused' : null
 if (why != null) {
 coreLog(w, 'gradualEnded', [run: run.id, path: g.path, change: g.what, steps: g.tick, why: why])
 return false
@@ -3161,7 +3184,7 @@ if (op.shape != 'absolute') return [allowed: false, reason: 'only an absolute op
 if ((intent.retries as int) >= CORE_MAX_RETRIES) return [allowed: false, reason: 'retry limit reached']
 Map run = w.runs.get(intent.run)
 Map rec = w.rules.get(intent.rule)
-if (rec == null || rec.disabled) return [allowed: false, reason: 'rule no longer enabled']
+if (rec == null || (rec.disabled && !coreOnce(run))) return [allowed: false, reason: 'rule no longer enabled']
 if ((intent.epoch as int) != (rec.epoch as int)) return [allowed: false, reason: 'rule version superseded']
 if (run != null && run.status == 'cancelled') return [allowed: false, reason: 'run was cancelled']
 Map gone = coreDispatchCheck(w, coreDevice(w, intent.device as String), intent.device as String, op)
@@ -3930,7 +3953,7 @@ durations.clear()
 corePersist(w)
 }
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = 'd7e50c9f5241b36c'
+@Field static final String RT_CHILD_BUILD = '52f7eed7c5e5f6e1'
 @Field static final long RT_GRACE_MS = 30000L
 @Field static final long RT_CADENCE_MS = 60000L
 @Field static final long RT_RECOVERY_MS = 120000L
@@ -4709,9 +4732,40 @@ rtCall(plat, 'selfCheck', false); rt.selfCheck = false; rt.remove('selfCheckAt')
 boolean rtSettleSleep(Map ctx) {
 Map rt = ctx.rt
 boolean sleep = rtCanSleep(ctx)
+List once = sleep ? null : rtOnceSlots(ctx)
+Object had = rt.remove('once')
+if (once == null && had instanceof Map && !sleep && rtStill(ctx)) once = []
+if (once != null) { rtOnce(ctx, once); return false }
+if (had instanceof Map && ((Map) had).stopped == true && rtRule(ctx)?.disabled == true) rtUnsubscribe(ctx)
 if (sleep) rtSleep(ctx)
 else if (rt.asleep == true) rtWake(ctx)
 return sleep
+}
+List rtOnceSlots(Map ctx) {
+if (!rtStill(ctx)) return null
+Map rec = rtRule(ctx)
+List live = ((Map) ((Map) ctx.w).runs).values().findAll { Object r -> ((Map) r).rule == rec.id && !(((Map) r).status in RT_TERMINAL_RUN) }
+if (live.isEmpty() || live.any { Object r -> ((Map) ((Map) r).cause)?.once != true }) return null
+Map refs = (((Map) rec.doc).refs ?: [:])
+Closure idOf = { Object key -> ((Map) refs.get(key))?.id as String }
+Set out = [] as Set
+live.each { Object r ->
+Map wt = ((Map) r).wait
+if (wt?.action instanceof Map) rtWaitSlots((Map) wt.action, idOf, out)
+if (wt?.kind == 'forReturn') out << [RT_LOCATION, RT_RETURN_EVENT]
+}
+return new ArrayList(out).sort { x, y -> ((List) x).join('|') <=> ((List) y).join('|') }
+}
+boolean rtStill(Map ctx) {
+Map rec = rtRule(ctx)
+return rec != null && rec.doc != null && (rec.paused == true || rec.disabled == true)
+}
+void rtOnce(Map ctx, List slots) {
+Map rt = ctx.rt
+Map rec = rtRule(ctx)
+rt.asleep = true
+rt.once = [slots: slots, stopped: rec.disabled == true]
+if (rtWantSlots(rt, rec.doc) != (rt.subs ?: [])) rtResubscribeKeepingWatch(ctx, rec.doc)
 }
 boolean rtCanSleep(Map ctx) {
 Map rec = rtRule(ctx)
@@ -4762,11 +4816,16 @@ rtNote(ctx, 'awake', [paused: rec?.paused == true, disabled: rec?.disabled == tr
 List rtWantSlots(Map rt, Map doc) {
 List all = rtSlots(doc)
 if (rt?.asleep != true) return all
-return all.findAll { Object so ->
+Map once = rt.once instanceof Map ? rt.once : null
+List keep = once?.stopped == true ? [] : all.findAll { Object so ->
 List s = so
 String dev = s[0] as String
 dev == RT_LOCATION ? ((s[1] as String) in RT_ASLEEP_KEEP) : (dev.startsWith(RULE_STATE_PREFIX) || dev.startsWith(RULE_VARIABLE_PREFIX))
 }
+if (once == null) return keep
+Set out = new LinkedHashSet(keep)
+out.addAll((List) once.slots)
+return new ArrayList(out).sort { x, y -> ((List) x).join('|') <=> ((List) y).join('|') }
 }
 Object rtExecute(Map plat, Closure work) {
 Map ctx = rtBegin(plat)

@@ -28,6 +28,9 @@ mappings {
 path('/migration') { action: [GET: 'migrationPageGet'] }
 path('/migration/api/state') { action: [GET: 'migrationStateGet'] }
 path('/migration/api/apply') { action: [POST: 'migrationApplyPost'] }
+path('/migration/api/run') { action: [POST: 'migrationRunPost'] }
+path('/migration/api/job') { action: [GET: 'migrationJobGet'] }
+path('/migration/api/job/stop') { action: [POST: 'migrationJobStopPost'] }
 path('/migration/api/assess') { action: [GET: 'migrationAssessGet', POST: 'migrationAssessPost'] }
 path('/migration/api/plan') { action: [POST: 'migrationPlanPost'] }
 path('/migration/api/dryrun') { action: [POST: 'migrationDryRunPost'] }
@@ -40,6 +43,10 @@ state.remove('accessToken')
 try { createAccessToken() }
 catch (Exception e) { if (before) state.accessToken = before; throw e }
 return true
+}
+String haiMigrationPageLink() {
+if (!state.accessToken) return null
+return "/apps/api/${app.id}/migration?access_token=${state.accessToken}&v=${MIGRATION_PAGE_SHA256.take(12)}".toString()
 }
 void migrationInit() {
 if (!state.accessToken) {
@@ -228,6 +235,7 @@ pairs = migRecord(pairs, e.rmId as String, e.rmName as String,
 testedAt: e.testedAt], now())
 }
 parent.haiMigrationRecord(pairs)
+if (op == 'clone') migNoteRefusals(((List) many.done) + ((List) many.failed), rows)
 return migrationRespond(many + [state: migrationRowsAfter(wanted, reads)])
 }
 String rmId = wanted[0]
@@ -243,7 +251,127 @@ Map pairs = migPairs([migPairs: ((Map) parent.haiMigrationFacts(true)).pairs])
 parent.haiMigrationRecord(migRecord(pairs, rmId, row.rmName as String, out, now()), rmId,
 op == 'switchOver' || out.rmWasPaused == true ? Boolean.TRUE : (op == 'switchBack' && out.confirmed == true ? Boolean.FALSE : null))
 }
+if (op == 'clone' && out != null) migNoteRefusals([out + [rmId: rmId]], [row])
 return migrationRespond((out ?: [:]) + [state: migrationRowsAfter(wanted, reads)])
+}
+@Field static final int MIG_JOB_STEP = 4
+@Field static final int MIG_JOB_MAX = 500
+def migrationRunPost() {
+Map req = [:]
+try { req = new groovy.json.JsonSlurper().parseText(request?.body ?: '{}') } catch (Exception e) { req = [:] }
+String op = req.op as String
+if (!(op in ['clone', 'deleteClone'])) return migrationRespond([ok: false, code: 'MIGRATION_BAD_REQUEST', message: 'Only Clone and Delete run on the hub.'])
+List ids = ((req.rmIds instanceof List) ? req.rmIds : []).collect { it as String }.unique()
+if (ids.isEmpty() || ids.size() > MIG_JOB_MAX) return migrationRespond([ok: false, code: 'MIGRATION_BAD_REQUEST', message: 'That request did not name the rules.'])
+Map running = state.migJob
+if (running?.state == 'running') return migrationRespond([ok: false, code: 'MIGRATION_JOB_RUNNING', message: 'A run is already going on the hub.', job: migJobView(running)])
+Map ups = [:]
+if (req.upgrades instanceof Map) ((Map) req.upgrades).each { k, v -> if (ids.contains(k as String) && v instanceof List) ups.put(k as String, ((List) v).collect { it as String }) }
+Map job = [id: now().toString(), op: op, ids: ids, ups: ups, handled: 0, results: [], state: 'running', startedAt: now(), lastStepAt: now()]
+state.remove('migJobStop')
+state.migJob = job
+runIn(1, 'migJobStep', [overwrite: true])
+return migrationRespond([ok: true, job: migJobView(job)])
+}
+def migrationJobGet() {
+Map job = state.migJob
+if (job?.state == 'running' && now() - ((job.lastStepAt ?: 0) as long) > 180000L) runIn(1, 'migJobStep', [overwrite: true])
+return migrationRespond([ok: true, job: job == null ? null : migJobView(job)])
+}
+def migrationJobStopPost() {
+state.migJobStop = true
+return migrationRespond([ok: true])
+}
+Map migJobView(Map job) {
+List res = (job.results ?: [])
+return [id: job.id, op: job.op, state: job.state, ids: job.ids, total: ((List) job.ids).size(), handled: res.size(),
+results: res, startedAt: job.startedAt, endedAt: job.endedAt, now: now()]
+}
+Map migDeleteRows(List wanted) {
+Map facts
+try { facts = parent.haiMigrationFacts() } catch (Throwable t) { return [ok: false, message: t.message as String] }
+Map pairs = migPairs([migPairs: facts.pairs])
+Map haiRules = (facts.haiRules ?: [:])
+List paused = ((List) (facts.paused ?: [])).collect { it as String }
+List rows = []
+wanted.each { String k ->
+Map p = pairs.get(k)
+if (p == null) { rows << [rmId: k, ops: [deleteClone: [available: false, why: 'There is no HAI copy of this rule.']]]; return }
+String haiId = p.haiRuleId as String
+Map hr = haiId ? haiRules.get(haiId) : null
+String st = hr?.state as String
+boolean gone = hr == null || st == 'removed'
+Map row = [rmId: k, rmName: p.rmName ?: hr?.name, haiId: haiId, haiState: st]
+row.ops = [deleteClone: gone
+? [available: false, why: 'The HAI copy this rule was paired with has already been deleted.']
+: st != 'held' && (p.phase == 'switched' || (paused.contains(k) && st == 'active'))
+? [available: false, why: 'The HAI copy is the one doing this rule\'s job. Switch back first, then delete the copy.']
+: [available: true]]
+rows << row
+}
+return [ok: true, rows: rows]
+}
+def migJobStep() {
+Map job = state.migJob
+if (job?.state != 'running') return
+List ids = job.ids
+List results = (job.results ?: [])
+int from = results.size()
+if (state.migJobStop == true || from >= ids.size()) {
+state.remove('migJobStop')
+job.state = from >= ids.size() ? 'done' : 'stopped'
+job.endedAt = now()
+state.migJob = job
+return
+}
+List wanted = ids.subList(from, Math.min(ids.size(), from + MIG_JOB_STEP)).collect { it as String }
+job.lastStepAt = now()
+state.migJob = job
+Map reads = [:]
+Map gathered
+if (job.op == 'deleteClone') gathered = migDeleteRows(wanted)
+else {
+try { gathered = migrationGatherState(wanted, reads) } catch (Throwable t) { gathered = [ok: false, message: t.message as String] }
+}
+if (gathered?.ok == false) {
+wanted.each { String k -> results << [rmId: k, ok: false, message: ((gathered.message ?: 'The rules could not be read.') as String).take(300)] }
+} else {
+List known = gathered.rows
+List rows = []
+wanted.each { String k ->
+Map r = known.find { ((Map) it).rmId == k }
+if (r == null) { results << [rmId: k, ok: false, message: 'This hub has no Rule Machine rule with that id any more.']; return }
+List up = ((Map) (job.ups ?: [:])).get(k)
+rows << (up ? r + [upgrades: up] : r)
+}
+if (rows) {
+Map many
+try { many = migApplyMany(rows, job.op as String, migrationPlat(reads), rows.size()) }
+catch (Throwable t) { many = [done: [], failed: rows.collect { [rmId: it.rmId, rmName: it.rmName, ok: false, message: t.message as String] }] }
+Map pairs = migPairs([migPairs: ((Map) parent.haiMigrationFacts(true)).pairs])
+((List) many.done).each { Object d ->
+Map e = d
+pairs = migRecord(pairs, e.rmId as String, e.rmName as String,
+[ok: true, op: job.op, phase: e.phase, haiId: e.haiId, heldReason: e.heldReason, rmPrint: e.rmPrint, testedAt: e.testedAt], now())
+}
+parent.haiMigrationRecord(pairs)
+if (job.op == 'clone') migNoteRefusals(((List) many.done) + ((List) many.failed), rows)
+(((List) many.done) + ((List) many.failed)).each { Object o ->
+Map e = o
+Map line = [rmId: e.rmId, rmName: e.rmName, ok: e.ok == true]
+if (e.flagged == true) line.flagged = true
+if (e.ok != true) line.message = ((e.message ?: 'The hub did not say why.') as String).take(300)
+if (e.ok != true && e.code) line.code = e.code as String
+if (e.renames) line.renames = e.renames
+results << line
+}
+}
+}
+job.results = results
+job.lastStepAt = now()
+if (results.size() >= ids.size()) { job.state = 'done'; job.endedAt = now() }
+state.migJob = job
+if (job.state == 'running') runIn(1, 'migJobStep', [overwrite: true])
 }
 Map migrationRowsAfter(List wanted, Map reads) {
 try {
@@ -382,6 +510,38 @@ if (p != q) return p <=> q
 }
 return 0
 }
+void migNoteRefusals(List results, List rows) {
+Map kept = new LinkedHashMap((Map) (state.migRefused ?: [:]))
+boolean moved = false
+results.each { Object o ->
+Map e = o
+String k = e.rmId as String
+if (k == null) return
+if (e.ok == true || e.flagged == true) { if (kept.remove(k) != null) moved = true; return }
+if (!((e.code ?: '') as String).startsWith('RM_')) return
+Map row = (rows ?: []).find { ((((Map) it)?.rmId) as String) == k }
+kept.put(k, [message: ((e.message ?: 'HAI could not clone this rule.') as String).take(300), code: e.code as String,
+rmPrint: row?.rmPrint as String])
+moved = true
+}
+if (moved) state.migRefused = kept
+}
+void migMarkRefused(List rows, boolean full) {
+Map kept = state.migRefused
+if (!kept) return
+Map left = [:]
+rows.each { Object o ->
+Map r = o
+Map x = kept.get(r.rmId as String)
+if (x == null) return
+boolean copied = r.haiId != null && r.haiMissing != true
+if (copied || (x.rmPrint && r.rmPrint && x.rmPrint != r.rmPrint)) return
+left.put(r.rmId as String, x)
+if (!(r.warnings instanceof List)) r.warnings = []
+((List) r.warnings) << [kind: 'notCloned', names: [], blocking: false, message: x.message]
+}
+if (full && left.size() != kept.size()) state.migRefused = left
+}
 Map migrationGatherState(Collection only = null, Map reads = null) {
 boolean reuse = reads != null && reads.containsKey('decode')
 state.migStep = 'the Rule Machine rule list'
@@ -429,6 +589,12 @@ detailWhy = null
 }
 }
 if (reuse) amGone = decode?.code == 'HAM_UNINSTALLED'
+if (!reuse) {
+boolean seen = decode != null && decode.ok != false && !amGone
+if (state.amSeenSent != seen) {
+try { parent.haiAutomationMapSeen(seen); state.amSeenSent = seen } catch (Throwable t) { log.warn "HAI Migration: could not tell the Engine about Automation Map: ${t.message}" }
+}
+}
 if (reads != null && !reuse) reads.putAll([decode: decode, detail: detail, detailWhy: detailWhy])
 state.migStep = 'building the rows'
 Set vocab = null
@@ -441,6 +607,11 @@ Map st = migState(rmRows, paused, pairs, haiRules, decode, vocab, now(),
 detail?.ok == true ? detail : null, facts.allowed, limits, checked,
 facts.stopped instanceof List ? facts.stopped : [],
 facts.disabled instanceof List ? facts.disabled : [], only)
+migMarkRefused((List) (st.rows ?: []), only == null)
+st.drafted = facts.drafted instanceof List ? facts.drafted : []
+st.draftWhy = facts.draftWhy instanceof Map ? facts.draftWhy : [:]
+st.environment = facts.environment
+if (state.migJob instanceof Map) st.job = [state: ((Map) state.migJob).state, op: ((Map) state.migJob).op]
 st.amAppId = ((Map) (decode?.instance ?: [:])).appId
 Map am = [appId: st.amAppId, version: decode?.sourceVersion, rules: rmRows.size(), uninstalled: amGone]
 state.assessAm = am
@@ -486,6 +657,15 @@ return out?.refused instanceof Map
 : out
 },
 rmPausedNow: { Object rmId -> (Boolean) ((Map) parent.haiMigrationCall('rmPausedNow', [rmId: rmId]))?.paused },
+rmPrivateBoolean: { Object rmId ->
+Boolean pb = null
+httpGet([uri: "http://127.0.0.1:8080/installedapp/statusJson/${rmId}".toString(),
+contentType: 'application/json', timeout: 10]) { resp ->
+if (resp?.status == 200) pb = migPrivateBooleanFrom(resp.data)
+}
+return pb
+},
+setBoolean: { Map c -> parent.haiMigrationCall('setBoolean', c) },
 now : { Object unused -> now() },
 pauseFor : { Object ms -> pauseExecution(ms as long) },
 rebuildRule: { Map c ->
@@ -921,7 +1101,7 @@ return "the trigger \"${said}\"".toString()
 @Field static final int MIG_CONFIRM_TRIES = 3
 @Field static final long MIG_CONFIRM_GAP_MS = 250L
 @Field static final String MIGRATION_PAGE_FILE = 'hai-migration.html'
-@Field static final String MIGRATION_PAGE_SHA256 = '171a8185eddc51489f1f8510d34c94adff57c9c7d3cc5d446ae710c1ede5e96f'
+@Field static final String MIGRATION_PAGE_SHA256 = '59b2c08ed6492fd34afd58524d6da7d21165d3286a9d581b41064b3a66f243b9'
 @Field static final String MIG_PROV_OK = 'ok'
 @Field static final String MIG_PROV_PARTIAL = 'partial'
 @Field static final String MIG_PROV_ABSENT = 'absent'
@@ -1150,9 +1330,9 @@ w.pbOnlyNames = ((List) (coupling.inboundPbOnly ?: [])).findAll { !repairNoted.c
 w.message = ((w.message as String) + " ${pb.take(4).join(', ')}${pb.size() > 4 ? ' and others' : ''} " +
 "set${pb.size() == 1 ? 's' : ''} this rule's private boolean, often to repair a cooldown " +
 'after a restart. The HAI copy keeps its delays and its private boolean through a restart, ' +
-'so it does not need that repair, but it will not receive those settings either, even from ' +
-'a caller already copied to HAI. If a caller sets it for any other reason, change that step ' +
-"to this rule's HAI copy once both are in HAI.").toString()
+'so it does not need that repair. Once this rule is switched over, a caller running on HAI ' +
+'sets the HAI copy, but a caller still in Rule Machine sets the paused Rule Machine rule, so ' +
+'switch those callers over too.').toString()
 }
 if (!repair.isEmpty() && repair.containsAll(inb)) {
 Map w = warnings[-1]
@@ -1416,9 +1596,9 @@ List renames = stopped.renames instanceof List ? stopped.renames : []
 String offer = renames.isEmpty() ? '' : (' ' + renames.collect { Map n ->
 "${n.device} no longer offers ${n.from}; it now offers ${n.to}".toString() }.join('; ') +
 '. Tick "Use the new name" on the row and clone again.')
-Map kept2 = null
-try { kept2 = plat?.containsKey('keepDraft') ? migCall(plat, 'keepDraft', [doc: made.doc]) : null } catch (Exception ignored) { kept2 = null }
 String why = (stopped.message ?: stopped.code ?: 'the hub refused the copy') as String
+Map kept2 = null
+try { kept2 = plat?.containsKey('keepDraft') ? migCall(plat, 'keepDraft', [doc: made.doc, why: why]) : null } catch (Exception ignored) { kept2 = null }
 if (kept2?.ok == true) {
 return [ok: false, flagged: true, op: 'clone', code: 'MIGRATION_FLAGGED', phase: 'activate', renames: renames,
 message: ("Cloned as a draft to check, not on the hub: ${why}. It is in the editor's Drafts, marked Needs fixing." + offer).toString()]
@@ -1503,12 +1683,14 @@ op: op, message: first?.message ?: 'The active rule could not be stopped.']
 if (toHai) {
 Map seen = migConfirmPaused(plat, row.rmId)
 if (seen.paused != true) {
+try { migCall(plat, 'rmAction', [ids: [row.rmId], action: 'resumeRule']) } catch (Exception ignored) { }
 return [ok: false, code: 'MIGRATION_RM_NOT_CONFIRMED', op: op, confirmed: false,
 message: ("Rule Machine was asked to pause ${row.rmName ?: row.rmId} and it could not be " +
 "confirmed as paused${seen.why ? ': ' + seen.why : ''}. HAI was NOT started, so the " +
 'Rule Machine rule is the one still running. Check it and try again.').toString()]
 }
 }
+String pbNote = toHai ? migCarryPrivateBoolean(row, plat) : ''
 Map second = toHai
 ? migCall(plat, 'haiRuleOp', [ruleId: row.haiId, op: 'enable'])
 : migCall(plat, 'rmAction', [ids: [row.rmId], action: 'resumeRule'])
@@ -1518,7 +1700,7 @@ message: "The active rule was stopped, but its replacement did not start: ${seco
 }
 if (toHai) {
 return [ok: true, op: op, phase: 'switched', confirmed: true, rmWasPaused: row.rmPaused == true,
-message: 'Switched over: the Rule Machine rule is paused and the HAI copy is running.']
+message: 'Switched over: the Rule Machine rule is paused and the HAI copy is running.' + pbNote]
 }
 Map back = migConfirmPaused(plat, row.rmId, MIG_CONFIRM_TRIES, false)
 boolean running = back.paused == false
@@ -1527,6 +1709,27 @@ message: running ? 'Switched back: the HAI copy is stopped and the Rule Machine 
 : ("Switched back: the HAI copy is stopped and Rule Machine was asked to resume " +
 "${row.rmName ?: row.rmId}, but it is not yet confirmed as running" +
 "${back.why ? ': ' + back.why : ''}. Read the row again in a moment.").toString()]
+}
+String migCarryPrivateBoolean(Map row, Map plat) {
+Closure read = (Closure) (plat ?: [:]).get('rmPrivateBoolean')
+if (read == null) return ''
+Object v = null
+try { v = read(row.rmId) } catch (Exception e) { v = null }
+if (!(v instanceof Boolean)) {
+return " Rule Machine's private boolean for this rule could not be read, so the HAI copy keeps its own."
+}
+Map set = migCall(plat, 'setBoolean', [ruleId: row.haiId, value: v])
+return set?.ok == true ? '' :
+(" The HAI copy's private boolean could not be set to ${v} as Rule Machine had it" +
+(set?.message ? ": ${set.message}" : '') + '.').toString()
+}
+Boolean migPrivateBooleanFrom(Object status) {
+Object rows = status instanceof Map ? ((Map) status).appState : null
+if (!(rows instanceof List)) return null
+Map row = ((List) rows).find { it instanceof Map && ((Map) it).name == 'private' }
+if (row == null) return null
+Object v = row.value
+return v == true || v == 'true' ? Boolean.TRUE : v == false || v == 'false' ? Boolean.FALSE : null
 }
 Map migDeleteClone(Map row, Map plat) {
 if (row.haiState == 'active') {
@@ -1574,7 +1777,7 @@ Closure c = (Closure) (plat ?: [:]).get(name)
 if (c == null) return [ok: false, message: "this build has no ${name}".toString()]
 try {
 Object r = c(arg)
-return r instanceof Map ? r : [ok: true]
+return r instanceof Map ? r : [ok: false, message: "${name} gave no answer HAI could read".toString()]
 } catch (Exception e) {
 return [ok: false, message: e.message as String]
 }
@@ -2250,6 +2453,12 @@ if (c.required != null) doc.requiredExpression = c.required
 Map loc = rmLocaliseVariables(doc, hubVariableTypes, localVariables)
 if (loc.ok != true) return loc
 doc.refs = rmRefsFor(doc, detailRule, hubVariableTypes, loc.locals)
+((Map) doc.refs).each { Object k, Object v ->
+Map ref = v
+if (ref?.kind != 'rmRule') return
+Map hit = (allRules ?: []).find { Object o -> o instanceof Map && (((Map) o).id as String) in [ref.id as String, 'a' + ref.id] }
+if (hit?.name) ref.name = ((hit.name as String).replaceAll(/\s*\((Rule-[\d.]+|child of Rule Machine)\)\s*$/, '')).toString()
+}
 rmTypeVariableValues(doc)
 List behaviour = rmFaithful(doc, upgrades)
 ((upgrades ?: []) as List).collect { it as String }.findAll { it.startsWith('rename:') && it.contains('>') }.each { String u ->
@@ -2641,7 +2850,7 @@ Closure look
 look = { Object node ->
 if (node instanceof Map) {
 Map n = node
-if (n.type == 'variable' && n.ref instanceof String && n.containsKey('value')) {
+if (n.type == 'variable' && n.ref instanceof String && n.containsKey('value') && !(n.value instanceof Map)) {
 Object v = n.value
 String t = v instanceof Boolean ? 'boolean' : (v instanceof Number ? 'number' : 'string')
 out.put(n.ref, t)
@@ -3400,6 +3609,16 @@ String name = ops.name as String
 if (name == null) return rmNo('RM_VAR_MISSING', 'This variable condition names no variable.')
 Map op = rmComparator(ops.comparator as String)
 if (op.ok != true) return op
+Map vin = ops.value instanceof Map ? ops.value : null
+if (vin?.variable) {
+String other = (vin.variable as String).trim().replaceAll(/\.$/, '')
+return [ok: true, node: [type: 'variable', ref: (RM_HUB_VARIABLE_PREFIX + name).toString(), op: op.op,
+value: [ref: (RM_HUB_VARIABLE_PREFIX + other).toString()], unknownAs: 'false']]
+}
+if (vin != null && vin.containsKey('literal') && vin.literal == null) {
+return rmNo('RM_VALUE_MISSING', ("This condition compares ${name} with something Automation Map did not pass on " +
+'(in Rule Machine it is usually another variable). Update Automation Map, scan again and assess it again.').toString())
+}
 Map value = rmValue(ops.value)
 if (value.ok != true) return value
 return [ok: true, node: [type: 'variable', ref: (RM_HUB_VARIABLE_PREFIX + name).toString(),
@@ -3819,6 +4038,7 @@ return [ok: true, steps: steps]
 }
 Map rmActDefined(Map ops) {
 String cmd = ops.command as String
+if (cmd != null && RM_COMMAND_RENAMES.containsKey(cmd)) cmd = RM_COMMAND_RENAMES.get(cmd) as String
 Map got
 if (ops.useLastDevice == true) {
 if (cmd == null || cmd.trim().isEmpty()) {
@@ -3870,6 +4090,11 @@ step.meterMs = meterMs
 step.refs = new ArrayList((List) got.refs).sort { Object a, Object b -> rmDevNum(a) <=> rmDevNum(b) }
 }
 if (!modelled) step.passthrough = true
+if (!modelled && ((List) step.refs).size() == 1 && step.meterMs == null) {
+Map one = [type: 'customCommand', ref: ((List) step.refs)[0], command: cmd]
+if (step.args != null) one.args = step.args
+step = one
+}
 if (longGapSecs != null) {
 List order = new ArrayList((List) got.refs).sort { Object a, Object b -> rmDevNum(a) <=> rmDevNum(b) }
 List steps = []
@@ -3884,6 +4109,7 @@ return [ok: true, steps: steps]
 }
 return [ok: true, steps: [step]]
 }
+@Field static final Map RM_COMMAND_RENAMES = ['applyDefaultColorTemperature': 'applyDefault']
 long rmDevNum(Object ref) {
 String s = (ref as String) ?: ''
 if (s.startsWith('dev:')) s = s.substring(4)
@@ -4203,7 +4429,7 @@ if (!src) return rmNo('RM_ACT_VAR_VALUE', "This copies a variable into ${name} w
 Map srcRef = [ref: (RM_HUB_VARIABLE_PREFIX + src).toString()]
 Object off = val.offset == null ? 0 : rmTrigNumber(val.offset)
 if (off == null) return rmNo('RM_ACT_VAR_NUMBER', "The offset '${val.offset}' for ${name} is not a number.".toString())
-if (((Number) off).doubleValue() == 0d) return [ok: true, steps: [[type: 'setVariable', ref: ref, value: srcRef]]]
+if (((Number) off).doubleValue() == 0d) return [ok: true, steps: [[type: 'setVariable', ref: ref, op: 'set', args: [srcRef]]]]
 return [ok: true, steps: [[type: 'setVariable', ref: ref, op: 'math', args: [srcRef, '+', off]]]]
 case 'string':
 if (val.value == null) break
