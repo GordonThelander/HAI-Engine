@@ -1,6 +1,6 @@
 # HAI Engine interfaces
 
-Applies to HAI Engine version 0.5.87.
+Applies to HAI Engine version 0.5.117.
 
 Everything here except the Automation Map feed (last section) is served by HAI Engine and needs its access token (`?access_token=...`), shown on the HAI
 Engine page. The token is a private credential: anyone holding it can edit drafts and put rules on the hub, although
@@ -10,18 +10,41 @@ and trigger rules.
 **Changing them.** **Change HAI's access addresses**, in its own section of the HAI Engine page, makes a new
 access token, new audience keys (`aud`) for the editor, the end points and MCP, a new API token for other apps
 (below), and a new access token for HAI Migration's page. Every old address and the old API token stop working
-at once: open editor tabs, saved links, dashboard buttons, the MCP client's address and other apps' requests.
+within a minute (the hub keeps accepting the old access token for up to 60 seconds, probed 2.5.2.135): open editor tabs, saved links, dashboard buttons, the MCP client's address and other apps' requests.
 Rules keep running. Each rule app's **Open this rule in the editor** link is sent the new address, a few rule
 apps at a time.
 
+**The editor holds the end point secret too.** The editor's `state` route returns `endpointAud`, the end points'
+audience secret, so the editor can build each rule's end point addresses. Anyone holding the editor's address can
+therefore call the rule end points as well; give a dashboard or shortcut only the end point address, never the
+editor's.
+
+**HAI Migration's page is a separate credential, and stays one.** Its address carries HAI Migration's own access
+token, which reaches `/apps/api/<migration app id>/migration/...` and nothing of HAI Engine's. Since 0.5.117,
+`GET /migration/api/state` no longer returns the editor's address in `links` (it used to return `links.editor`, the
+Engine's token with the editor audience key, so the Migration link led to the editor's credential). The Migration
+page's **Open the editor** uses the editor address it is handed by whoever opened it already holding one: the
+editor's **Open Migration** and HAI Migration's settings page (the hub's own page, behind its login) put it after
+`#editor=` in the page's address, which the browser keeps to itself. The page then removes it from the address bar
+and keeps it for that tab only. Opened any other way, the page falls back to the editor tab that opened it, and
+otherwise asks the person to open it from the editor.
+
 ## Editor API
 
-Base: `/apps/api/<engine app id>/editor/api/`. Bodies are JSON. Errors return
+The editor page itself is `GET /apps/api/<engine app id>/editor` (editor audience), the HTML from the File Manager.
+Base for its API: `/apps/api/<engine app id>/editor/api/`. Bodies are JSON. Errors return
 `{ok: false, error: <code>, message: <text for a person>}`.
+
+**Credentials in headers (0.5.119).** The editor page sends the access token as `Authorization: Bearer <token>` and
+its audience key as `X-HAI-Aud: <key>`, so neither is in a request's address; `?access_token=` and `?aud=` still
+work, and the page falls back to them once if the hub refuses the headers. The page itself is served
+`private, no-cache` with an `ETag`, and answered 304 when it has not changed, so the browser asks the hub each time it
+opens it: a revoked token is refused rather than the page opening from the cache. The page's own address still
+carries the token, since that is how the browser opens it; keep it private.
 
 | Route | Method | Body | Returns |
 |---|---|---|---|
-| `state` | GET | none | The editor's opening data: devices, modes, hub variables, Rule Machine rules, drafts, the runtime summary and the size limits |
+| `state` | GET | none | The editor's opening data: devices, modes, hub variables, Rule Machine rules, drafts, the runtime summary and the size limits. It also carries `endpointAud`, the end points' audience secret, so the editor can show each rule's end point addresses: whoever can read `state` (the editor audience) can call the rule end points too |
 | `fixed` | GET | `?v=<version>` | The field specs, labels, templates and command list. Fixed for a build; cached by the browser when `v` names the current build |
 | `device` | GET | `?ids=<id,id,...>` (up to 20) | Those devices' rows with their current values, in the shape of a Check's `values`. Reads only those devices |
 | `check` | POST | `{rule}` | Validation findings, read-back, simulation, approvals needed, activation blockers. Stores nothing. |
@@ -29,7 +52,15 @@ Base: `/apps/api/<engine app id>/editor/api/`. Bodies are JSON. Errors return
 | `save` | POST | `{id?, name, rule}` | Saves a draft. No count limit; a draft, and all drafts together, have byte limits. |
 | `delete` | POST | `{id}` | Deletes a draft. |
 | `send` | POST | `{op: "run", rule}` or `{op: "pause" \| "resume" \| "stop" \| "start", ruleId}` | Signs the request and hands it to the engine's own runtime in the same call. `run` puts the rule on the hub: it is checked and, if it passes, activated. It does **not** run the steps: the rule waits for its triggers (the rule child is created and committed with `runs: 0`). To run the steps once, use `runNow` (the `rules/<rule id>/run` end point below). The outcome shows in the runtime summary. |
+| `run-step` | POST | `{step, refs, rule: {name}}` | The editor's **Run this step**: that one action, on the hub, now, with no trigger or condition. Only a device command HAI's catalogue knows with no risk (never a driver's own command, `UNKNOWN_COMMAND`, nor one that opens, unlocks, sounds or disarms, `RISKY_STEP`), a notification, a mode change (needs **Allow rules to change the mode**), an approved hub variable set to a fixed value, or a log line. HSM, device enable and disable, and hub reboot or shutdown are refused (`RISKY_STEP`). Every device must be approved and enabled. It is not a signed submission: it runs nothing else of the rule and changes no rule. `{ok, done, sent, message}`; a failure is `{ok: false, error: "FAILED", sent, message}`. |
 | `runtime` | GET | none | The latest runtime summary. |
+| `active` | GET | `?id=<rule id>` | The version the hub runs for that rule, read from its rule app (one child call), with device names refreshed; a copy held for review reads like a draft, with its hold reason |
+| `run-step` | POST | `{step, refs, rule: {name}}` | Runs that one action now, with no trigger and no conditions: a device command on approved, enabled devices whose driver offers it, a mode change (only with the mode permission on), a hub variable (only when approved), or a log line. Flow, waiting and risky steps are refused before anything is read. Nothing is written to state |
+| `draft` | POST | `{request, base?}` | Starts AI drafting of `request` (up to the request limit), optionally as a change to the complete rule `base`. `{ok, working, status, message}` |
+| `draft` | GET | none | How drafting is going: `{ok, working, status, outcome, draftId, draftAt, basedOn, amendment}` |
+| `delete-many` | POST | `{rules: [id], drafts: [id]}` (up to 500 in all) | Starts a delete job on the hub: each rule is stopped and deleted a few per step, then the drafts. 409 `JOB_RUNNING` while one runs. `{ok, job}` |
+| `delete-many` | GET | none | The delete job's progress, `{ok, job}`; a job the hub dropped (a restart) is started again |
+| `delete-many/stop` | POST | `{}` | Stops the running delete job after its current step |
 | `uses` | GET | `?device=<id>` (`dev:12` or `12`) | `{ok, device, rules, drafts}`: the rules on the hub (`id`, `name`, `state`, `paused`, `epoch`, `ruleHash`, `rule`) and the drafts (`id`, `name`, `ruleId`, `rule`) that name that device, with their documents. For the editor's Replace / add alongside / remove. Each rule's index (`deviceIds`, kept in the registry since activation) decides; only the rules it names are read from their apps. Reads nothing else and writes nothing. |
 | `backups` | GET | none | `{ok, backups, keep, daily}`: the rule backups, newest first, each `{name, at, bytes, rules}` (`name` is `hai-backup-<yyyyMMdd>.json` in File Manager), from the index the Engine keeps in its state. No file is read. |
 | `backup` | GET | `?name=hai-backup-<yyyyMMdd>.json` | `{ok, name, backup}`: that one backup file as written, `{format: "hai.backup/1", engine, at, rules: [{id, name, state, paused, epoch, ruleHash, rule}]}`. Only a name the index lists is read; it reads that one file and nothing else. `NO_SUCH_BACKUP` (404) otherwise. |
@@ -114,10 +145,25 @@ The editor page opens a rule from its address:
 
 ## Rule end points
 
-Rule Machine's local and cloud end points, for HAI rules. All are GETs on HAI Engine (the rule routes
-take POST too; the body is not read), with its
-access token, and all are open to anyone holding that token; every call is logged. Local base: `http://<hub>/apps/api/<engine app id>/endpoint/`; cloud base:
-`https://cloud.hubitat.com/api/<hub UID>/apps/<engine app id>/endpoint/`. The page shows both.
+Rule Machine's local and cloud end points, for HAI rules, on HAI Engine with its
+access token, and all are open to anyone holding that token; every call is logged. `rules` is a GET. Every route that
+changes something (the rule and variable routes) acts on **POST** (the body is not read); since 0.5.119 a GET to
+one answers 405 `POST_ONLY` unless **Allow GET links (Rule Machine-style)** is on under the web address on the HAI
+Engine page (off by default), so a link a browser, a link preview or a crawler opens on its own does nothing. Every
+answer is `Cache-Control: no-store`; a GET link user who goes through a cache can add `&n=<anything new>` to keep
+two identical requests apart. Local base: `http://<hub>/apps/api/<engine app id>/endpoint/`; cloud base:
+`https://cloud.hubitat.com/api/<hub UID>/apps/<engine app id>/endpoint/`.
+
+**Home network only, unless allowed** (0.5.117). A request that arrives through Hubitat's cloud relay (the hub marks
+it with `request.requestSource` `cloud`) is refused with 403 `CLOUD_OFF` unless **Allow through Hubitat's cloud** is
+on under the web address on the HAI Engine page. It is off by default; when it is on, the page shows the cloud
+address as well. The MCP server has its own switch of the same name. The editor and Migration pages are not refused
+through the cloud: whoever holds their address can use them from anywhere, so the help on the page says to keep them
+private. Over the relay, an answer larger than about 128 KB fails there with a 504 after a long wait; that is the
+relay's limit, not HAI's. So since 0.5.119 an answer through the relay larger than 120 000 bytes (the editor page
+itself, a large editor `state` or `fixed`, a large Migration `state`) is refused at once with 413
+`TOO_LARGE_FOR_CLOUD` and a message saying to use the home network. The editor page is larger than that (about
+900 KB), so in practice the editor opens on the home network only; the Migration page (about 125 KB) is not capped.
 
 | Route | Does | Runtime operation |
 |---|---|---|
@@ -138,33 +184,133 @@ access token, and all are open to anyone holding that token; every call is logge
   or variables rules may use. The one route on the engine that needs no audience secret is the read-only
   Automation Map feed (last section); nothing an end point does reaches it.
 - **Values:** up to 1024 characters. A rule id's colon may be sent as `%3A`.
-- **Errors:** 404 `NO_SUCH_OPERATION`, 400 `NOT_A_BOOLEAN` or `NO_VALUE`, 409 `NOT_PAIRED`, 413 `TOO_LARGE`.
+- **Errors:** 404 `NO_SUCH_OPERATION`, 400 `NOT_A_BOOLEAN` or `NO_VALUE`, 405 `POST_ONLY`, 409 `NOT_PAIRED`, 413 `TOO_LARGE`.
 
 ## HAI rules from other apps
 
 HAI's `RMUtils`: another app on the same hub lists and controls HAI rules with a location event, and gets the
-answer as another. Each request carries HAI Engine's API token (below). On by default; a person may switch off **Let other apps on this hub run HAI rules** (under **Rule end points**) on the HAI Engine page,
-and then every request is answered with `API_OFF`. The library `engine/public/hai_rule_api.groovy` (add it under Libraries
-code, then `#include <namespace>.HAIRuleApi`, with the namespace from the library's own `library(...)` header) wraps
-both events.
+answer as another. Each request is signed with HAI Engine's API token (below), which it never carries. On by default; a person may switch off **Let other apps on this hub run HAI rules** (under **Rule end points**) on the HAI Engine page,
+and then every request is answered with `API_OFF`. The library below wraps both events, signs every request and
+checks every reply: add it under Libraries code, then `#include gordonthelander.HAIRuleApi` in your app. It is
+printed here in full because it is not installed by Hubitat Package Manager (its source in this repository is
+`engine/public/hai_rule_api.groovy`, whose header comment shows an example app).
+
+```groovy
+library(
+    name: 'HAIRuleApi',
+    namespace: 'gordonthelander',
+    author: 'HAI',
+    description: 'List HAI rules; run, stop, pause, resume or trigger them; set their Private Boolean',
+    category: 'Utility',
+    documentationLink: ''
+)
+
+/** Ask HAI Runtime to act on one rule. The reply comes as a haiRuleApiReply location event whose value is `id`. */
+void haiRuleAction(String op, String ruleId, Object value = null, String id = null) {
+    Map req = [op: op, rule: ruleId, from: app?.label ?: app?.name ?: 'an app']
+    if (value != null) req.value = value.toString()
+    if (id != null) req.id = id
+    sendLocationEvent(name: 'haiRuleApi', value: op, data: haiRuleApiSigned('haiRuleApi', op, req), isStateChange: true, displayed: false)
+}
+
+/** Ask HAI Runtime for its rules: [id, name, state (active or disabled), paused] each, in the reply's `rules`. */
+void haiRuleList(String id = null) {
+    Map req = [op: 'list', from: app?.label ?: app?.name ?: 'an app']
+    if (id != null) req.id = id
+    sendLocationEvent(name: 'haiRuleApi', value: 'list', data: haiRuleApiSigned('haiRuleApi', 'list', req), isStateChange: true, displayed: false)
+}
+
+/** HAI Engine's API token, from this app's haiApiToken setting. */
+String haiRuleApiToken() {
+    return ((settings?.haiApiToken ?: '') as String).trim()
+}
+
+/**
+ * A haiRuleApiReply event's answer as a map, with a list's `rules` opened; empty if it is not HAI Engine's (its
+ * signature does not hold under the token, or it is more than two minutes old).
+ */
+Map haiRuleReply(evt) {
+    String data = evt.data as String
+    int cut = data == null ? -1 : data.lastIndexOf(',"sig":"')
+    if (cut < 1 || !data.endsWith('"}')) return [:]
+    String text = data.substring(0, cut) + '}'
+    String sig = data.substring(cut + 8, data.length() - 2)
+    if (haiRuleApiHmac(haiRuleApiToken(), "${evt.name}|${evt.value}|${text}".toString()) != sig) return [:]
+    Map r
+    try { r = (Map) new groovy.json.JsonSlurper().parseText(text) } catch (Exception e) { return [:] }
+    if (!(r.ts instanceof Number) || Math.abs(now() - (r.ts as long)) > 120000L) return [:]
+    if (r.sealed instanceof String) {
+        try { r.rules = new groovy.json.JsonSlurper().parseText(haiRuleUnseal(haiRuleApiToken(), r.n as String, r.sealed as String)) }
+        catch (Exception e) { r.rules = null }
+        r.remove('sealed')
+    }
+    return r
+}
+
+/** A request's data, signed as HAI Engine checks it: the JSON with ts and n, then sig appended last. */
+String haiRuleApiSigned(String name, String value, Map req) {
+    Map body = new LinkedHashMap(req)
+    body.ts = now()
+    body.n = UUID.randomUUID().toString()
+    String text = groovy.json.JsonOutput.toJson(body)
+    String sig = haiRuleApiHmac(haiRuleApiToken(), "${name}|${value}|${text}".toString())
+    return text.substring(0, text.length() - 1) + ',"sig":"' + sig + '"}'
+}
+
+/** A sealed rule list opened: XOR with HMAC-SHA256(token, "hai-seal/1|<nonce>|<block>") per 32-byte block. */
+String haiRuleUnseal(String token, String nonce, String sealed) {
+    byte[] b = sealed.decodeBase64()
+    byte[] out = new byte[b.length]
+    for (int i = 0; i < b.length; i += 32) {
+        String ks = haiRuleApiHmac(token, "hai-seal/1|${nonce}|${i.intdiv(32)}".toString())
+        for (int j = 0; j < 32 && i + j < b.length; j++) out[i + j] = (byte) (((int) b[i + j]) ^ Integer.parseInt(ks.substring(2 * j, 2 * j + 2), 16))
+    }
+    return new String(out, 'UTF-8')
+}
+
+/** HMAC-SHA256 (RFC 2104) as hex. */
+String haiRuleApiHmac(String key, String text) {
+    byte[] k = (key ?: '').getBytes('UTF-8')
+    if (k.length > 64) k = java.security.MessageDigest.getInstance('SHA-256').digest(k)
+    byte[] ipad = new byte[64]
+    byte[] opad = new byte[64]
+    for (int i = 0; i < 64; i++) {
+        int b = i < k.length ? (int) k[i] : 0
+        ipad[i] = (byte) (b ^ 0x36)
+        opad[i] = (byte) (b ^ 0x5c)
+    }
+    def inner = java.security.MessageDigest.getInstance('SHA-256')
+    inner.update(ipad)
+    inner.update((text ?: '').getBytes('UTF-8'))
+    byte[] ih = inner.digest()
+    def outer = java.security.MessageDigest.getInstance('SHA-256')
+    outer.update(opad)
+    outer.update(ih)
+    return outer.digest().collect { String.format('%02x', it) }.join('')
+}
+```
 
 **Request:** `sendLocationEvent(name: 'haiRuleApi', value: <op>, data: <JSON>)`, where the JSON is
-`{op, rule, value, from, id, token}`: `rule` is the HAI rule id, `value` a text, `from` the asking app's name (for the
-log only; it is not proof of anything), `id` any text of yours that the reply carries back, and `token` HAI Engine's
-API token.
+`{op, rule, value, from, id, ts, n, sig}`: `rule` is the HAI rule id, `value` a text, `from` the asking app's name
+(for the log only; it is not proof of anything), `id` any text of yours that the reply carries back, `ts` the time
+in milliseconds, `n` a nonce never used before, and `sig` the signature, which must be the last field.
 
-**The token (required).** Any app on the hub can send a location event, so each request must
-carry the API token shown, with a Copy button, under **Rule end points** on the HAI Engine page. It is 32 hex
-characters, made once per install, and compared over its whole length. A request with no token or a wrong one is
-**ignored**: no reply is sent, no rule is touched, and HAI Engine writes one warning to the Logs page for each
-sender (by `from`) until the hub restarts. **Change HAI's access addresses** on the same page makes a new token,
-and the old one stops working at once.
+**The signature (required, since 0.5.119).** Any app on the hub can send, and hear, a location event, so the API
+token is never sent: each request is signed with it. Write the JSON of every field but `sig`, then append
+`,"sig":"<hex>"` before its closing brace, where `<hex>` is HMAC-SHA256 under the token of
+`haiRuleApi|<op>|<that JSON>`. HAI Engine checks the exact text it receives, so nothing depends on how JSON is
+written. A request whose signature does not hold, whose `ts` is more than two minutes from the hub's clock, or
+whose nonce HAI has already seen, is **ignored**: no reply is sent, no rule is touched, and HAI Engine writes one
+warning to the Logs page for each sender (by `from`) until the hub restarts. The token is shown, with a Copy button,
+under **Rule end points** on the HAI Engine page; it is 32 hex characters, made once per install and once more when
+HAI updates to 0.5.119 (the old one had travelled in clear). **Change HAI's access addresses** on the same page makes
+a new one, and the old one stops working within a minute.
 
-**Breaking change for existing integrations.** An app that sends no token is ignored, and waits for a reply
-that never comes. To update it: copy the token from the HAI Engine page and add it to
-the request's data as `token`. With the library, update `hai_rule_api.groovy` under Libraries code, add
-`input 'haiApiToken', 'text', title: 'HAI API token'` to your app's page, and paste the token there; the
-library sends it with every request.
+**Breaking change for existing integrations (0.5.119).** An app that sends `token` in the request, as the library
+did from 13 October, is ignored, and its log line says to update `hai_rule_api.groovy`. To update it: update the
+library under Libraries code, copy the new token from the HAI Engine page, and paste it into your app's
+`haiApiToken` setting (`input 'haiApiToken', 'text', title: 'HAI API token'`); the library signs every request and
+checks every reply.
 
 | `op` | Does | Like `RMUtils.sendAction` |
 |---|---|---|
@@ -176,8 +322,12 @@ library sends it with every request.
 | `trigger` | Fires the rule's first `endpoint` trigger with `value` as `%value%`; its conditions and re-run policy apply | none |
 
 **Reply:** `haiRuleApiReply` location event, value the request's `id` (or its `op` without one), data
-`{ok, op, rule, id, from, code?, message?, rules?}`. Subscribe with `subscribe(location, 'haiRuleApiReply', 'handler')`;
-every subscriber hears every reply, so match on `id`.
+`{ok, op, rule, id, code?, message?, sealed?, ts, n, sig}`, signed as the request is (`haiRuleApiReply|<value>|...`),
+so a reply another app sent fails the check. Every subscriber hears every reply, so a `list`'s rules are not in it
+in clear: `sealed` is their JSON XORed with HMAC-SHA256 under the token of `hai-seal/1|<n>|<block>` for each 32-byte
+block, as base64. The library's `haiRuleReply(evt)` checks the signature and the time, opens `sealed` into `rules`,
+and returns an empty map for anything else. Subscribe with `subscribe(location, 'haiRuleApiReply', 'handler')`, and
+match on `id`.
 
 - **Checks:** the engine's runtime handles `run`, `stop`, `pause`, `resume`, `setBoolean` and `trigger` exactly as the same
   buttons in the editor (`rtRuleOp`): a rule that is not active or stopped answers `NOT_AVAILABLE`. Nothing
@@ -187,19 +337,29 @@ every subscriber hears every reply, so match on `id`.
   listened for while it lasts. When the rule declines the run, the reply is `ok: false` with `NOT_AVAILABLE`
   and a `message` saying which of the three reasons it was: it is already running and set to ignore a new run,
   its queue is full, or it is already running as many times at once as it allows.
-- **Log:** each request is written to the hub's Logs page ("HAI Runtime: <from> asked to <op> <rule>: done") and to the engine's own log (`appApi`).
-- **Codes:** a request without the right token gets no reply at all, so `NO_TOKEN` and `WRONG_TOKEN` appear only
-  in the log. Otherwise `API_OFF`, `UNKNOWN_OPERATION`, `NO_RULE`, `NOT_A_BOOLEAN`, `TOO_LARGE` (value over 1024 characters),
+- **Log:** each request is written to the engine's own log (`appApi`), and to the hub's Logs page ("HAI Runtime: <from> asked to <op> <rule>: done") while HAI Engine's debug logging is on.
+- **Codes:** a request without the right signature gets no reply at all, so `TOKEN_IN_CLEAR`, `NO_SIGNATURE` and
+  `BAD_SIGNATURE` appear only in the log. Otherwise `API_OFF`, `UNKNOWN_OPERATION`, `NO_RULE`, `NOT_A_BOOLEAN`, `TOO_LARGE` (value over 1024 characters),
   `NOT_AVAILABLE`, and whatever the rule app answers (`NO_ACTIVE_RULE`).
 - **Between HAI rules** the `haiRuleControl` and `haiRuleInvoke` events stay internal; use `haiRuleApi` from
-  other apps.
+  other apps. Since 0.5.119 every event between HAI rules, and the Engine's `haiRulePaused` and `haiRmSwitched`, is
+  signed (`ts`, a nonce `n`, `sig` = HMAC-SHA256 under a key only HAI Engine and its rule apps hold), and a rule acts
+  on one only within two minutes of `ts` and only once per nonce. The key is never in an event; it changes on every
+  Done, every code update and **Change HAI's access addresses**.
 
 ## MCP server
 
 Off by default: until **Let an AI assistant connect (MCP)** is switched on in HAI Engine, both methods answer 403 `MCP_OFF`.
+Home network only by default: a request through Hubitat's cloud relay answers 403 `CLOUD_OFF` unless MCP's own
+**Allow through Hubitat's cloud** is on (0.5.117).
 
 Endpoint: `/apps/api/<engine app id>/mcp`, over JSON-RPC (MCP protocol versions 2024-11-05, 2025-03-26
 and 2025-06-18).
+
+**A body that is not JSON.** The hub itself parses a body sent as `application/json` before HAI sees it, and answers
+a malformed one with an empty 200 (probed 2.5.2.129). So a client never gets JSON-RPC's `-32700 Parse error` for
+broken JSON: an empty 200 with no body means the request was not valid JSON. HAI answers `-32700` only for a body it
+receives and cannot read (an empty one, or one sent under another content type).
 
 | Tool | Arguments | Does |
 |---|---|---|
@@ -287,9 +447,14 @@ It is the one engine route that needs no audience secret (`aud`), because a sibl
 the hub has no HAI Engine.
 
 **Calling it from an app on the same hub:** use `http://127.0.0.1:8080/apps/api/...`, not the hub's LAN
-address. An app calling the hub's own LAN IP on port 80 does not get through (the request times out and the
-call returns 408); the loopback address on port 8080 is the hub's own web server. This applies to every
-endpoint on this page, and to a rule's own `http` step calling back into the same hub.
+address. An app calling the hub's own LAN IP on port 80 does not get through: a synchronous call is refused at once
+(`HttpHostConnectException`), and an asynchronous one comes back to its callback as 408. The loopback address on
+port 8080 is the hub's own web server. This applies to every endpoint on this page. A rule's own `http` step cannot
+call back into the same hub at all (0.5.117): the runtime refuses the hub's loopback and its own LAN address, at
+any port, however the address was written, and since 0.5.119 any `.local` name and any name that spells out one of
+those addresses (`127.0.0.1.nip.io`, `192-168-1-20.sslip.io`, `7f000001.nip.io`). Its requests do not follow
+redirects (`followRedirects: false`); a 3xx is the answer. A LAN DNS name that resolves to the hub is not caught: an
+app cannot resolve names.
 
 Each HAI rule is a child app of type **HAI Rule Container (DEV)**, a child of HAI Engine (DEV), so its node id is its installed app id. Contract `hai.am/1`, in
 Automation Map's own graph shape:
@@ -420,7 +585,7 @@ the file being uploaded to match. `nodes`, `edges` and `flows` are still correct
 <!-- hai-status:begin -->
 Of Rule Machine 5.1's **140 capabilities**, HAI has **implemented 140**: **140 tested** on the hub and 0 built but not yet tested. 0 are scoped but unbuilt. HAI's own 31 capabilities are counted separately.
 
-Every row, with its evidence, is in [`ideation/rm51_parity.md`](../../ideation/rm51_parity.md). These figures are generated from the same file as the hub's capability feed; do not edit them by hand.
+Every row, with its evidence, is in the parity tracker. These figures are generated from the same file as the hub's capability feed; do not edit them by hand.
 <!-- hai-status:end -->
 
   - `rm51` names the tracker row. `hai` lists the schema kinds the row names.

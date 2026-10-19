@@ -67,9 +67,9 @@ because two single-threaded apps calling each other can deadlock:
 
 | Event | From, to | Carries | Checked by |
 |---|---|---|---|
-| `haiRuleInvoke` | One rule app to another | Which rule to run, the caller, the run, and the call depth | The target checks the name is its own, and the depth is within the limit. |
+| `haiRuleInvoke` | One rule app to another | Which rule to run, the caller, the run, and the call depth | Each rule app subscribes to `haiRuleInvoke.<its rule id>`, so the hub delivers the event to that rule only (as with `haiRuleControl` and `haiRuleReturn`); the target still checks the name is its own, and the depth is within the limit. |
 | `variable:<name>` | Hubitat to rule apps | A hub variable's new value | Admitted like a device report. |
-| `haiRuntimeSummary` | Engine to anything listening | Each rule's name, state, version and recent runs; the last request's result; which hub variables rules may change | Display only. The engine keeps its own copy in state, because Hubitat does not deliver an app's own location event back to it. |
+| `haiRuntimeSummary` | Engine to anything listening | Each rule's name, state, version and recent runs; the last request's result; which hub variables rules may change | Display only. The engine keeps its own copy in state, which is what it reads. Hubitat does deliver an app's own location events back to it when it subscribes to them (probed 2.5.2.139), so a handler must not assume it never sees its own; the Engine does not subscribe to this one. |
 | `haiRuleApi` / `haiRuleApiReply` | Another app to the engine and back | List, run, stop, pause, resume, set the Private Boolean, trigger | The engine's API token. See "HAI rules from other apps" in [api.md](api.md). |
 
 ## What the engine passes to each rule app

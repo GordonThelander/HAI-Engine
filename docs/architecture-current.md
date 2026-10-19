@@ -332,11 +332,11 @@ Which side is live is read from the two live states, not inferred from the phase
 
 | Item | Where | What |
 |---|---|---|
-| Registry | Engine `state` (`rtRegistry`) | One entry per rule: `ruleId`, `childId`, `state` (`staging`, `active`, `disabled`, `removed`), `epoch`, `ruleHash`, the active document, version history. Tombstones are pruned above a cap. Only the activation path and reconcile write it; the watchdog reads it. |
-| Candidates and claims | Engine `state` | Bounded store of submitted candidates (`open`, `claimed`, `consumed`, `expired`) and single-use activation claims with nonces. |
+| Registry | Engine `atomicState` (`rtRegistry`), with the challenges and versions: the claim and commit protocol's record, written at once | One entry per rule: `ruleId`, `childId`, `state` (`staging`, `active`, `disabled`, `removed`), `epoch`, `ruleHash`, the active document, version history. Tombstones are pruned above a cap. Only the activation path and reconcile write it; the watchdog reads it. |
+| Candidates and claims | Engine `state` (candidates, the log, the watchdog record; written once per execution) and `atomicState` (claims) | Bounded store of submitted candidates (`open`, `claimed`, `consumed`, `expired`) and single-use activation claims with nonces. |
 | Rule state | Each rule app's `state.rt` | The rule's world: run records, ledger, deadlines, trace, health, variables, Private Boolean, subscriptions, staged document, `rmSwitched`, `lightMark`, `allowHash`. Written once per execution (`rtEnd`), under a byte budget. |
 | Light mark | Returned by each rule app | `rtLight`: rule id, epoch, hash, paused, disabled, staged, and a `mark` string that moves whenever anything a person would see changed (epoch, run counter, last run and its length, last rejection and note, ledger size, blocked). The Engine reads a rule in full only when its mark moved. |
-| Summary | Engine `state.runtimeSummary`, and the `haiRuntimeSummary` location event | Each rule's name, state, version and recent runs; the last request's result; which hub variables rules may change. One copy is kept in state. The event is for listeners, because an app does not receive its own location events. |
+| Summary | Engine `state.runtimeSummary`, and the `haiRuntimeSummary` location event | Each rule's name, state, version and recent runs; the last request's result; which hub variables rules may change. One copy is kept in state. The event is for listeners. An app does receive its own location events when it subscribes to them (probed 2.5.2.139); the Engine does not subscribe to this one, and reads its state copy. |
 | Rule Machine paused cache | Engine `state.runtimeRmPaused` | Paused state of the Rule Machine rules that HAI rules or the ledger refer to. Read from one app-list read per watchdog pass. |
 | Rule backups | Engine `state` (index) and File Manager (`hai-backup-<yyyyMMdd>.json`) | A daily backup of every live rule's document, written only on a day a rule changed. The last ten are kept. |
 
@@ -829,7 +829,9 @@ every push, so a change to the feed cannot pass unnoticed.
 ## 9. Endpoints
 
 All paths are app OAuth endpoints: `http://<hub>/apps/api/<app id><path>?access_token=<token>`, and the
-cloud form through Hubitat's cloud relay. Each app has one OAuth token that reaches all of its paths. The
+cloud form through Hubitat's cloud relay. Each app has one OAuth token that reaches all of its paths. The rule end
+points and MCP refuse a request through the cloud relay (`request.requestSource` `cloud`) unless their own **Allow
+through Hubitat's cloud** is on (0.5.117, off by default); the editor and Migration pages answer either way. The
 full interface reference is [api.md](developer/api.md).
 
 ### 9.1 HAI Engine
@@ -859,9 +861,9 @@ Each route also needs the **audience secret** for its group (`aud` beside the to
 | `/editor/api/import` | POST | `editor` | Import a bundle as a draft. |
 | `/editor/api/draft` | GET, POST | `editor` | Read or write the drafts store; also the AI author's turns. |
 | `/endpoint/rules` | GET | `endpoint` | List HAI rules with ids and states. |
-| `/endpoint/rules/:id/:op` | GET, POST | `endpoint` | `run`, `stop`, `pause`, `resume`, `trigger` (Rule Machine's end point trigger). |
-| `/endpoint/rules/:id/:op/:value` | GET, POST | `endpoint` | `boolean/true` or `/false` (Private Boolean), `trigger/<value>` (read as `%value%`). |
-| `/endpoint/variables/:name/:value` | GET | `endpoint` | Set a hub variable that rules may change. |
+| `/endpoint/rules/:id/:op` | POST (GET only with Allow GET links) | `endpoint` | `run`, `stop`, `pause`, `resume`, `trigger` (Rule Machine's end point trigger). |
+| `/endpoint/rules/:id/:op/:value` | POST (GET only with Allow GET links) | `endpoint` | `boolean/true` or `/false` (Private Boolean), `trigger/<value>` (read as `%value%`). |
+| `/endpoint/variables/:name/:value` | POST (GET only with Allow GET links) | `endpoint` | Set a hub variable that rules may change. |
 
 Location-event API for other apps on the hub: `haiRuleApi` in, `haiRuleApiReply` out, with ops list, run,
 stop, pause, resume, set Private Boolean and trigger. Each request must carry the Engine's API token

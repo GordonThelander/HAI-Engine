@@ -724,6 +724,7 @@ body.no-hints .choice-hint.essential { display: block; }
 .menu-item:hover, .menu-item:focus-visible { background: var(--surface-2); }
 .menu-item.danger { color: var(--block); }
 .menu-item.warning { color: var(--warn); }
+.choice.risky .choice-name, .choice.risky .choice-hint { color: var(--warn); }
 .toast { display: flex; align-items: center; gap: 14px; border-radius: 12px; padding: 10px 12px 10px 16px; }
 .toast-ai { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--ai); color: var(--ai-text); border-radius: 12px; padding: 14px 22px; font-size: 15px; font-weight: 650; max-width: calc(100vw - 32px); z-index: 51; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25); text-align: center; }
 .toast-act { border: 0; background: transparent; color: var(--accent-weak); font-weight: 700; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
@@ -1101,7 +1102,6 @@ body.form-open { overflow: hidden; }
       </div>
       <div id="where" class="where" hidden aria-live="polite"></div>
       <div id="banner" class="banner" hidden></div>
-
       <section id="view-blocks" role="tabpanel" aria-labelledby="tab-blocks"></section>
       <section id="view-doc" role="tabpanel" aria-labelledby="tab-doc" hidden>
         <div class="doc-wrap">
@@ -1196,21 +1196,32 @@ body.form-open { overflow: hidden; }
   var BASE = location.pathname.replace(/\/editor\/?$/, '');
   var CHECK_DELAY = 600;
   var SLOW_CHECK_DELAY = 1500;
+  var VIA_QUERY = false;
   function api(route, opts) {
     opts = opts || {};
     var q = new URLSearchParams(opts.query || {});
-    if (TOKEN) q.set('access_token', TOKEN);
-    if (AUD) q.set('aud', AUD);
     var init = { method: opts.method || 'GET', credentials: 'same-origin', headers: {} };
+    if (VIA_QUERY) {
+      if (TOKEN) q.set('access_token', TOKEN);
+      if (AUD) q.set('aud', AUD);
+    } else {
+      if (TOKEN) init.headers['Authorization'] = 'Bearer ' + TOKEN;
+      if (AUD) init.headers['X-HAI-Aud'] = AUD;
+    }
     if (route !== 'fixed') init.cache = 'no-store';
     if (opts.body !== undefined) {
       init.headers['Content-Type'] = 'application/json';
       init.body = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body);
     }
-    return fetch(BASE + '/editor/api/' + route + '?' + q.toString(), init).then(function (res) {
+    var qs = q.toString();
+    return fetch(BASE + '/editor/api/' + route + (qs ? '?' + qs : ''), init).then(function (res) {
       return res.text().then(function (text) {
         var data = null;
         try { data = JSON.parse(text); } catch (e) { data = null; }
+        if (!VIA_QUERY && !opts.viaQueryRetry && TOKEN && (res.status === 401 || (res.status === 403 && data && data.error === 'WRONG_AUDIENCE'))) {
+          VIA_QUERY = true;
+          return api(route, Object.assign({}, opts, { viaQueryRetry: true }));
+        }
         if (!res.ok || !data || data.ok === false) {
           var msg = data && data.message ? data.message : 'The hub answered ' + res.status + ' and no explanation.';
           if (res.status === 401 || res.status === 403) msg = 'The hub refused this request. Open the editor again from the HAI Engine (Dev) settings page.';
@@ -3631,6 +3642,8 @@ body.form-open { overflow: hidden; }
     'byMode': ['Depending on the mode'],
     'flashSwitches': ['Flash', '$refs', 'on and off, each for', '$seconds', ',', '$times'],
     'deviceEnabled': ['$enabled', '$refs'],
+    'hubReboot': ['Reboot the hub'],
+    'hubShutdown': ['Shut down the hub'],
     'fade': ['Fade the', '$attribute', 'of', '$refs', 'to', '$to', 'over', '$seconds'],
     'stopGradual': ['Stop the fading or flashing:', '$what'],
     'track': ['Make', '$refs', 'follow the', '$attribute', 'of the device that started the run']
@@ -3678,6 +3691,8 @@ body.form-open { overflow: hidden; }
     'byMode': 'Different steps for each mode: set lights, colours or delays per mode, with steps for any other mode.',
     'flashSwitches': 'Flash any switch or light on and off, a number of times or until stopped, while the rule carries on.',
     'deviceEnabled': 'Disable devices so the hub ignores them, for every app, or enable them again. Each device is read back from the hub before the rule goes on.',
+    'hubReboot': 'Restart the hub. Every automation on it stops until it is back, a few minutes later.',
+    'hubShutdown': 'Turn the hub off. Nothing on it runs again until someone unplugs it and plugs it back in.',
     'fade': 'Change a level or colour temperature a step at a time over minutes or hours, while the rule carries on.',
     'stopGradual': 'End the fades and flashing this rule started.',
     'track': 'Make lights follow the device that started the run: on and off together, or at its level.',
@@ -3740,6 +3755,8 @@ body.form-open { overflow: hidden; }
     'fade': 'Example: fade Hall Light from 0 to 100% over 30 minutes, as a wake-up light.',
     'stopGradual': 'Example: Hall Motion becomes active, so the fade on Hall Light stops.',
     'deviceEnabled': 'Example: disable Hall Motion while the hall is painted, then enable it again.',
+    'hubReboot': 'Example: the hub reports a low memory warning, so it reboots at 3 in the morning. It runs only while "Allow rules to reboot or shut down the hub" is on in HAI Engine.',
+    'hubShutdown': 'Example: the UPS reports it is on battery, so the hub shuts down cleanly. It runs only while "Allow rules to reboot or shut down the hub" is on in HAI Engine.',
     'wait:delay': 'Example: turn Hall Light on, wait 5 minutes, then turn it off.',
     'wait:forEvent': 'Example: wait up to 10 minutes for Front Door to close, then lock it.',
     'wait:until': 'Example: wait until Hall Motion has been inactive for 5 minutes, then turn Hall Light off.',
@@ -4150,7 +4167,7 @@ body.form-open { overflow: hidden; }
   function stepChoice(e, onpick) {
     var sp = entrySpec(e);
     var b = h('button', {
-      type: 'button', class: 'choice', role: 'option', 'data-tip': e.tip || TIPS[e.key],
+      type: 'button', class: 'choice' + (e.risky ? ' risky' : ''), role: 'option', 'data-tip': e.tip || TIPS[e.key],
       disabled: !sp,
       onclick: function () { closePop(false); onpick(e); }
     },
@@ -5089,7 +5106,7 @@ body.form-open { overflow: hidden; }
     'repeat:every': 'rotate', 'repeat:while': 'rotate', 'repeat:until': 'rotate', stopRepeat: 'circle-stop', exit: 'circle-stop',
     'return': 'reply', comment: 'note-sticky', log: 'list', setVariable: 'square-root-variable', setRuleBoolean: 'toggle-off',
     controlRule: 'flag', http: 'globe', ping: 'satellite-dish', file: 'file-lines', hsm: 'shield-halved',
-    flashSwitches: 'bolt', deviceEnabled: 'power-off', fade: 'circle-half-stroke', stopGradual: 'circle-stop', track: 'link', capture: 'bookmark', restore: 'clock-rotate-left',
+    flashSwitches: 'bolt', deviceEnabled: 'power-off', hubReboot: 'rotate', hubShutdown: 'power-off', fade: 'circle-half-stroke', stopGradual: 'circle-stop', track: 'link', capture: 'bookmark', restore: 'clock-rotate-left',
     'trigger:schedule': 'clock', 'trigger:periodic': 'rotate', 'trigger:mode': 'house', 'trigger:hubVariable': 'square-root-variable',
     'trigger:ruleInvocation': 'flag', 'trigger:rulePaused': 'pause', 'trigger:endpoint': 'globe', 'trigger:hsmStatus': 'shield-halved',
     'trigger:hsmAlert': 'shield-halved', 'trigger:locationEvent': 'server', 'trigger:duration': 'hourglass-half',
@@ -5805,6 +5822,8 @@ body.form-open { overflow: hidden; }
       case 'file': use('op', 'name', 'text'); t(node.op ? vb(cap(decamel(node.op).toLowerCase())) : ph('choose what to do'), ' the file ', val('name', 'a file name'), node.op !== 'delete' && node.text !== undefined ? [': ', vb('"' + node.text + '"')] : ''); break;
       case 'cancelDelays': t("Cancel this rule's delayed actions that can be cancelled, and the steps they hold back"); break;
       case 'hsm': use('op'); t('Tell HSM to ', val('op', 'choose what to do')); break;
+      case 'hubReboot': t(vb('Reboot the hub')); break;
+      case 'hubShutdown': t(vb('Shut down the hub')); break;
       case 'deviceEnabled': use('refs', 'enabled'); t(vb(node.enabled === true ? 'Enable' : 'Disable'), ' ', devicesWords(node), node.enabled === true ? '' : ': the hub ignores them until enabled again'); break;
       case 'flashSwitches': use('refs', 'seconds', 'times'); t('Flash ', devicesWords(node), ', on and off for ', val('seconds', 'how long'), ' each, ', node.times !== undefined ? vb(node.times + ' times') : vb('until stopped')); break;
       case 'fade': use('refs', 'attribute', 'to', 'seconds'); t('Fade the ', vb(node.attribute === 'colorTemperature' ? 'colour temperature' : 'level'), ' of ', devicesWords(node), ' to ', val('to', 'a value'), ' over ', val('seconds', 'how long')); break;
@@ -6166,6 +6185,9 @@ body.form-open { overflow: hidden; }
     ['The hub', [
       { key: 'setMode', label: 'Change the mode' },
       { key: 'hsm', label: 'Tell HSM to arm or disarm' }]],
+    ['Risky: the whole hub', [
+      { key: 'hubReboot', label: 'Reboot the hub', hint: '\u26a0\ufe0f every automation stops until the hub is back', risky: true },
+      { key: 'hubShutdown', label: 'Shut down the hub', hint: '\u26a0\ufe0f it stays off until it is unplugged and plugged in again', risky: true, more: true }]],
     ['Messages and notes', [
       { key: 'log', label: 'Write to the log' },
       { key: 'comment', label: 'Note' }]],
@@ -6508,7 +6530,7 @@ body.form-open { overflow: hidden; }
     if (!isObj(node) || node.disabled || !RUN_STEP_TYPES[node.type]) return false;
     if (node.type === 'command' || node.type === 'customCommand') {
       var spec = cmdSpec(node.command);
-      if (spec && spec.risk && spec.risk !== 'none') return false;
+      if (!spec || (spec.risk && spec.risk !== 'none')) return false;
     }
     if (node.type === 'setVariable') {
       var ref = isObj(doc) && isObj(doc.refs) ? doc.refs[node.ref] : null;
@@ -7749,6 +7771,7 @@ body.form-open { overflow: hidden; }
           if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(copied, byHand); else byHand();
         } }, 'Copy')));
         ew.appendChild(h('p', { class: 'help' }, (liveRule() ? '' : 'It works once the rule is on the hub. ') +
+          'Call it with POST; a plain link (GET) works only with Allow GET links (Rule Machine-style) on, on the HAI Engine page. ' +
           'Add /value after /trigger to pass a value, which the rule reads as %value%. Keep it private: anyone with it can start this rule.'));
       } else ew.appendChild(h('p', { class: 'help' }, 'Open the HAI Engine app page for the address: the hub has not given it to this page.'));
       body.appendChild(ew);
@@ -8966,8 +8989,12 @@ body.form-open { overflow: hidden; }
       title: (open ? 'Runs the version on the hub, not your unsaved changes. ' : '') +
              'Runs the whole rule once, now, without waiting for its trigger and without asking its conditions. It does not start or stop the rule.' + stays,
       onclick: function () {
-        if (open) toast('Runs the version on the hub, not your unsaved changes.');
-        hubOp('runNow', r.id, open ? 'It ran the version on the hub, not your unsaved changes.' : '');
+        var go = function () {
+          if (open) toast('Runs the version on the hub, not your unsaved changes.');
+          hubOp('runNow', r.id, open ? 'It ran the version on the hub, not your unsaved changes.' : '');
+        };
+        var power = r.hubPower || (isObj(doc) && doc.id === r.id ? hubPowerOf(doc) : null);
+        if (power) hubPowerAsk(power, 'run', go); else go();
       } }, 'Run rule');
   }
   function hubActs(host, r, size) {
@@ -9189,8 +9216,10 @@ body.form-open { overflow: hidden; }
     };
     watching = setTimeout(tick, 500);
   }
-  function runOnHub() {
+  function runOnHub(confirmed) {
     if (busy) return;
+    var power = isObj(doc) && confirmed !== true ? hubPowerOf(doc) : null;
+    if (power && S.canSend && typeof doc.id === 'string' && !(check && check.status === 'blocked')) { hubPowerAsk(power, 'activate', function () { runOnHub(true); }); return; }
     if (!S.canSend) { toast('HAI is not ready to take rules from the editor yet. Open the HAI Engine app page once and press Done.', true); return; }
     if (!isObj(doc) || typeof doc.id !== 'string') return;
     if (!$('rtab-hub').hidden) setRTab('hub');
@@ -9219,6 +9248,28 @@ body.form-open { overflow: hidden; }
         watchHub(res.ruleId, Number(res.sentAt), 'run');
       }, function (err) { setBusy(false); toast('Not sent: ' + err.message, true); });
     });
+  }
+  function hubPowerOf(rule) {
+    var found = null;
+    (function walk(x) {
+      if (Array.isArray(x)) { x.forEach(walk); return; }
+      if (!isObj(x) || x.disabled === true) return;
+      if (x.type === 'hubShutdown') found = 'shutdown';
+      else if (x.type === 'hubReboot' && !found) found = 'reboot';
+      Object.keys(x).forEach(function (k) { if (k !== 'refs' && k !== 'condition') walk(x[k]); });
+    })([rule.actions, rule.onFailure, rule.onCancel]);
+    return found;
+  }
+  function hubPowerAsk(power, what, go) {
+    var does = power === 'shutdown' ? 'shuts down' : 'reboots';
+    var box = h('div', { class: 'sheet-box', role: 'alertdialog', 'aria-label': 'This rule ' + does + ' the hub' },
+      h('p', {}, h('strong', {}, '\u26a0\ufe0f This rule ' + does + ' the hub. '),
+        (what === 'run' ? 'Run it now only if you mean the hub to ' + (power === 'shutdown' ? 'shut down' : 'reboot') + ' when the rule reaches that step.'
+                        : 'Activate it only if you mean it to: whenever it reaches that step, the hub ' + (power === 'shutdown' ? 'turns off and stays off until it is unplugged and plugged in again.' : 'restarts, and every automation stops until it is back.')) +
+        ' It runs only while "Allow rules to reboot or shut down the hub" is on in HAI Engine.'),
+      h('button', { type: 'button', class: 'btn danger', dataset: { confirm: 'hubPower' }, onclick: function () { closeSheet(); go(); } }, what === 'run' ? 'Run it anyway' : 'Activate anyway'),
+      h('button', { type: 'button', class: 'btn', onclick: closeSheet }, 'Cancel'));
+    sheet(box);
   }
   function hubDelete(r) {
     if (busy) return;

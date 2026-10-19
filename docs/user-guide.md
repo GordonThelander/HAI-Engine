@@ -631,12 +631,17 @@ describe what it saw, and read `timeout` if it gave up. `%elapsed%` is how many 
 A rule's name can contain a hub variable too, like `Heating (%Target%)`.
 The same markers work in an HTTP address, headers and body, a ping's address, and a file's name and text.
 
-**HTTP, ping and files:** HTTP requests and pings may reach any address, and file steps may change any File
-Manager file except HAI's own. One address is still refused: a rule reaching one of the hub's own restart,
-shutdown, update, restore, reset, backup or delete pages through a value filled in when the rule runs, because
-then nobody saw which page it would call. To call this hub from one of its own rules, use
-`http://127.0.0.1:8080/...`: the hub's own LAN address on port 80 does not answer a call from an app on the
-same hub, and the step fails with 408.
+**HTTP, ping and files:** HTTP requests and pings may reach any other address, and file steps may change any File
+Manager file except HAI's own. Two kinds of address are refused, however the address was written: a hub's
+restart, shutdown, update, restore, reset, backup or delete pages, and a web request to this hub itself (its own
+address, `localhost` or `127.0.0.1`, at any port). Since 0.5.119 that includes a `.local` name (the hub answers
+as `hubitat.local`) and a name spelling out the hub's address, such as `127.0.0.1.nip.io`: give a device on your
+network by its IP address instead. A redirect is not followed; the step gets its 3xx status. The hub's own admin
+pages answer an app on the hub without a login, so a rule may not call them. The step fails and says why. To reboot or shut down the hub, use the **Reboot the hub** or
+**Shut down the hub** step instead (under **Risky: the whole hub**). The editor asks before a rule with one is
+activated or run, Run this step never runs one, and it works only while **Allow rules to reboot or shut down the
+hub** is on in HAI Engine (on unless you turn it off). A Rule Machine rule that reboots or shuts down its hub is
+copied with this step, after you tick **Copy it anyway** on its row.
 
 **Disable** (in a step's or trigger's **⋯** menu) keeps it in the rule but skips it, which is handy for
 trying things out. Rule Machine calls this disabling an action. HAI also lets you disable a trigger.
@@ -790,16 +795,17 @@ you turn it off), another app can list your
 HAI rules and run, stop, pause, resume or trigger them, or set their Private Boolean, as apps do with Rule
 Machine's RMUtils (docs/developer/api.md). Each request is logged. It cannot activate, change or remove a rule.
 
-**The other app needs HAI's API token (changed 13 October 2026).** Any app on your hub can send these
-requests, so each must now carry the API token shown under **Rule end points** on the HAI Engine page. A request
-without it is ignored, and HAI writes one warning to the Logs page for that app ("ignored a request from ... it
-carries no API token").
+**The other app needs HAI's API token (changed again with 0.5.119).** Any app on your hub can send these
+requests, and hear them, so each must be signed with the API token shown under **Rule end points** on the HAI
+Engine page; the token itself is no longer sent, because any app could read it there. HAI made a new token once
+when it updated to 0.5.119, since the old one had travelled in the open. A request that is not signed is ignored,
+and HAI writes one warning to the Logs page for that app ("ignored a request from ...").
 
 **If you already use another app with HAI, update it:**
 1. Open **HAI Engine**, then **Rule end points**, and press **Copy** beside **API token for other apps**.
 2. Paste the token into the other app. An app built on the HAI Rule API library has a **HAI API token**
-   setting for it; first update the library under **Libraries code** to the current `hai_rule_api.groovy`. For
-   any other app, ask its author to send the token as `token` in each request.
+   setting for it; first update the library under **Libraries code** to the current `hai_rule_api.groovy`, which
+   signs each request. For any other app, ask its author to sign requests as the developer documents describe.
 3. Try one request, such as listing your rules. If the Logs page still says "ignored a request", the token was not
    copied whole.
 
@@ -812,6 +818,16 @@ Like Rule Machine's end points, another system can act on your HAI rules with a 
 **Rule end points** section of the HAI Engine page shows the local address once you switch on **Let a web
 address run HAI rules**; it is off on a new install, and while it is off the address does nothing. It carries HAI Engine's access
 token, which also opens the editor, so keep it private.
+
+The address works on your home network. To use it from outside, for example a phone away from home, turn on
+**Allow through Hubitat's cloud** under it: the page then shows the cloud address too. Off (the default), a request
+through Hubitat's cloud is refused. The MCP address has its own switch of the same name.
+
+Listing the rules is an ordinary link. Every address that does something (run, stop, pause, resume, trigger, the
+Private Boolean, a hub variable) works only as a **POST** request (since 0.5.119), so a link that a browser, a link
+preview or a search engine opens on its own does nothing; a plain link answers "This end point changes something,
+so it takes POST". For a dashboard or device that can only open a plain link, as with Rule Machine's end points,
+turn on **Allow GET links (Rule Machine-style)** under the address; anything that opens the link then runs the rule.
 
 | Add to the address | What happens |
 |---|---|
@@ -1088,7 +1104,7 @@ What HAI has not built yet:
 | Feature | Why not yet |
 |---|---|
 
-Every row, with its evidence, is in [`ideation/rm51_parity.md`](../ideation/rm51_parity.md). These figures are generated from the same file as the hub's capability feed; do not edit them by hand.
+Every row, with its evidence, is in the parity tracker. These figures are generated from the same file as the hub's capability feed; do not edit them by hand.
 <!-- hai-status:end -->
 
 ## Appendix: Quick start

@@ -286,6 +286,21 @@ body.has-sel main.wrap { padding-bottom: 120px; }
 <script>
 var AUD = new URLSearchParams(location.search).get('aud') || '';
 var TOKEN = new URLSearchParams(location.search).get('access_token') || '';
+var EDITOR = (function () {
+  var ok = function (u) { return typeof u === 'string' && /^\/apps\/api\/\d+\/editor\?[^#\s]*$/.test(u) ? u : null; };
+  var m = /(?:^#|&)editor=([^&]*)/.exec(location.hash || '');
+  var url = null;
+  if (m) {
+    try { url = ok(decodeURIComponent(m[1])); } catch (e) { url = null; }
+    try { if (url) sessionStorage.setItem('haiEditorUrl', url); } catch (e) {  }
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {  }
+  }
+  if (!url) { try { url = ok(sessionStorage.getItem('haiEditorUrl')); } catch (e) { url = null; } }
+  if (!url) {
+    try { var o = window.opener; if (o && o.location.origin === location.origin) url = ok(o.location.pathname + o.location.search); } catch (e) { url = null; }
+  }
+  return url;
+})();
 var ROWS = [];
 var UPG = {};
 var RENAME = {};
@@ -1263,7 +1278,7 @@ function runAll(op, rules) {
 }
 function rowOf(id) { return ROWS.filter(function (r) { return r.rmId === id; })[0]; }
 function openEditor(url) {
-  if (!url) { note('The editor link is not ready yet. Reload the page.', true); return; }
+  if (!url) { note('Open the editor from the HAI Engine page, then open this page from the editor\'s Open Migration.', true); return; }
   var w = window.open(url, 'haiEditor');
   if (w) { try { w.focus(); } catch (e) {  } }
 }
@@ -1452,6 +1467,7 @@ function show(out) {
   if (ENV !== 'DEV') SHOW_TESTS = false;
   if (out.plan) PLAN = out.plan;
   if (out.links) LINKS = out.links;
+  LINKS.editor = EDITOR;
   if (out.provider) PROVIDER = out.provider;
   ASSESS = out.assess || {available: false, why: 'Needs Automation Map 2.4.36 or later.'};
   if (!PENDING && ASSESS.request) watch(ASSESS.request);

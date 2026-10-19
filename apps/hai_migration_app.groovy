@@ -35,29 +35,66 @@ path('/migration/api/assess') { action: [GET: 'migrationAssessGet', POST: 'migra
 path('/migration/api/plan') { action: [POST: 'migrationPlanPost'] }
 path('/migration/api/dryrun') { action: [POST: 'migrationDryRunPost'] }
 }
-def installed() { migrationInit() }
-def updated() { migrationInit() }
-def haiRotateAccess() {
+def installed() { migrationInit(); runIn(3, 'migrationAccessSync') }
+def updated() { migrationInit(); runIn(3, 'migrationAccessSync') }
+void migrationRotateToken() {
 String before = state.accessToken as String
 state.remove('accessToken')
 try { createAccessToken() }
 catch (Exception e) { if (before) state.accessToken = before; throw e }
-return true
 }
 String haiMigrationPageLink() {
 if (!state.accessToken) return null
 return "/apps/api/${app.id}/migration?access_token=${state.accessToken}&v=${MIGRATION_PAGE_SHA256.take(12)}".toString()
 }
+def migrationAccessSync() {
+for (int i = 0; i < 2; i++) {
+Map r = null
+try { r = parent?.haiMigrationAccess(haiMigrationPageLink()) } catch (Exception e) { return }
+int want = (r?.epoch ?: 0) as int
+if (want <= ((state.accessEpoch ?: 0) as int)) return
+try { migrationRotateToken() } catch (Exception e) { log.warn "HAI Migration: kept its old address (${e.message})"; return }
+state.accessEpoch = want
+}
+}
+def migrationRotateEvent(evt) { migrationAccessSync() }
 void migrationInit() {
 if (!state.accessToken) {
-try { createAccessToken() } catch (Exception e) { log.warn "HAI Migration: OAuth is not enabled for this app code (${e.message})" }
+try { createAccessToken() } catch (Exception e) { migrationOAuthSelf('HAI Migration') }
 }
 migrationAssessSubscribe(true)
+}
+boolean migrationOAuthSelf(String who) {
+if (state.oauthSelfAt != null && now() - (state.oauthSelfAt as long) < 60000L) return false
+state.oauthSelfAt = now()
+try {
+Object typeId = null
+httpGet([uri: "http://127.0.0.1:8080/installedapp/json/${app.id}".toString(), contentType: 'application/json', timeout: 10]) { resp ->
+Map d = resp?.data instanceof Map ? resp.data : [:]
+typeId = (d.app instanceof Map ? ((Map) d.app).id : null) ?: (d.appType instanceof Map ? ((Map) d.appType).id : null) ?:
+(d.installedApp instanceof Map ? (((Map) d.installedApp).appTypeId ?: ((Map) d.installedApp).appId) : null) ?: d.appTypeId
+}
+if (!("${typeId}" ==~ /\d{1,12}/)) { log.warn "${who}: OAuth could not be turned on (this app's code id was not found); turn it on in Apps Code"; return false }
+Object version = null
+httpGet([uri: "http://127.0.0.1:8080/app/ajax/code?id=${typeId}".toString(), contentType: 'application/json', timeout: 10]) { resp ->
+version = resp?.data instanceof Map ? ((Map) resp.data).version : null
+}
+if (version == null) { log.warn "${who}: OAuth could not be turned on (the code's version was not read); turn it on in Apps Code"; return false }
+httpPost([uri: 'http://127.0.0.1:8080/app/edit/update', requestContentType: 'application/x-www-form-urlencoded', timeout: 20,
+body: [id: typeId as String, version: version as String, oauthEnabled: 'true', webServerRedirectUri: '', displayLink: '',
+_action_update: 'Update']]) { resp -> }
+createAccessToken()
+log.info "${who}: OAuth was off for this app's code, so HAI turned it on"
+return true
+} catch (Exception e) {
+log.warn "${who}: OAuth is not enabled for this app code, and could not be turned on (${e.message}); turn it on in Apps Code"
+return false
+}
 }
 @Field static final String ASSESS_MIN_AM = '2.4.36'
 @Field static final String ASSESS_REQUEST_EVENT = 'haiAssessRequest'
 @Field static final String ASSESS_DONE_EVENT = 'haiAssessDone'
-@Field static final int ASSESS_SUBSCRIPTION = 1
+@Field static final int ASSESS_SUBSCRIPTION = 2
 @Field static final long ASSESS_WAIT_IDS_MS = 120000L
 @Field static final long ASSESS_WAIT_ALL_MS = 300000L
 void migrationAssessSubscribe(boolean force) {
@@ -65,6 +102,7 @@ if (!force && atomicState.assessSubscribed == ASSESS_SUBSCRIPTION) return
 try {
 unsubscribe()
 subscribe(location, ASSESS_DONE_EVENT, 'migrationAssessDone')
+subscribe(location, 'haiMigrationRotate', 'migrationRotateEvent')
 atomicState.assessSubscribed = ASSESS_SUBSCRIPTION
 } catch (Exception e) {
 log.warn "HAI Migration: could not listen for Automation Map's answers (${e.message})"
@@ -87,12 +125,18 @@ if (cur == null || cur.done != null) return null
 long wait = (cur.all == true || cur.progress != null) ? ASSESS_WAIT_ALL_MS : ASSESS_WAIT_IDS_MS
 return (now() - ((cur.sentAt ?: 0) as long)) < wait ? cur : null
 }
+String migBody() {
+Object b = null
+try { b = request?.body } catch (Exception e) { b = null }
+String t = b instanceof byte[] ? new String((byte[]) b, 'UTF-8') : b?.toString()
+return t == null || t.trim().isEmpty() ? '{}' : t
+}
 def migrationAssessGet() {
 return migrationRespond([ok: true, assess: state.assess])
 }
 def migrationAssessPost() {
 Map req = [:]
-try { req = new groovy.json.JsonSlurper().parseText(request?.body ?: '{}') } catch (Exception e) { req = [:] }
+try { req = new groovy.json.JsonSlurper().parseText(migBody()) } catch (Exception e) { req = [:] }
 Map am = state.assessAm instanceof Map ? state.assessAm : null
 String why = migrationAssessUnavailable(am)
 if (why != null) return migrationRespond([ok: false, code: 'MIGRATION_ASSESS_UNAVAILABLE', message: why])
@@ -133,7 +177,7 @@ state.assess = cur
 }
 def migrationPlanPost() {
 Map req = [:]
-try { req = new groovy.json.JsonSlurper().parseText(request?.body ?: '{}') } catch (Exception e) { req = [:] }
+try { req = new groovy.json.JsonSlurper().parseText(migBody()) } catch (Exception e) { req = [:] }
 if (req.withdraw == true) {
 state.remove('planApproved')
 return migrationRespond([ok: true, planApproved: null, message: 'Approval withdrawn.'])
@@ -145,7 +189,7 @@ return migrationRespond([ok: true, planApproved: state.planApproved, message: 'P
 }
 def migrationDryRunPost() {
 Map req = [:]
-try { req = new groovy.json.JsonSlurper().parseText(request?.body ?: '{}') } catch (Exception e) { req = [:] }
+try { req = new groovy.json.JsonSlurper().parseText(migBody()) } catch (Exception e) { req = [:] }
 String rmId = req.rmId as String
 Map facts = parent.haiMigrationFacts(true)
 Map refused = migrationContractRefusal(facts)
@@ -163,11 +207,14 @@ return render(status: 200, contentType: 'application/json', data: groovy.json.Js
 }
 def migrationMainPage() {
 migrationInit()
+migrationAccessSync()
 dynamicPage(name: 'migrationMainPage', title: 'HAI Migration (Preview)', install: true, uninstall: true) {
 section('Rule Machine') {
 if (state.accessToken) {
+String editor = null
+try { editor = parent?.haiEditorPageLink() as String } catch (Exception e) { editor = null }
 href name: 'haiMigrationHref', title: 'Rule Machine Migration Facility', required: false,
-url: "${getFullLocalApiServerUrl()}/migration?access_token=${state.accessToken}&v=${MIGRATION_PAGE_SHA256.take(12)}".toString(),
+url: "${haiMigrationPageLink()}${editor ? '#editor=' + URLEncoder.encode(editor, 'UTF-8') : ''}".toString(),
 description: 'Discover, select, assess and controlled migration of RM rules, with rollback option'
 } else {
 paragraph 'Enable OAuth for the HAI Migration app code, then press Done, to create the migration link.'
@@ -200,7 +247,7 @@ message: ("The rule list could not be built. It got as far as " +
 }
 def migrationApplyPost() {
 Map req = [:]
-try { req = new groovy.json.JsonSlurper().parseText(request?.body ?: '{}') } catch (Exception e) { req = [:] }
+try { req = new groovy.json.JsonSlurper().parseText(migBody()) } catch (Exception e) { req = [:] }
 String op = req.op as String
 List wanted = (req.rmIds instanceof List) ? ((List) req.rmIds).collect { it as String }
 : (req.rmId == null ? [] : [req.rmId as String])
@@ -258,7 +305,7 @@ return migrationRespond((out ?: [:]) + [state: migrationRowsAfter(wanted, reads)
 @Field static final int MIG_JOB_MAX = 500
 def migrationRunPost() {
 Map req = [:]
-try { req = new groovy.json.JsonSlurper().parseText(request?.body ?: '{}') } catch (Exception e) { req = [:] }
+try { req = new groovy.json.JsonSlurper().parseText(migBody()) } catch (Exception e) { req = [:] }
 String op = req.op as String
 if (!(op in ['clone', 'deleteClone'])) return migrationRespond([ok: false, code: 'MIGRATION_BAD_REQUEST', message: 'Only Clone and Delete run on the hub.'])
 List ids = ((req.rmIds instanceof List) ? req.rmIds : []).collect { it as String }.unique()
@@ -387,7 +434,20 @@ return null
 }
 }
 Object migrationRespond(Map out) {
-return render(status: (out?.ok ? 200 : 409), contentType: 'application/json', data: groovy.json.JsonOutput.toJson(out))
+String data = groovy.json.JsonOutput.toJson(out)
+if (data.length() * 3 > MIGRATION_CLOUD_MAX_BYTES && migrationViaCloud() && data.getBytes('UTF-8').length > MIGRATION_CLOUD_MAX_BYTES) {
+int kb = (int) Math.ceil(data.getBytes('UTF-8').length / 1024.0d)
+return render(status: 413, contentType: 'application/json', headers: ['Cache-Control': 'no-store'],
+data: groovy.json.JsonOutput.toJson([ok: false, code: 'TOO_LARGE_FOR_CLOUD',
+message: "This answer is ${kb} KB, more than Hubitat's cloud relay carries (about 128 KB). Open the Migration page on your home network.".toString()]))
+}
+return render(status: (out?.ok ? 200 : 409), contentType: 'application/json', data: data)
+}
+@Field static final int MIGRATION_CLOUD_MAX_BYTES = 120000
+boolean migrationViaCloud() {
+String src = null
+try { src = request?.requestSource as String } catch (Exception e) { src = null }
+return src != null && src.toLowerCase() == 'cloud'
 }
 @Field static final java.util.concurrent.ConcurrentHashMap MIGRATION_DECODE_CACHE = new java.util.concurrent.ConcurrentHashMap()
 @Field static final long MIGRATION_DECODE_TTL_MS = 120000L
@@ -546,10 +606,16 @@ Map migrationGatherState(Collection only = null, Map reads = null) {
 boolean reuse = reads != null && reads.containsKey('decode')
 state.migStep = 'the Rule Machine rule list'
 List rmRows = []
-if (reuse) rmRows = reads.rmRows
+String rmListWhy = null
+if (reuse) { rmRows = reads.rmRows; rmListWhy = reads.rmListWhy as String }
 else {
-try { rmRows = schemaRmRuleRows(RMUtils.getRuleList('5.0')) } catch (Exception e) { rmRows = [] }
-if (reads != null) reads.rmRows = rmRows
+try { rmRows = schemaRmRuleRows(RMUtils.getRuleList('5.0')) }
+catch (Exception e) {
+rmRows = []
+rmListWhy = (e.message ?: e.toString()) as String
+log.warn "HAI Migration: Rule Machine's rule list could not be read (${rmListWhy})"
+}
+if (reads != null) { reads.rmRows = rmRows; reads.rmListWhy = rmListWhy }
 }
 state.migStep = 'HAI Engine'
 Map facts = parent.haiMigrationFacts()
@@ -620,7 +686,7 @@ st.assess = [available: assessWhy == null, why: assessWhy, hint: migrationAssess
 decodeWrittenAt: decode?.writtenAt, request: migrationAssessOutstanding()]
 state.migStep = null
 st.links = [engine: parent?.id == null ? null : "/installedapp/configure/${parent.id}".toString(),
-editor: facts.editorUrl, devices: '/device/list',
+devices: '/device/list',
 map: st.amAppId == null ? null : "/installedapp/configure/${st.amAppId}".toString()]
 st.planApproved = state.planApproved
 st.source = [summary: [file: decode?.sourceFile, appVersion: decode?.sourceVersion, channel: decode?.sourceChannel,
@@ -635,6 +701,10 @@ if (detail?.sourceFile != null) {
 if (detailWhy != null) {
 ((List) st.notes).add(1, ("HAI could not read Automation Map's detailed decode, so there are no " +
 "readings of what each rule does: ${detailWhy}").toString())
+}
+if (rmListWhy != null) {
+st.rmListError = rmListWhy
+((List) st.notes).add(0, "Rule Machine's rule list could not be read (${rmListWhy}), so no Rule Machine rules are listed. This is not the same as having none: refresh the page, and if it persists, open Rule Machine to check it is installed and working.".toString())
 }
 if (facts.pausedWhy) {
 ((List) st.notes) << ("Whether each Rule Machine rule is paused could not be read: ${facts.pausedWhy}. " +
@@ -693,8 +763,11 @@ contentType: 'application/json', timeout: 10]) { resp ->
 if (resp?.status == 200) locals = rmLocalVariablesFrom(resp.data)
 }
 } catch (Exception e) { locals = null }
+String ownIp = null
+try { ownIp = location.hub?.localIP as String } catch (Exception e) { ownIp = null }
 Map made = rmDecodeTooOld(detail) ?: rmRebuild(dRule, (detail.rules ?: []), detail.hubVariables,
-(c.upgrades instanceof List) ? c.upgrades : null, locals)
+(c.upgrades instanceof List) ? c.upgrades : null, locals,
+ownIp ? [ownIp] : [])
 return made + [decodeSource: [channel: detail.sourceChannel, file: detail.sourceFile,
 scanAt: detail.generatedAt, writtenAt: detail.writtenAt]]
 },
@@ -702,6 +775,68 @@ importRule : { Map c -> parent.haiMigrationCall('importRule', c) }
 ]
 }
 @Field static final int LIMIT_PARALLEL_RUNS = 4
+String jsonCanonicalise(Object value, Map defaults = [:]) {
+StringBuilder out = new StringBuilder()
+jsonWrite(value, out, defaults, '')
+return out.toString()
+}
+String jsonHash(Object value, Map defaults = [:]) {
+byte[] bytes = jsonCanonicalise(value, defaults).getBytes('UTF-8')
+return MessageDigest.getInstance('SHA-256').digest(bytes).collect { String.format('%02x', it) }.join('')
+}
+void jsonWrite(Object value, StringBuilder out, Map defaults, String path) {
+if (value instanceof Map) {
+out.append('{')
+List keys = new ArrayList(((Map) value).keySet())
+Collections.sort(keys)
+boolean first = true
+keys.each { Object k ->
+String key = (String) k
+String childPath = path.isEmpty() ? key : (path + '.' + key)
+Object child = ((Map) value).get(key)
+if (defaults.containsKey(childPath) && defaults.get(childPath) == child) return
+if (!first) out.append(',')
+first = false
+jsonWriteString(key, out)
+out.append(':')
+jsonWrite(child, out, defaults, childPath)
+}
+out.append('}')
+return
+}
+if (value instanceof List) {
+out.append('[')
+boolean first = true
+((List) value).each { Object child ->
+if (!first) out.append(',')
+first = false
+jsonWrite(child, out, defaults, path)
+}
+out.append(']')
+return
+}
+if (value instanceof String) { jsonWriteString((String) value, out); return }
+if (value instanceof Boolean) { out.append(((Boolean) value) ? 'true' : 'false'); return }
+if (value instanceof BigDecimal) { out.append(((BigDecimal) value).stripTrailingZeros().toPlainString()); return }
+if (value instanceof Integer || value instanceof Long) { out.append(value.toString()); return }
+throw new Exception('not canonicalisable: ' + (value == null ? 'null' : value.toString()))
+}
+void jsonWriteString(String value, StringBuilder out) {
+out.append('"')
+for (int i = 0; i < value.length(); i++) {
+char c = value.charAt(i)
+if (c == ('"' as char)) { out.append('\\"') }
+else if (c == ('\\' as char)) { out.append('\\\\') }
+else if (c == ('\b' as char)) { out.append('\\b') }
+else if (c == ('\f' as char)) { out.append('\\f') }
+else if (c == ('\n' as char)) { out.append('\\n') }
+else if (c == ('\r' as char)) { out.append('\\r') }
+else if (c == ('\t' as char)) { out.append('\\t') }
+else if (c < 0x20) { out.append(String.format('\\u%04x', (int) c)) }
+else { out.append(c) }
+}
+out.append('"')
+}
 @Field static final List TIME_CRON_MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 @Field static final List TIME_CRON_DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 Map timeCronParse(Object text) {
@@ -791,6 +926,7 @@ pattern: '(?i)snow|sleet|flurr'],
 @Field static final List BUTTON_ACTIONS = ['pushed', 'held', 'doubleTapped', 'released']
 @Field static final List HSM_ARM_OPS = ['armAway', 'armHome', 'armNight', 'disarm', 'disarmAll', 'armAll', 'armRules', 'disarmRules', 'cancelAlerts']
 @Field static final List LOCATION_EVENTS = ['systemStart', 'severeLoad', 'zigbeeOff', 'zigbeeOn', 'zwaveCrashed', 'sunrise', 'sunset', 'sunriseTime', 'sunsetTime', 'lowMemory']
+@Field static final List HUB_POWER_TYPES = ['hubReboot', 'hubShutdown']
 @Field static final Map CATALOGUE = { Map dflt, Map diffs ->
 Map out = [:]
 diffs.each { k, v -> Map e = new LinkedHashMap(dflt); e.putAll((Map) v); out.put(k, e) }
@@ -874,8 +1010,71 @@ return out.sort { a, b -> (a.name as String) <=> (b.name as String) }
 }
 @Field static final Map HUB_VARIABLE_TYPES = [integer: 'number', bigdecimal: 'number', boolean: 'boolean',
 string: 'string', datetime: 'datetime']
+String schemaUrlHost(Object url) {
+java.util.regex.Matcher m = ((url ?: '') as String) =~ /^(?i)https?:\/\/(?:[^@\/?#]*@)?(\[[0-9a-fA-F:.]+\]|[^:\/?#]+)(?::\d{1,5})?(?:[\/?#].*)?$/
+return m.matches() ? m.group(1).toLowerCase() : null
+}
 boolean schemaHubMaintenance(Object url) {
 return url instanceof String && (url =~ /(?i)^https?:\/\/[^\/]+\/hub\/[^?#]*(reboot|shutdown|restart|update|restore|reset|backup|delete)/).find()
+}
+String schemaHubPowerOf(Object url) {
+java.util.regex.Matcher m = ((url ?: '') as String) =~ /(?i)^https?:\/\/[^\/?#]+\/hub\/(reboot|restart|shutdown)\/?(?:[?#].*)?$/
+if (!m.matches()) return null
+return m.group(1).toLowerCase() == 'shutdown' ? 'hubShutdown' : 'hubReboot'
+}
+boolean schemaHubSelfHost(Object host) {
+String h = ((host ?: '') as String).trim().toLowerCase()
+if (h.startsWith('[') && h.endsWith(']')) h = h.substring(1, h.length() - 1)
+if (h.endsWith('.')) h = h.substring(0, h.length() - 1)
+if (h.isEmpty()) return false
+if (h == 'localhost' || h.endsWith('.localhost')) return true
+if (h.contains(':')) {
+if (h.startsWith('::ffff:')) return schemaHubSelfHost(h.substring(7))
+return h ==~ /[0:]*:[0:]*1?/
+}
+if (!(h ==~ /(0x[0-9a-f]+|[0-9]+)(\.(0x[0-9a-f]+|[0-9]+)){0,3}/)) return false
+List parts
+try {
+parts = h.tokenize('.').collect { String x ->
+x.startsWith('0x') ? new BigInteger(x.substring(2) ?: '0', 16) : (x.length() > 1 && x.startsWith('0') ? new BigInteger(x, 8) : new BigInteger(x))
+}
+} catch (NumberFormatException e) { return false }
+BigInteger first = (BigInteger) parts[0]
+if (parts.size() == 1) return first.shiftRight(24) == 127G || first == 0G
+return first == 127G || (first == 0G && parts.every { it == 0G })
+}
+boolean schemaHubOwnHost(Object host, Collection own) {
+if (schemaHubSelfHost(host)) return true
+if (own == null || own.isEmpty()) return false
+String h = ((host ?: '') as String).trim().toLowerCase()
+if (h.startsWith('[') && h.endsWith(']')) h = h.substring(1, h.length() - 1)
+if (h.startsWith('::ffff:')) h = h.substring(7)
+if (h.endsWith('.')) h = h.substring(0, h.length() - 1)
+if (h.isEmpty()) return false
+String mine = schemaIpv4Dotted(h) ?: h
+return own.any { Object o ->
+String a = ((o ?: '') as String).trim().toLowerCase()
+a && (a == h || (schemaIpv4Dotted(a) ?: a) == mine)
+}
+}
+String schemaIpv4Dotted(String h) {
+if (h == null || !(h ==~ /(0x[0-9a-f]+|[0-9]+)(\.(0x[0-9a-f]+|[0-9]+)){0,3}/)) return null
+List parts
+try {
+parts = h.tokenize('.').collect { String x ->
+x.startsWith('0x') ? new BigInteger(x.substring(2) ?: '0', 16) : (x.length() > 1 && x.startsWith('0') ? new BigInteger(x, 8) : new BigInteger(x))
+}
+} catch (NumberFormatException e) { return null }
+BigInteger last = (BigInteger) parts[-1]
+List head = parts.size() > 1 ? parts[0..-2] : []
+if (head.any { ((BigInteger) it) > 255G }) return null
+int rest = 4 - head.size()
+if (last >= 256G.pow(rest)) return null
+List bytes = head.collect { (it as BigInteger).intValue() }
+List tail = []
+BigInteger v = last
+rest.times { tail.add(0, v.mod(256G).intValue()); v = v.divide(256G) }
+return (bytes + tail).join('.')
 }
 @Field static final Map BUTTON_CAPABILITY = [pushed: 'PushableButton', held: 'HoldableButton',
 doubleTapped: 'DoubleTapableButton', released: 'ReleasableButton']
@@ -1101,7 +1300,7 @@ return "the trigger \"${said}\"".toString()
 @Field static final int MIG_CONFIRM_TRIES = 3
 @Field static final long MIG_CONFIRM_GAP_MS = 250L
 @Field static final String MIGRATION_PAGE_FILE = 'hai-migration.html'
-@Field static final String MIGRATION_PAGE_SHA256 = '59b2c08ed6492fd34afd58524d6da7d21165d3286a9d581b41064b3a66f243b9'
+@Field static final String MIGRATION_PAGE_SHA256 = 'b3c7accc08718c98d7bb4f6f4ffd3b06c5c3eef09c1308c537c90f6d4b6477aa'
 @Field static final String MIG_PROV_OK = 'ok'
 @Field static final String MIG_PROV_PARTIAL = 'partial'
 @Field static final String MIG_PROV_ABSENT = 'absent'
@@ -1371,12 +1570,12 @@ message: ("This rule uses ${names.size() == 1 ? 'a device' : names.size() + ' de
 Map rebuild = null
 boolean devicesBlocked = warnings.any { ((Map) it).kind == 'devices' }
 if (dRule != null && conds?.ok == true && !devicesBlocked) {
-Map made = rmDecodeTooOld(detail) ?: rmRebuild(dRule, (detail?.rules ?: []), detail?.hubVariables)
+Map made = migRebuildCached(dRule, detail, limits)
 rebuild = made.ok == true
-? [ok: true, triggers: ((List) made.doc.triggers).size(), steps: ((List) made.doc.actions).size(),
+? [ok: true, triggers: made.triggers, steps: made.steps,
 invoked: made.invoked == true, skipped: made.skipped, behaviour: made.behaviour]
 : [ok: false, code: made.code, message: made.message]
-if (made.ok == true && limits != null) warnings.addAll(migPermissionBlocks((Map) made.doc, limits))
+if (made.ok == true && limits != null) warnings.addAll(migPermissionBlocksFrom((Map) made.perm, limits))
 if (made.ok == true && made.hubPower != null) {
 Map line = ((List) (made.behaviour ?: [])).find { ((Map) it).key == 'hubPower' }
 warnings << [kind: 'hubPower', names: ['the hub'], blocking: false,
@@ -1428,17 +1627,44 @@ if (dRule == null) return null
 String text = groovy.json.JsonOutput.toJson([t: dRule.triggers, c: dRule.conditions, e: dRule.expressions, a: dRule.actions])
 return java.security.MessageDigest.getInstance('SHA-256').digest(text.getBytes('UTF-8')).toList().take(6).collect { String.format('%02x', it) }.join('')
 }
-List migPermissionBlocks(Map doc, Map limits) {
-List out = []
+@Field static final java.util.concurrent.ConcurrentHashMap MIG_REBUILD_CACHE = new java.util.concurrent.ConcurrentHashMap()
+@Field static final int MIG_REBUILD_CACHE_MAX = 400
+Map migRebuildCached(Map dRule, Map detail, Map limits) {
+String file = detail == null ? null : [detail.sourceFile, detail.writtenAt, detail.generatedAt, detail.sourceVersion].join('|')
+String key = null
+if (file != null && (detail.writtenAt != null || detail.generatedAt != null)) {
+if (MIG_REBUILD_CACHE.get('file') != file) { MIG_REBUILD_CACHE.clear(); MIG_REBUILD_CACHE.put('file', file) }
+String one = null
+try { one = jsonHash(dRule) } catch (Exception e) { one = null }
+if (one != null) key = "${one}|${((Collection) (limits?.hubAddresses ?: [])).join(',')}".toString()
+}
+Object had = key == null ? null : MIG_REBUILD_CACHE.get(key)
+if (had instanceof Map) {
+Map copy = new LinkedHashMap((Map) had)
+if (copy.behaviour instanceof List) copy.behaviour = new ArrayList((List) copy.behaviour)
+return copy
+}
+Map made = rmDecodeTooOld(detail) ?: rmRebuild(dRule, (detail?.rules ?: []), detail?.hubVariables, null, null,
+(Collection) limits?.hubAddresses)
+Map kept = made.ok == true
+? [ok: true, triggers: ((List) made.doc.triggers).size(), steps: ((List) made.doc.actions).size(), invoked: made.invoked == true,
+skipped: made.skipped, behaviour: made.behaviour, hubPower: made.hubPower, perm: migPermissionFacts((Map) made.doc)]
+: [ok: false, code: made.code, message: made.message]
+if (key != null && MIG_REBUILD_CACHE.size() < MIG_REBUILD_CACHE_MAX) MIG_REBUILD_CACHE.put(key, kept)
+return kept
+}
+Map migPermissionFacts(Map doc) {
 Map refs = (doc?.refs instanceof Map ? doc.refs : [:])
 Set written = [] as Set
 boolean setsMode = false
+boolean powers = false
 Closure walk
 walk = { Object o ->
 if (o instanceof List) { ((List) o).each { walk(it) }; return }
 if (!(o instanceof Map)) return
 Map m = o
 if (m.type == 'setMode') setsMode = true
+if (HUB_POWER_TYPES.contains(m.type)) powers = true
 if (m.type == 'setVariable' && m.ref instanceof String) written << m.ref
 if ((m.type == 'runRule' || m.type == 'http') && m.result instanceof String) written << m.result
 if (m.type == 'ping' && m.into instanceof Map) ((Map) m.into).values().each { if (it instanceof String) written << it }
@@ -1446,11 +1672,18 @@ m.each { Object k, Object v -> if (v instanceof Map || v instanceof List) walk(v
 }
 walk(doc?.actions)
 walk(doc?.onFailure)
+List hubWritten = written.collect { Object k -> refs.get(k) }
+.findAll { Map r -> r != null && r.kind == 'variable' && (r.scope ?: 'hub') == 'hub' }
+.collect { Map r -> (r.name ?: '') as String }
+return [hubWritten: hubWritten, setsMode: setsMode, powers: powers]
+}
+List migPermissionBlocksFrom(Map facts, Map limits) {
+List out = []
+boolean setsMode = facts?.setsMode == true
+boolean powers = facts?.powers == true
 if (limits.writable instanceof Collection) {
 Set ok = ((Collection) limits.writable).collect { it.toString() } as Set
-List names = written.collect { Object k -> refs.get(k) }
-.findAll { Map r -> r != null && r.kind == 'variable' && (r.scope ?: 'hub') == 'hub' && !ok.contains((r.name ?: '') as String) }
-.collect { Map r -> r.name as String }.unique().sort()
+List names = ((List) (facts?.hubWritten ?: [])).findAll { !ok.contains(it as String) }.collect { it as String }.unique().sort()
 if (!names.isEmpty()) {
 out << [kind: 'variables', names: names, blocking: true,
 message: ("This rule changes ${names.size() == 1 ? 'a hub variable' : names.size() + ' hub variables'} HAI rules may not change: " +
@@ -1461,6 +1694,10 @@ message: ("This rule changes ${names.size() == 1 ? 'a hub variable' : names.size
 if (setsMode && limits.modeAllowed == false) {
 out << [kind: 'mode', names: ['the mode'], blocking: true,
 message: 'This rule sets the mode, and HAI rules may not. Turn on "Allow rules to change the mode" on the HAI Engine page first. HAI will not copy this rule until then.']
+}
+if (powers && limits.hubPowerAllowed == false) {
+out << [kind: 'hubPowerOff', names: ['the hub'], blocking: true,
+message: 'This rule reboots or shuts down the hub, and HAI rules may not. Turn on "Allow rules to reboot or shut down the hub" on the HAI Engine page first. HAI will not copy this rule until then.']
 }
 return out
 }
@@ -1695,8 +1932,16 @@ Map second = toHai
 ? migCall(plat, 'haiRuleOp', [ruleId: row.haiId, op: 'enable'])
 : migCall(plat, 'rmAction', [ids: [row.rmId], action: 'resumeRule'])
 if (second?.ok != true) {
-return [ok: false, code: 'MIGRATION_HALF_DONE', op: op,
-message: "The active rule was stopped, but its replacement did not start: ${second?.message ?: 'unknown error'}. Both copies should now be inactive; check their actual states before retrying.".toString()]
+Map back = null
+try {
+back = toHai ? migCall(plat, 'rmAction', [ids: [row.rmId], action: 'resumeRule'])
+: migCall(plat, 'haiRuleOp', [ruleId: row.haiId, op: 'enable'])
+} catch (Exception ignored) { back = null }
+String kept = back?.ok == true
+? " The ${toHai ? 'Rule Machine rule' : 'HAI copy'} was started again, so it is the one running."
+: ' Both copies may now be inactive; check their actual states before retrying.'
+return [ok: false, code: 'MIGRATION_HALF_DONE', op: op, restored: back?.ok == true,
+message: "The active rule was stopped, but its replacement did not start: ${second?.message ?: 'unknown error'}.${kept}".toString()]
 }
 if (toHai) {
 return [ok: true, op: op, phase: 'switched', confirmed: true, rmWasPaused: row.rmPaused == true,
@@ -2097,11 +2342,15 @@ return [rows: take, skipped: skip]
 @Field static final List HAM_SCHEMAS = [1, 2, 3, 4]
 @Field static final int HAM_SCHEMA = 3
 @Field static final int HAM_VOCABULARY = 2
+String hamAmChannel(String channel) {
+if (channel == null) return null
+return channel in ['production', 'preview'] ? 'production' : 'dev'
+}
 String hamFileFor(String channel) {
-return channel == 'production' ? 'ham-decode.json' : 'ham-decode-dev.json'
+return hamAmChannel(channel) == 'production' ? 'ham-decode.json' : 'ham-decode-dev.json'
 }
 String hamDetailFileFor(String channel) {
-return channel == 'production' ? 'ham-decode-detail.json' : 'ham-decode-detail-dev.json'
+return hamAmChannel(channel) == 'production' ? 'ham-decode-detail.json' : 'ham-decode-detail-dev.json'
 }
 Map hamDecode(Map plat, String channel) {
 return hamRead(plat, channel, HAM_CONTRACT, hamFileFor(channel))
@@ -2116,7 +2365,7 @@ Map scan = (h.scan instanceof Map ? h.scan : [:])
 return h.contract == (detail ? HAM_DETAIL_CONTRACT : HAM_CONTRACT) &&
 HAM_SCHEMAS.contains(h.contractSchemaVersion as Integer) &&
 ((h.rmConstructVocabularyVersion as Integer) in [1, HAM_VOCABULARY]) &&
-(inst.buildChannel == null || channel == null || inst.buildChannel == channel) &&
+(inst.buildChannel == null || channel == null || inst.buildChannel == hamAmChannel(channel)) &&
 h.ok != false && scan.status != 'failed'
 }
 Map hamRead(Map plat, String channel, String wantContract, String name) {
@@ -2163,7 +2412,7 @@ return hamNo('HAM_VOCABULARY', ("Automation Map describes Rule Machine with voca
 }
 Map inst = (doc.instance ?: [:])
 String theirs = inst.buildChannel as String
-if (theirs != null && channel != null && theirs != channel) {
+if (theirs != null && channel != null && theirs != hamAmChannel(channel)) {
 return hamNo('HAM_CHANNEL', ("This decode came from the ${theirs} Automation Map and HAI is ${channel}. " +
 'Both are installed on this hub and they hold different estates.').toString(),
 [instance: inst])
@@ -2434,14 +2683,14 @@ return rmNo('RM_DECODE_TOO_OLD',
 'while a condition holds. Update Automation Map to 2.4.9 or later and rescan before copying a rule.').toString())
 }
 Map rmRebuild(Map detailRule, List allRules = null, Map hubVariableTypes = null, Collection upgrades = null,
-Map localVariables = null) {
+Map localVariables = null, Collection hubAddresses = null) {
 Map unread = rmUnreadable(detailRule)
 if (unread != null) return unread
 Map t = rmTriggers(detailRule, allRules)
 if (t.ok != true) return t
 Map c = rmConditions(detailRule)
 if (c.ok != true) return c
-Map a = rmActions(detailRule, allRules)
+Map a = rmActions(detailRule, allRules, hubAddresses)
 if (a.ok != true) return a
 String rmId = rmBareId(detailRule.id)
 Map doc = [schema : RM_HAI_SCHEMA,
@@ -2541,25 +2790,29 @@ if (st.type == 'wait' && st.waitKind in ['forEvents', 'until']) waits = true
 if (st.type == 'if') anyIf = true
 }
 List power = []
+boolean viaWeb = false
 rmEachStep((List) doc.actions) { Map st ->
-if (st.type == 'http' && schemaHubMaintenance(st.url)) power << (st.url as String)
+if (st.type == 'hubShutdown') power << 'shutdown'
+else if (st.type == 'hubReboot') power << 'reboot'
+else if (st.type == 'http' && schemaHubMaintenance(st.url)) { power << (st.url as String); viaWeb = true }
 }
 if (!power.isEmpty()) {
 boolean ok = chosen.contains('hubPower')
 String low = power.join(' ').toLowerCase()
 String does = low.contains('shutdown') ? 'shuts down' : (low.contains('reboot') || low.contains('restart')) ? 'reboots'
 : 'runs a maintenance page on'
+String sends = viaWeb ? " (it sends ${power.find { (it as String).contains('/') }})".toString() : ''
 doc.hubPower = power
 lines << [key: 'hubPower', differs: false, warn: !ok,
 text: ok
-? "You chose to copy it: like the Rule Machine rule, this copy ${does} your hub (${power[0]}).".toString()
-: ("Warning: this rule ${does} your hub (it sends ${power[0]}). Tick \"Copy it anyway\" below " +
+? "You chose to copy it: like the Rule Machine rule, this copy ${does} your hub${sends}.".toString()
+: ("Warning: this rule ${does} your hub${sends}. Tick \"Copy it anyway\" below " +
 'if you want the HAI copy to do the same; without the tick, Copy leaves this rule alone.').toString(),
 upgrade: [key: 'hubPower', chosen: ok,
 label: "Copy it anyway, including the step that ${does} the hub".toString(),
-tip: 'The HAI copy sends this request to your hub whenever the rule reaches that step, exactly as ' +
-'the Rule Machine rule does. A restart or shutdown stops everything on the hub, so only tick ' +
-'this if that is what you want.']]
+tip: "The HAI copy ${does} your hub whenever the rule reaches that step, exactly as " +
+'the Rule Machine rule does, while "Allow rules to reboot or shut down the hub" is on in HAI ' +
+'Engine. A restart or shutdown stops everything on the hub, so only tick this if that is what you want.']]
 }
 if (delays && !waits) {
 if (chosen.contains('restart')) {
@@ -3877,7 +4130,7 @@ case 'getPollSwitch': out = rmActPlainCommand(act.method as String, ops); break
 case 'getChime': out = rmActChime(ops); break
 case 'getSetMode': out = rmActSetMode(ops); break
 case 'getComment': out = rmActComment(ops); break
-case 'getHTTPPost': out = rmActHttpPost(ops); break
+case 'getHTTPPost': out = rmActHttpPost(ops, ruleCtx); break
 case 'getOCGarage': out = rmActGarage(ops); break
 case 'getToggleSwitch': out = rmActSwitch(ops); break
 case 'getToggleDimmer': out = rmActToggleLevel(ops); break
@@ -3886,7 +4139,7 @@ case 'getShadePosition': out = rmActShadePosition(ops); break
 case 'getAdjustFan': out = rmActDeviceCommand(ops, 'cycleSpeed', 'fan'); break
 case 'getExitRule': out = [ok: true, steps: [[type: 'exit']]]; break
 case 'getStopRepeat': out = [ok: true, steps: [[type: 'stopRepeat']]]; break
-case 'getHTTPGet': out = rmActHttpPost(ops + [method: 'get']); break
+case 'getHTTPGet': out = rmActHttpPost(ops + [method: 'get'], ruleCtx); break
 case 'getPingIP': out = rmActPing(ops); break
 case 'getWriteLocalFile':
 case 'getAppendLocalFile':
@@ -4140,11 +4393,12 @@ String text = ops.text as String
 if (text == null) return rmNo('RM_ACT_LOG_TEXT', 'This log action has nothing to log.')
 return [ok: true, steps: [[type: 'log', text: text]]]
 }
-Map rmActions(Map detailRule, List allRules = null) {
+Map rmActions(Map detailRule, List allRules = null, Collection hubAddresses = null) {
 if (detailRule == null) return rmNo('RM_RULE_MISSING', 'Automation Map holds no detail for this rule.')
 List acts = (detailRule.actions instanceof List) ? detailRule.actions : []
 Map ruleCtx = [captured: rmCapturedRefs(acts)]
 if (allRules != null) ruleCtx.knownRules = allRules.collect { rmBareId(((Map) it).id) } as Set
+if (hubAddresses != null) ruleCtx.hubAddresses = hubAddresses
 Set actionConds = acts.collect { rmActCondSlot(((Map) it).condition) }.findAll { it != null } as Set
 Map conv = rmConditions(detailRule, actionConds)
 if (conv.ok != true) return conv
@@ -4769,9 +5023,13 @@ return [ok: true, steps: [[type: 'hsm', op: op]]]
 Map rmActComment(Map ops) {
 return [ok: true, steps: [[type: 'comment', text: (ops.text ?: '') as String]]]
 }
-Map rmActHttpPost(Map ops) {
+Map rmActHttpPost(Map ops, Map ruleCtx = null) {
 String url = ops.url as String
 if (url == null || url.trim().isEmpty()) return rmNo('RM_ACT_HTTP_URL', 'This HTTP request has no address.')
+String power = url.contains('%') ? null : schemaHubPowerOf(url)
+if (power != null && schemaHubOwnHost(schemaUrlHost(url), (Collection) ruleCtx?.hubAddresses)) {
+return [ok: true, steps: [[type: power]]]
+}
 Map step = [type: 'http', method: ((ops.method ?: 'post') as String), url: url]
 if (ops.body != null) step.body = ops.body as String
 if (ops.contentType != null) step.contentType = ops.contentType as String

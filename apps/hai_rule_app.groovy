@@ -203,7 +203,7 @@ currentState: { Object dev, Object attr -> ruleCurrent(dev as String, attr as St
 currentFresh: { Object dev, Object attr -> ruleCurrent(dev as String, attr as String, true) },
 driver : { Object dev -> ruleDevice(dev as String)?.typeName?.toString() },
 command : { List a -> ruleCommand(a[0] as String, a[1] as String, a[2]) },
-listen : { Object dev, Object attr -> ruleListen(dev as String, attr as String) },
+listen : { Object dev, Object attr, Object every = false -> ruleListen(dev as String, attr as String, every == true) },
 unlistenAll : { Object u -> unsubscribe() },
 timerAt : { List a -> runOnce(new Date(a[0] as long), a[1] as String, [data: a[2], overwrite: false]) },
 unscheduleHandler: { Object h -> unschedule(h as String) },
@@ -220,20 +220,21 @@ variable : { Object name -> def g = getGlobalVar(name as String); g == null ? nu
 setVariable : { List a -> if (setGlobalVar(a[0] as String, a[1]) == false) throw new Exception("the hub refused to set the variable ${a[0]}".toString()) },
 announceInvoke: { Map call ->
 sendLocationEvent(name: RT_INVOKE_EVENT, value: call.target as String, isStateChange: true, displayed: false,
-data: groovy.json.JsonOutput.toJson([from: call.from, run: call.run, depth: call.depth, caller: call.caller, input: call.input, key: ruleKey()]),
+data: ruleSigned(RT_INVOKE_EVENT, call.target, [from: call.from, run: call.run, depth: call.depth, caller: call.caller, input: call.input]),
 descriptionText: "HAI rule ${call.from} runs ${call.target}".toString())
 },
 announceControl: { Map call ->
 sendLocationEvent(name: RT_CONTROL_EVENT, value: call.target as String, isStateChange: true, displayed: false,
-data: groovy.json.JsonOutput.toJson([op: call.op, value: call.value, from: call.from, depth: call.depth, key: ruleKey()]),
+data: ruleSigned(RT_CONTROL_EVENT, call.target, [op: call.op, value: call.value, from: call.from, depth: call.depth]),
 descriptionText: "HAI rule ${call.from}: ${call.op} ${call.target}".toString())
 },
 log : { Map line -> line.level == 'warn' ? log.warn(line.text as String) : log.info(line.text as String) },
 setMode : { Object mode -> location.setMode(mode as String) },
 setHsm : { Object op -> sendLocationEvent(name: 'hsmSetArm', value: op as String) },
+hubPower : { Object op -> ruleHubPower(op as String) },
 announceReturn: { Map call ->
 sendLocationEvent(name: RT_RETURN_EVENT, value: call.rule as String, isStateChange: true, displayed: false,
-data: groovy.json.JsonOutput.toJson([run: call.run, value: call.value, how: call.how, key: ruleKey()]),
+data: ruleSigned(RT_RETURN_EVENT, call.rule, [run: call.run, value: call.value, how: call.how]),
 descriptionText: "HAI rule answered ${call.rule}".toString())
 },
 announceCommitted: { Map n ->
@@ -243,21 +244,16 @@ descriptionText: "HAI rule ${n.ruleId} committed version ${n.epoch}".toString())
 },
 announcePaused: { Map call ->
 sendLocationEvent(name: RT_PAUSED_EVENT, value: call.rule as String, isStateChange: true, displayed: false,
-data: groovy.json.JsonOutput.toJson([paused: call.paused == true, key: ruleKey()]),
+data: ruleSigned(RT_PAUSED_EVENT, call.rule, [paused: call.paused == true]),
 descriptionText: "HAI rule ${call.rule} ${call.paused ? 'paused' : 'resumed'}".toString())
 },
 rmAction : { Map call -> RMUtils.sendAction((List) call.ids, call.action as String, app.label, '5.0') },
 appDisable : { Map call ->
 String body = groovy.json.JsonOutput.toJson([id: call.appId, disable: call.disable == true])
-Map res = [:]
-httpPost([uri: 'http://127.0.0.1:8080/installedapp/disable', contentType: 'application/json',
-requestContentType: 'application/json', body: body, timeout: 20]) { resp ->
-res = [status: resp?.status]
-}
-if (!(res.status in [200, 201, 202, 204])) {
-throw new Exception("the hub refused to ${call.disable == true ? 'disable' : 'enable'} app ${call.appId} (HTTP ${res.status})")
-}
-return res
+asynchttpPost('haiAppDisableReply', [uri: 'http://127.0.0.1:8080/installedapp/disable', contentType: 'application/json',
+requestContentType: 'application/json', body: body, timeout: 20],
+[appId: call.appId as String, disable: call.disable == true, run: call.run as String])
+return [sent: true]
 },
 useVariables: { Object names ->
 removeAllInUseGlobalVar()
@@ -265,6 +261,7 @@ if (names) addInUseGlobalVar((List) names)
 state.usesHubVars = names ? true : false
 },
 net : { Map req -> ruleNet(req) },
+hubAddresses: { Object u -> String ip = null; try { ip = location.hub?.localIP as String } catch (Exception e) { ip = null }; ip ? [ip] : [] },
 file : { Map req -> ruleFile(req) },
 readFile : { Object name ->
 byte[] b = null
@@ -279,13 +276,32 @@ if (req.kind == 'ping') {
 runInMillis(1, 'haiPing', [data: data + [host: req.host], overwrite: false])
 return
 }
-Map params = [uri: req.url, timeout: req.timeoutSeconds]
+Map params = [uri: req.url, timeout: req.timeoutSeconds, followRedirects: false]
 if (req.headers) params.headers = req.headers
 if (req.method == 'post') {
 params.requestContentType = req.contentType
 params.body = req.body
-asynchttpPost('haiHttpReply', params, data)
-} else asynchttpGet('haiHttpReply', params, data)
+}
+try { ruleHttpSend(req.method == 'post', params, data) }
+catch (Exception e) {
+if (!((e.message ?: '') as String).contains('followRedirects')) throw e
+params.remove('followRedirects')
+ruleHttpSend(req.method == 'post', params, data)
+}
+}
+void ruleHttpSend(boolean post, Map params, Map data) {
+if (post) asynchttpPost('haiHttpReply', params, data) else asynchttpGet('haiHttpReply', params, data)
+}
+void ruleHubPower(String op) {
+String url = op == 'shutdown' ? 'http://127.0.0.1:8080/hub/shutdown' : op == 'reboot' ? 'http://127.0.0.1:8080/hub/reboot' : null
+if (url == null) throw new Exception("'${op}' is not a hub power operation".toString())
+log.warn "HAI rule ${app.label}: ${op == 'shutdown' ? 'shutting down' : 'rebooting'} the hub, as the rule asks"
+asynchttpPost('haiHubPowerReply', [uri: url, requestContentType: 'application/json', body: '{}', timeout: 20], [op: op])
+}
+void haiHubPowerReply(resp, Map data) {
+Integer status = null
+try { status = resp?.status as Integer } catch (Exception e) { status = null }
+if (status == null || !(status in [200, 201, 202, 204])) log.warn "HAI rule ${app.label}: the hub answered the ${data?.op} with ${status ?: 'no status'}"
 }
 void ruleFile(Map req) {
 String name = req.name as String
@@ -303,14 +319,14 @@ def ruleDevice(String dev) {
 String want = rtBareId(dev)
 return ((settings.ruleDevices ?: []) as List).find { it?.id?.toString() == want }
 }
-void ruleListen(String dev, String attr) {
+void ruleListen(String dev, String attr, boolean every = false) {
 if (dev == RT_LOCATION) {
 if (attr == 'mode') subscribe(location, 'mode', 'haiMode')
-if (attr == RT_INVOKE_EVENT) subscribe(location, RT_INVOKE_EVENT, 'haiInvoked')
-if (attr == RT_CONTROL_EVENT) subscribe(location, RT_CONTROL_EVENT, 'haiControlled')
+if (attr == RT_INVOKE_EVENT) subscribe(location, ruleAddressed(RT_INVOKE_EVENT), 'haiInvoked')
+if (attr == RT_CONTROL_EVENT) subscribe(location, ruleAddressed(RT_CONTROL_EVENT), 'haiControlled')
 if (attr == RT_PAUSED_EVENT) subscribe(location, RT_PAUSED_EVENT, 'haiRulePausedEvent')
 if (attr == RT_SWITCHED_EVENT) subscribe(location, RT_SWITCHED_EVENT, 'haiRmSwitched')
-if (attr == RT_RETURN_EVENT) subscribe(location, RT_RETURN_EVENT, 'haiReturned')
+if (attr == RT_RETURN_EVENT) subscribe(location, ruleAddressed(RT_RETURN_EVENT), 'haiReturned')
 if (attr in ['hsmStatus', 'hsmAlert'] || attr in LOCATION_EVENTS) subscribe(location, attr, 'haiLocation')
 return
 }
@@ -319,7 +335,13 @@ subscribe(location, "variable:${dev.substring(HUB_VARIABLE_PREFIX.length())}".to
 return
 }
 def d = ruleDevice(dev)
-if (d != null) subscribe(d, attr, 'haiEvent')
+if (d == null) return
+if (every) subscribe(d, attr, 'haiEvent', [filterEvents: false])
+else subscribe(d, attr, 'haiEvent')
+}
+String ruleAddressed(String event) {
+String me = (state.rt instanceof Map) ? (((Map) state.rt).ruleId as String) : null
+return (me && !me.contains('.')) ? "${event}.${me}".toString() : event
 }
 List ruleCurrent(String dev, String attr, boolean fresh = false) {
 if (dev == RT_LOCATION) return attr == 'hsmStatus' && location.hsmStatus != null ? [location.hsmStatus.toString(), null] : null
@@ -387,48 +409,67 @@ try { type = getGlobalVar(name)?.type?.toString() } catch (Exception e) { type =
 rtOnEvents(rulePlat(), [rtVariableEvent(name, evt.value, type, at, evt.id)])
 }
 String ruleKey() {
-try { return parent?.haiRuleKey() as String } catch (Exception e) { return null }
+Object h = state.haiKey
+return h instanceof Map ? (((Map) h).k as String) : null
 }
-boolean ruleKeyOk(Map call, String what) {
-String want = ruleKey()
-if (want != null && call?.key == want) return true
-log.warn "HAI rule ${state.rt?.ruleId}: ignored a ${what} that did not come from an HAI rule"
-return false
+void ruleKeyTake(Object k) {
+if (!(k instanceof String) || ((String) k).isEmpty()) return
+Map h = state.haiKey instanceof Map ? state.haiKey : null
+if (h?.k == k) return
+state.haiKey = [k: k, p: h?.k, at: now()]
+}
+List ruleKeys() {
+Map h = state.haiKey instanceof Map ? state.haiKey : null
+if (h == null) return []
+List out = [h.k]
+if (h.p != null && now() - ((h.at ?: 0L) as long) <= RT_SIG_WINDOW_MS) out << h.p
+return out
+}
+@Field static final java.util.concurrent.ConcurrentHashMap RULE_SIG_SEEN = new java.util.concurrent.ConcurrentHashMap()
+String ruleSigned(String name, Object value, Map payload) {
+String d = rtSignedData(ruleKey(), name, value, payload, now(), UUID.randomUUID().toString())
+if (d != null) return d
+log.warn "HAI rule ${state.rt?.ruleId}: has no rule key from HAI Engine yet, so other rules will ignore this; press Done on the HAI Engine page"
+return groovy.json.JsonOutput.toJson(payload ?: [:])
+}
+Map ruleVerified(evt, String what) {
+String id = app.id as String
+Map seen = RULE_SIG_SEEN.get(id)
+if (seen == null) { seen = new LinkedHashMap(); RULE_SIG_SEEN.put(id, seen) }
+Map call = rtSignedPayload(ruleKeys(), evt.name as String, evt.value, evt.data, now(), seen)
+if (call == null) log.warn "HAI rule ${state.rt?.ruleId}: ignored a ${what} that did not come from an HAI rule"
+return call
 }
 def haiInvoked(evt) {
 if (evt.value != state.rt?.ruleId) return
-Map call = [:]
-try { call = new groovy.json.JsonSlurper().parseText(evt.data as String) } catch (Exception e) { call = [:] }
-if (!ruleKeyOk(call, 'request to run')) return
+Map call = ruleVerified(evt, 'request to run')
+if (call == null) return
 rtOnInvoke(rulePlat(), evt.value as String, call)
 }
 def haiControlled(evt) {
 if (evt.value != state.rt?.ruleId) return
-Map call = [:]
-try { call = new groovy.json.JsonSlurper().parseText(evt.data as String) } catch (Exception e) { call = [:] }
-if (!ruleKeyOk(call, 'control request')) return
+Map call = ruleVerified(evt, 'control request')
+if (call == null) return
 rtOnControl(rulePlat(), evt.value as String, call)
 }
 def haiReturned(evt) {
 if (evt.value != state.rt?.ruleId) return
-Map d = [:]
-try { d = new groovy.json.JsonSlurper().parseText(evt.data as String) } catch (Exception e) { d = [:] }
-if (!ruleKeyOk(d, 'returned value')) return
+Map d = ruleVerified(evt, 'returned value')
+if (d == null) return
 rtOnReturn(rulePlat(), evt.value as String, d)
 }
 def haiRulePausedEvent(evt) {
 if (evt.value == state.rt?.ruleId) return
-Map d = [:]
-try { d = new groovy.json.JsonSlurper().parseText(evt.data as String) } catch (Exception e) { d = [:] }
-if (!ruleKeyOk(d, 'pause notice')) return
+if (!(state.rt instanceof Map) || !rtNamesRule((Map) state.rt, evt.value)) return
+Map d = ruleVerified(evt, 'pause notice')
+if (d == null) return
 Long at = null
 try { at = evt.date?.getTime() } catch (Exception e) { at = null }
 rtOnRulePaused(rulePlat(), evt.value as String, d.paused, evt.id, at)
 }
 def haiRmSwitched(evt) {
-Map d = [:]
-try { d = new groovy.json.JsonSlurper().parseText(evt.data as String) } catch (Exception e) { return }
-if (!ruleKeyOk(d, 'switched-over list')) return
+Map d = ruleVerified(evt, 'switched-over list')
+if (d == null) return
 rtOnSwitched(rulePlat(), (d.pairs instanceof Map ? d.pairs : [:]))
 }
 void renameVariable(String oldName, String newName) {
@@ -444,6 +485,16 @@ else reply = status > 0 ? [status: status] : [error: (resp.getErrorMessage() ?: 
 reply = [error: e.message]
 }
 rtOnNetReply(rulePlat(), data?.run, data?.token, reply)
+}
+def haiAppDisableReply(resp, Map data) {
+Integer status = null
+String err = null
+try { status = resp?.status as Integer } catch (Exception e) { status = null }
+if (status in [200, 201, 202, 204]) return
+try { err = resp?.getErrorMessage() as String } catch (Exception e) { err = null }
+String what = data?.disable == true ? 'disable' : 'enable'
+log.warn "HAI rule ${state.rt?.ruleId}: the hub refused to ${what} app ${data?.appId} (HTTP ${status ?: 'no answer'}${err ? ', ' + err : ''})"
+rtOnNetReply(rulePlat(), data?.run, null, [status: status, error: "the hub refused to ${what} app ${data?.appId}".toString()])
 }
 def haiPing(Map data) {
 Map reply
@@ -464,8 +515,9 @@ List ok = ((devices ?: []) as List).collect { rtBareId(it) }.findAll { ((allow ?
 List have = ((settings.ruleDevices ?: []) as List).collect { rtBareId(it.id?.toString()) }.sort()
 if (have != ok.sort()) app.updateSetting('ruleDevices', [type: 'capability.*', value: ok])
 Map mine = ((purposes ?: [:]) as Map).findAll { k, v -> ok.contains(rtBareId(k)) }
+ruleKeyTake(options?.ruleKey)
 return rtSetAllow(rulePlat(), ok, mine, options?.writableVariables, options?.rules, options?.paused, options?.modeAllowed == true,
-options?.switched instanceof Map ? options.switched : null)
+options?.switched instanceof Map ? options.switched : null, options?.hubPowerAllowed == true)
 }
 Map haiStage(Map doc, String ruleHash, String challengeId, String claimId, Object baseEpoch, Object expiresAt,
 Object startStopped = false) {
@@ -500,6 +552,33 @@ return out.toString()
 String jsonHash(Object value, Map defaults = [:]) {
 byte[] bytes = jsonCanonicalise(value, defaults).getBytes('UTF-8')
 return MessageDigest.getInstance('SHA-256').digest(bytes).collect { String.format('%02x', it) }.join('')
+}
+boolean jsonSameSecret(Object a, Object b) {
+if (!(a instanceof String) || !(b instanceof String)) return false
+String x = (String) a, y = (String) b
+if (x.isEmpty() || x.length() != y.length()) return false
+int diff = 0
+for (int i = 0; i < x.length(); i++) diff |= ((int) x.charAt(i)) ^ ((int) y.charAt(i))
+return diff == 0
+}
+String jsonHmac(String key, String text) {
+byte[] k = (key ?: '').getBytes('UTF-8')
+if (k.length > 64) k = MessageDigest.getInstance('SHA-256').digest(k)
+byte[] ipad = new byte[64]
+byte[] opad = new byte[64]
+for (int i = 0; i < 64; i++) {
+int b = i < k.length ? (int) k[i] : 0
+ipad[i] = (byte) (b ^ 0x36)
+opad[i] = (byte) (b ^ 0x5c)
+}
+MessageDigest inner = MessageDigest.getInstance('SHA-256')
+inner.update(ipad)
+inner.update((text ?: '').getBytes('UTF-8'))
+byte[] ih = inner.digest()
+MessageDigest outer = MessageDigest.getInstance('SHA-256')
+outer.update(opad)
+outer.update(ih)
+return outer.digest().collect { String.format('%02x', it) }.join('')
 }
 void jsonWrite(Object value, StringBuilder out, Map defaults, String path) {
 if (value instanceof Map) {
@@ -1035,6 +1114,55 @@ BigInteger first = (BigInteger) parts[0]
 if (parts.size() == 1) return first.shiftRight(24) == 127G || first == 0G
 return first == 127G || (first == 0G && parts.every { it == 0G })
 }
+boolean schemaHubOwnHost(Object host, Collection own) {
+if (schemaHubSelfHost(host)) return true
+if (own == null || own.isEmpty()) return false
+String h = ((host ?: '') as String).trim().toLowerCase()
+if (h.startsWith('[') && h.endsWith(']')) h = h.substring(1, h.length() - 1)
+if (h.startsWith('::ffff:')) h = h.substring(7)
+if (h.endsWith('.')) h = h.substring(0, h.length() - 1)
+if (h.isEmpty()) return false
+String mine = schemaIpv4Dotted(h) ?: h
+return own.any { Object o ->
+String a = ((o ?: '') as String).trim().toLowerCase()
+a && (a == h || (schemaIpv4Dotted(a) ?: a) == mine)
+}
+}
+boolean schemaHubNamedHost(Object host, Collection own) {
+String h = ((host ?: '') as String).trim().toLowerCase()
+if (h.endsWith('.')) h = h.substring(0, h.length() - 1)
+if (h.isEmpty() || h.contains(':') || schemaIpv4Dotted(h) != null) return false
+if (h == 'local' || h.endsWith('.local')) return true
+List mine = (own ?: []).collect { Object o -> schemaIpv4Dotted(((o ?: '') as String).trim().toLowerCase()) }.findAll { it != null }
+Closure hub = { String ip -> ip != null && (schemaHubSelfHost(ip) || mine.contains(ip)) }
+def m = h =~ /(?<![0-9])([0-9]{1,3})[.-]([0-9]{1,3})[.-]([0-9]{1,3})[.-]([0-9]{1,3})(?![0-9])/
+while (m.find()) {
+if (hub(schemaIpv4Dotted([m.group(1), m.group(2), m.group(3), m.group(4)].collect { String x -> x.replaceFirst(/^0+(?=.)/, '') }.join('.')))) return true
+}
+for (String label : h.tokenize('.')) {
+if (label ==~ /[0-9a-f]{8}/ && hub(schemaIpv4Dotted('0x' + label))) return true
+}
+return false
+}
+String schemaIpv4Dotted(String h) {
+if (h == null || !(h ==~ /(0x[0-9a-f]+|[0-9]+)(\.(0x[0-9a-f]+|[0-9]+)){0,3}/)) return null
+List parts
+try {
+parts = h.tokenize('.').collect { String x ->
+x.startsWith('0x') ? new BigInteger(x.substring(2) ?: '0', 16) : (x.length() > 1 && x.startsWith('0') ? new BigInteger(x, 8) : new BigInteger(x))
+}
+} catch (NumberFormatException e) { return null }
+BigInteger last = (BigInteger) parts[-1]
+List head = parts.size() > 1 ? parts[0..-2] : []
+if (head.any { ((BigInteger) it) > 255G }) return null
+int rest = 4 - head.size()
+if (last >= 256G.pow(rest)) return null
+List bytes = head.collect { (it as BigInteger).intValue() }
+List tail = []
+BigInteger v = last
+rest.times { tail.add(0, v.mod(256G).intValue()); v = v.divide(256G) }
+return (bytes + tail).join('.')
+}
 @Field static final String CORE_DEVICE_DISABLE_URL = 'http://127.0.0.1:8080/device/disable'
 @Field static final String CORE_DEVICE_JSON_URL = 'http://127.0.0.1:8080/device/fullJson/'
 @Field static final long CORE_FUTURE_TOLERANCE_MS = 5000L
@@ -1279,7 +1407,7 @@ if (kind == 'rmRule') {
 if (a.type == 'controlRule' && a.op in ['disable', 'enable']) {
 boolean off = a.op == 'disable'
 if (((Map) w.port).containsKey('appDisable')) {
-Closure ad = corePort(w, 'appDisable'); ad([appId: target, disable: off])
+Closure ad = corePort(w, 'appDisable'); ad([appId: target, disable: off, run: run.id])
 }
 coreLog(w, 'rmRuleDisabled', [run: run.id, rule: target, disable: off, path: path])
 return
@@ -1954,6 +2082,14 @@ if (type == 'deviceEnabled') {
 String problem = !((Map) w.port).containsKey('net') ? 'this runtime cannot send requests' :
 coreDeviceEnabledSend(w, run, doc, a, path, 0, 'set')
 if (problem != null) coreFail(w, run, 'DEVICE_ENABLE_FAILED', "${path}: ${problem}".toString())
+return
+}
+if (type == 'hubReboot' || type == 'hubShutdown') {
+String op = type == 'hubShutdown' ? 'shutdown' : 'reboot'
+if (((Map) w.port).containsKey('hubPower')) {
+try { Closure f = corePort(w, 'hubPower'); f(op) } catch (Exception e) { coreFail(w, run, 'HUB_POWER_FAILED', "${path}: ${e.message}".toString()); return }
+}
+coreLog(w, 'hubPowerSent', [run: run.id, op: op, path: path])
 return
 }
 if (type == 'hsm') {
@@ -2652,8 +2788,6 @@ String to
 if (http) {
 req.method = a.method ?: 'get'
 req.url = coreExpandText(w, run, doc, a.url as String)
-if (schemaHubMaintenance(a.url)) req.approvedMaintenance = true
-if (schemaHubSelfHost(schemaUrlHost(a.url))) req.namedHubSelf = true
 Map hs = [:]
 ((Map) (a.headers ?: [:])).each { k, v -> hs.put(k as String, coreExpandText(w, run, doc, v as String)) }
 if (hs) req.headers = hs
@@ -2755,7 +2889,7 @@ String id = (((Map) ((Map) (doc.refs ?: [:])).get(key))?.id ?: '') as String
 String bare = id.startsWith('dev:') ? id.substring(4) : id
 if (!(bare ==~ /\d{1,12}/)) return "${key} is not a hub device".toString()
 String token = coreNewToken(w)
-Map req = [kind: 'http', rule: doc.id, run: run.id, token: token, timeoutSeconds: NET_DEFAULT_TIMEOUT_SECONDS, namedHubSelf: true]
+Map req = [kind: 'http', rule: doc.id, run: run.id, token: token, timeoutSeconds: NET_DEFAULT_TIMEOUT_SECONDS, hubOwnCall: true]
 if (phase == 'set') {
 req.putAll([method: 'post', url: CORE_DEVICE_DISABLE_URL, contentType: 'application/json',
 body: groovy.json.JsonOutput.toJson([id: bare as long, disable: a.enabled != true])])
@@ -3953,9 +4087,9 @@ durations.clear()
 corePersist(w)
 }
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = '52f7eed7c5e5f6e1'
+@Field static final String RT_CHILD_BUILD = '672d9dee27561e42'
 @Field static final long RT_GRACE_MS = 30000L
-@Field static final long RT_CADENCE_MS = 60000L
+@Field static final long RT_WATCHDOG_EVERY_MS = 900000L
 @Field static final long RT_RECOVERY_MS = 120000L
 @Field static final long RT_BOOT_TOLERANCE_MS = 2000L
 @Field static final long RT_CLOCK_JUMP_MS = 5000L
@@ -4114,6 +4248,18 @@ if (ref.kind == 'variable' && ref.scope == 'rule' && ref.id instanceof String) {
 }
 return inv
 }
+Set rtEveryReportSlots(Map doc) {
+Set out = [] as Set
+Map refs = (doc?.refs ?: [:])
+((List) (doc?.triggers ?: [])).each { Object t ->
+if (!(t instanceof Map)) return
+Map trig = t
+if (trig.disabled == true || trig.discipline != 'event' || !(trig.kind in ['deviceAttribute', 'threshold']) || !trig.attribute) return
+String dev = ((Map) refs.get(trig.ref))?.id as String
+if (dev != null) out << "${dev}|${trig.attribute}".toString()
+}
+return out
+}
 List rtSlots(Map doc) {
 Set out = [] as Set
 Map refs = (doc.refs ?: [:])
@@ -4242,11 +4388,59 @@ out << b
 }
 return out
 }
+@Field static final long RT_SIG_WINDOW_MS = 120000L
+@Field static final int RT_SIG_SEEN_CAP = 256
+@Field static final String RT_SIG_FIELD = ',"sig":"'
+String rtSignedData(String key, String name, Object value, Map payload, long at, String nonce) {
+if (!(key instanceof String) || key.isEmpty()) return null
+Map body = new LinkedHashMap(payload ?: [:])
+body.remove('sig')
+body.remove('key')
+body.ts = at
+body.n = nonce
+String text = groovy.json.JsonOutput.toJson(body)
+String sig = jsonHmac(key, "${name}|${value}|${text}".toString())
+return text.substring(0, text.length() - 1) + RT_SIG_FIELD + sig + '"}'
+}
+Map rtSignedPayload(List keys, String name, Object value, Object data, long at, Map seen) {
+if (!(data instanceof String)) return null
+String d = (String) data
+int cut = d.lastIndexOf(RT_SIG_FIELD)
+if (cut < 1 || !d.endsWith('"}')) return null
+String sig = d.substring(cut + RT_SIG_FIELD.length(), d.length() - 2)
+String text = d.substring(0, cut) + '}'
+String signed = "${name}|${value}|${text}".toString()
+boolean good = false
+for (Object k in (keys ?: [])) if (k instanceof String && !((String) k).isEmpty() && jsonSameSecret(jsonHmac((String) k, signed), sig)) good = true
+if (!good) return null
+Map body
+try { body = new groovy.json.JsonSlurper().parseText(text) } catch (Exception e) { return null }
+Object ts = body.ts
+Object n = body.n
+if (!(ts instanceof Number) || !(n instanceof String) || Math.abs(at - (ts as long)) > RT_SIG_WINDOW_MS) return null
+if (seen != null) {
+if (seen.containsKey(n)) return null
+List old = seen.findAll { k, v -> !(v instanceof Number) || at - (v as long) > RT_SIG_WINDOW_MS }.collect { it.key }
+old.each { seen.remove(it) }
+while (seen.size() >= RT_SIG_SEEN_CAP) seen.remove(seen.keySet().iterator().next())
+seen.put(n, ts as long)
+}
+return body
+}
+int rtCallDepth(Object d) {
+if (d == null) return 1
+Long n = null
+if (d instanceof Integer || d instanceof Long || d instanceof Short || d instanceof Byte) n = (d as long)
+else if (d instanceof Number && ((Number) d).doubleValue() == Math.floor(((Number) d).doubleValue())) n = ((Number) d).longValue()
+else if (d instanceof String && ((String) d) ==~ /-?\d{1,9}/) n = Long.parseLong((String) d)
+if (n == null || n < 1L || n > (long) CORE_MAX_CALL_DEPTH) return CORE_MAX_CALL_DEPTH + 1
+return n as int
+}
 Object rtOnInvoke(Map plat, String target, Map call) {
 return rtExecute(plat) { Map ctx ->
 Map rec = rtRule(ctx)
 if (rec == null || rec.id != target) return null
-coreInvoked((Map) ctx.w, target, [from: call?.from, caller: call?.caller, input: call?.input], ((call?.depth ?: 1) as int))
+coreInvoked((Map) ctx.w, target, [from: call?.from, caller: call?.caller, input: call?.input], rtCallDepth(call?.depth))
 return null
 }
 }
@@ -4293,11 +4487,11 @@ if (rec == null || rec.id != target) return null
 Map w = ctx.w
 String from = (call?.from ?: 'another rule') as String
 switch (call?.op) {
-case 'setBoolean': coreSetRuleBoolean(w, target, call.value == true, from, ((call.depth ?: 1) as int)); break
+case 'setBoolean': coreSetRuleBoolean(w, target, call.value == true, from, rtCallDepth(call.depth)); break
 case 'pause': corePause(w, target); break
 case 'resume': coreResume(w, target); break
 case 'cancelTimers': coreCancelRuns(w, target); break
-case 'runActions': coreRunActions(w, target, from, ((call.depth ?: 1) as int)); break
+case 'runActions': coreRunActions(w, target, from, rtCallDepth(call.depth)); break
 case 'disable':
 case 'enable':
 rtNote(ctx, 'controlRefused', [from: from, op: call?.op,
@@ -4591,6 +4785,25 @@ armed++
 rtNote(ctx, 'timerJobsRebuilt', [armed: armed, overdue: overdue, withheld: withheld,
 kinds: keep.collect { ((Map) it).kind }.unique().sort()])
 }
+void rtDropRow(Map ctx, String token) {
+Map row = ((Map) ((Map) ctx.rt).deadlines).remove(token)
+if (row != null && row.firedAt == null && row.kind != 'dispatch' && row.withheld != true) ctx.timerJobsStale = true
+}
+void rtTimerJobsExact(Map ctx) {
+ctx.timerJobsStale = false
+Map plat = ctx.plat
+Closure drop = (Closure) plat.unscheduleHandler
+if (drop == null) return
+long now = rtNow(ctx)
+drop('haiTimer')
+((Map) ((Map) ctx.rt).deadlines).values().findAll { Object ro ->
+Map r = ro
+r.firedAt == null && r.kind != 'dispatch' && r.withheld != true
+}.sort { a, b -> (a.dueAt as long) <=> (b.dueAt as long) }.each { Object ro ->
+Map row = ro
+rtCall(plat, 'timerAt', [Math.max(row.dueAt as long, now + 1000L), 'haiTimer', [token: row.token]])
+}
+}
 void rtCancelSupersededSchedules(Map ctx, int epoch) {
 Map rt = ctx.rt
 Map deadlines = rt.deadlines
@@ -4598,7 +4811,7 @@ new ArrayList(deadlines.values()).each { Object ro ->
 Map row = ro
 if (row.kind != 'schedule' || row.firedAt != null) return
 if ((row.epoch as int) == epoch) return
-deadlines.remove(row.token)
+rtDropRow(ctx, row.token as String)
 rtNote(ctx, 'scheduleSuperseded', [token: row.token, epoch: row.epoch, now: epoch, dueAt: row.dueAt])
 }
 }
@@ -4629,8 +4842,8 @@ subscribe : { String ruleId, Map doc -> rtSubscribe(ctx, doc) },
 unsubscribe : { String ruleId -> rtUnsubscribe(ctx) },
 schedule : { Map timer -> rtArm(ctx, timer) },
 cancel : { Object token ->
-((Map) rt.deadlines).remove(token as String)
-((Map) rt.deadlines).remove("${token}${RT_FRESH_SUFFIX}".toString())
+rtDropRow(ctx, token as String)
+rtDropRow(ctx, "${token}${RT_FRESH_SUFFIX}".toString())
 },
 dispatch : { Map effect -> rtSend(ctx, effect) },
 dispatchNow : { Map effect -> rtSendNow(ctx, effect) },
@@ -4645,11 +4858,16 @@ rtCall(plat, 'setMode', mode)
 },
 returnTo : { Map call -> rtCall(plat, 'announceReturn', call) },
 setHsm : { Object op -> rtCall(plat, 'setHsm', op) },
+hubPower : { Object op ->
+if (((Map) ctx.rt).hubPowerAllowed != true) throw new Exception('turn on "Allow rules to reboot or shut down the hub" on the HAI Engine page first')
+if (!(op in ['reboot', 'shutdown'])) throw new Exception("'${op}' is not a hub power operation".toString())
+rtCall(plat, 'hubPower', op)
+},
 rmAction : { Map call -> rtCall(plat, 'rmAction', call) },
 rmSwitched : { Object rmId -> ((Map) (rt.rmSwitched ?: [:])).get(rmId as String) },
 appDisable : { Map call -> rtCall(plat, 'appDisable', call) },
 net : { Map req ->
-String why = rtNetRefusal(req)
+String why = rtNetRefusal(req, (Collection) rtCall(plat, 'hubAddresses', null))
 if (why != null) { rtNote(ctx, 'netRefused', [kind: req.kind, why: why]); throw new Exception(why) }
 rtCall(plat, 'net', req)
 },
@@ -4703,8 +4921,17 @@ ctx.w = rtDecodeWorld(rt, rt.world)
 ((Map) ctx.w).noRetry = true
 ((Map) ctx.w).port = rtPort(ctx)
 rtBoot(ctx)
+rtCodeCheck(ctx)
 rtSettleFences(ctx)
 return ctx
+}
+void rtCodeCheck(Map ctx) {
+Map rt = ctx.rt
+if (rt.ruleId == null || rt.cb == RT_CHILD_BUILD.take(8)) return
+Map rec = rtRule(ctx)
+if (rec?.doc == null || rec.disabled == true || ((List) (rt.subs ?: [])).isEmpty()) { rt.cb = RT_CHILD_BUILD.take(8); return }
+rtResubscribeKeepingWatch(ctx, rec.doc)
+rtNote(ctx, 'codeUpdated', [build: RT_CHILD_BUILD])
 }
 void rtEnd(Map ctx) {
 boolean asleep = rtSettleSleep(ctx)
@@ -4713,6 +4940,7 @@ rtCompact(ctx)
 rtBudget(ctx)
 rtFlushLoose(ctx)
 rtSelfCheckWanted(ctx)
+if (ctx.timerJobsStale == true) rtTimerJobsExact(ctx)
 ((Map) ctx.rt).lightMark = rtLight(ctx).mark
 rtCall((Map) ctx.plat, 'saveState', rtEncode(ctx))
 rtCall((Map) ctx.plat, 'idle', asleep)
@@ -4862,7 +5090,7 @@ rt.bootAt = now - upMs
 rt.lastUptimeMs = upMs
 rt.lastNow = now
 Map health = rt.health
-boolean stale = rt.lastWatchdogAt != null && now - (rt.lastWatchdogAt as long) > 3L * RT_CADENCE_MS
+boolean stale = rt.lastWatchdogAt != null && now - (rt.lastWatchdogAt as long) > 2L * RT_WATCHDOG_EVERY_MS
 if (stale) health.watchdogStale = now else health.remove('watchdogStale')
 }
 void rtOnRestart(Map ctx, long bootAt) {
@@ -4877,6 +5105,8 @@ Map rec = rtRule(ctx)
 if (rec != null && !rec.disabled) rtSubscribe(ctx, rec.doc)
 long now = rtNow(ctx)
 List rows = ((Map) rt.deadlines).values().findAll { ((Map) it).firedAt == null }.sort { a, b -> (a.dueAt as long) <=> (b.dueAt as long) }
+Closure drop = (Closure) ((Map) ctx.plat).unscheduleHandler
+if (drop != null) { drop('haiTimer'); drop('haiContinue') }
 rows.each { Object ro ->
 Map row = ro
 if ((row.dueAt as long) > now) rtCall((Map) ctx.plat, 'timerAt', [row.dueAt as long, 'haiTimer', [token: row.token]])
@@ -4961,8 +5191,14 @@ rtCall(plat, 'unlistenAll', null)
 rtCall(plat, 'useVariables', rtHubVariableNames(doc))
 List slots = rtWantSlots(rt, doc)
 Closure sub = (Closure) plat.listen
-slots.each { Object s -> sub(((List) s)[0], ((List) s)[1]) }
+Set every = rtEveryReportSlots(doc)
+boolean takes = sub != null && sub.maximumNumberOfParameters >= 3
+slots.each { Object s ->
+List sl = s
+if (takes && every.contains(sl[0] + '|' + sl[1])) sub(sl[0], sl[1], true) else sub(sl[0], sl[1])
+}
 rt.subs = slots
+rt.cb = RT_CHILD_BUILD.take(8)
 rt.modeSeen = rtModeSubscribed(rt) ? rtCall(plat, 'mode', null) : null
 slots.each { Object s ->
 String dev = ((List) s)[0] as String
@@ -5241,7 +5477,15 @@ return [code: 'DISPATCH_NOT_AUTHORISED', outcome: CONF_NOT_SENT, reason: "${dev}
 rtHook(ctx, 'beforeFence')
 Map fences = new LinkedHashMap(rtFencesOf(ctx))
 fences.put(key, [at: now, exec: ctx.execId, run: effect.run, intent: intent == null ? null : new LinkedHashMap(intent)])
+Set fenced = (Set) (ctx.fencedRuns instanceof Set ? ctx.fencedRuns : (ctx.fencedRuns = [] as Set))
+String runKey = (effect.run ?: key) as String
+Map runRec = effect.run == null ? null : ((Map) (((Map) ctx.w).runs ?: [:])).get(effect.run)
+Map runDoc = runRec == null ? null : ((Map) ((Map) (((Map) ctx.w).rules ?: [:])).get(runRec.rule))?.doc
+boolean stops = runDoc != null && ((runDoc.errorPolicy ?: 'stopRun') == 'stopRun')
+if (!stops || !fenced.contains(runKey)) {
 rtCall(plat, 'atomicPut', [RT_FENCE_KEY, fences])
+fenced << runKey
+}
 ctx.fences = fences
 rtHook(ctx, 'afterFence')
 Map pre = (ctx.preSend ?: (ctx.preSend = [:]))
@@ -5494,12 +5738,13 @@ return [ok: true, paused: rec.paused, disabled: rec.disabled]
 }
 }
 boolean rtSetupSame(Map rt, List allow, Map purposes, List writableVariables, List knownRules,
-List pausedRules, Boolean modeAllowed, Map switched = null) {
+List pausedRules, Boolean modeAllowed, Map switched = null, Boolean hubPowerAllowed = null) {
 if (pausedRules != null && ((List) (rt.subs ?: [])).any { ((List) it)[0].toString().startsWith(RULE_STATE_PREFIX) }) return false
 if (((allow ?: []).collect { it.toString() }) != (rt.allow ?: [])) return false
 if (writableVariables != null && (writableVariables.collect { it.toString() }) != (rt.writableVariables ?: [])) return false
 if (knownRules != null && (knownRules.collect { it.toString() }) != (rt.knownRules ?: [])) return false
 if (modeAllowed != null && modeAllowed != rt.modeAllowed) return false
+if (hubPowerAllowed != null && hubPowerAllowed != rt.hubPowerAllowed) return false
 if (switched != null && rtSwitchedOwn(switched) != (rt.rmSwitched ?: [:])) return false
 if (pausedRules != null && (pausedRules.collect { it.toString() }) != (rt.pausedRules ?: [])) return false
 if (purposes != null) {
@@ -5510,9 +5755,9 @@ if (p != (rt.purposes ?: [:])) return false
 return true
 }
 Map rtSetAllow(Map plat, List allow, Map purposes, List writableVariables = null, List knownRules = null,
-List pausedRules = null, Boolean modeAllowed = null, Map switched = null) {
+List pausedRules = null, Boolean modeAllowed = null, Map switched = null, Boolean hubPowerAllowed = null) {
 Object held = rtCall(plat, 'loadState', null)
-if (held instanceof Map && rtSetupSame((Map) held, allow, purposes, writableVariables, knownRules, pausedRules, modeAllowed, switched)) {
+if (held instanceof Map && rtSetupSame((Map) held, allow, purposes, writableVariables, knownRules, pausedRules, modeAllowed, switched, hubPowerAllowed)) {
 return [ok: true, unchanged: true]
 }
 return rtExecute(plat) { Map ctx ->
@@ -5523,6 +5768,7 @@ rt.remove('allowHash')
 if (writableVariables != null) rt.writableVariables = writableVariables.collect { it.toString() }
 if (knownRules != null) rt.knownRules = knownRules.collect { it.toString() }
 if (modeAllowed != null) rt.modeAllowed = modeAllowed
+if (hubPowerAllowed != null) rt.hubPowerAllowed = hubPowerAllowed
 if (switched != null) { Map own = rtSwitchedOwn(switched); if (own.isEmpty()) rt.remove('rmSwitched') else rt.rmSwitched = own }
 if (purposes != null) {
 Map p = [:]
@@ -5532,16 +5778,26 @@ rt.purposes = p
 return [ok: true]
 }
 }
-String rtNetRefusal(Map req) {
+String rtNetRefusal(Map req, Collection hubAddresses = null) {
 String host = req.kind == 'http' ? schemaUrlHost(req.url) : (req.host as String)?.toLowerCase()
 if (host == null) return 'that is not an address'
-if (req.kind == 'http' && schemaHubMaintenance(req.url) && req.approvedMaintenance != true) {
-return "that is one of the hub's power or maintenance pages, and this step's own address does not name it, so no person approved it"
+if (req.kind == 'http' && schemaHubMaintenance(req.url)) {
+return "that is one of a hub's power or maintenance pages, which a rule's web request may not call"
 }
-if (req.kind == 'http' && schemaHubSelfHost(host) && req.namedHubSelf != true) {
-return "that address is this hub itself, and this step's own address does not name the hub, so no person wrote it"
+if (req.kind == 'http' && schemaHubOwnHost(host, hubAddresses) && !rtHubOwnCall(req)) {
+return "that address is this hub itself, which a rule's web request may not reach"
+}
+if (req.kind == 'http' && schemaHubNamedHost(host, hubAddresses)) {
+return "that name may be this hub itself (a .local name, or one spelling out the hub's address), which a rule's web request may not reach; use the device's IP address"
 }
 return null
+}
+boolean rtHubOwnCall(Map req) {
+if (req.hubOwnCall != true) return false
+String u = req.url as String
+if (u == null) return false
+if (u == CORE_DEVICE_DISABLE_URL) return true
+return u.startsWith(CORE_DEVICE_JSON_URL) && (u.substring(CORE_DEVICE_JSON_URL.length()) ==~ /\d{1,12}/)
 }
 Object rtOnNetReply(Map plat, Object runId, Object token, Map reply) {
 return rtExecute(plat) { Map ctx ->
@@ -5689,7 +5945,7 @@ dispatched: 'logActions', variableWritten: 'logActions', modeSet: 'logActions', 
 ruleControlled: 'logActions', ruleBooleanSet: 'logActions', rmRuleAction: 'logActions', rmRuleRetargeted: 'logActions',
 netSent: 'logActions', fileWritten: 'logActions', waiting: 'logActions', exited: 'logActions',
 returned: 'logActions', captured: 'logActions', restored: 'logActions', runError: 'logActions',
-decisionUnknownSkipped: 'logActions', decisionElseOnUnknown: 'logActions']
+decisionUnknownSkipped: 'logActions', decisionElseOnUnknown: 'logActions', hubPowerSent: 'logActions']
 void rtLogOption(Map ctx, Map e) {
 String opt = RT_LOG_OPTION.get(e.what) as String
 if (opt == null || e.kind == 'button') return
@@ -5797,7 +6053,7 @@ if (row.firedAt == null && row.kind == 'dispatch' && runEnded) {
 row.firedAt = rtNow(ctx)
 coreSend(w, row.timer)
 }
-if (row.firedAt != null || (runEnded && row.kind != 'verify')) deadlines.remove(row.token)
+if (row.firedAt != null || (runEnded && row.kind != 'verify')) rtDropRow(ctx, row.token as String)
 }
 new ArrayList(runs.keySet()).each { Object id -> if (((Map) runs.get(id)).status in RT_TERMINAL_RUN) runs.remove(id) }
 rtCompactLedger(ctx)

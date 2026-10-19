@@ -6,63 +6,148 @@
 <title>HAI Engine settings help</title>
 </head>
 <body>
-
+<!--hai:overview-->
 <b>HAI is a rule engine for Hubitat</b>, an alternative to Rule Machine, built so a rule can be read, checked and trusted before it runs.
+<!--p-->
 <b>Key features</b><br>&bull; <b>A modern, interactive rule editor</b>: drag and drop steps, cut, copy and paste between rules, undo, search, every step in plain English, and live device values beside each condition.<br>&bull; <b>Checked before it runs</b>: missing devices, commands a device does not offer and steps that can never run are found when you save.<br>&bull; <b>Simulate</b> a rule, and see exactly what differs from the copy on the hub before you put it there.<br>&bull; <b>Backups and restore</b>: a nightly copy of every rule, compared and restored from the editor.<br>&bull; <b>RM migration</b> (optional): test copies of your Rule Machine rules in HAI, switch them over one at a time, and switch back whenever you like.<br>&bull; <b>AI Rule Assistant</b> (optional): describe a rule in your own words and Claude drafts it, on your own key, with a spending limit; drafts go through the same checks.<br>&bull; <b>Run rules from anywhere</b>: a dashboard tile, a phone shortcut, another hub or another app can start a rule or set a value, through a web address HAI gives you.
+<!--p-->
 <b>Benefits</b><br>&bull; Faults are caught at the desk, not discovered when a light fails to come on.<br>&bull; Rules are explained in plain speak.<br>&bull; Controlled testing and migration from Rule Machine, and back.<br>&bull; HAI sends nothing off the hub except what your own rules ask for and, if you add an AI key, what you ask it to draft.
+<!--p-->
 <b>User documents</b><br>&bull; <a href='/local/hai-toolkit.html' target='_blank'>Toolkit</a><br>&bull; <a href='{{docs}}/user-guide.md' target='_blank'>User guide</a>, with a quick start at the end<br>&bull; <a href='{{docs}}/migration-guide.md' target='_blank'>Moving rules from Rule Machine</a><br>&bull; <a href='{{issues}}' target='_blank'>Report a problem, give feedback or ask a question</a>
+<!--p-->
 <b>Technical documents</b><br>&bull; <a href='{{docs}}/architecture-current.md' target='_blank'>Architecture</a><br>&bull; <a href='{{docs}}/developer/architecture.md' target='_blank'>Developer guide</a>
-
+<!--/hai:overview-->
+<!--hai:migration-->
 HAI Migration copies Rule Machine rules into HAI, one at a time.
-
+<!--/hai:migration-->
+<!--hai:am-need-->
 <span style='color:#c62828'><b>HAI Migration needs Automation Map installed, with a scan done for migration to work.</b></span> In Hubitat Package Manager, press Install, then Search, and search for <b>Automation Map</b>. Or install it from <a href='{{amRepo}}' target='_blank'>{{amRepoShort}}</a>.
-
-<small>When this is on, a Z-Wave or Zigbee device you pair with the hub is added to Approved devices as soon as the hub reports it joined. A virtual device, or one a cloud or LAN integration creates, is not reported that way, so add it here by hand.</small>
-
+<!--/hai:am-need-->
+<!--hai:devices-new-->
+<small>When this is on, a Z-Wave or Zigbee device you pair with the hub is added to Approved devices as soon as the hub reports it joined. HAI checks the hub's own record that the device is new before adding it, and never adds back a device you have unticked here. A virtual device, or one a cloud or LAN integration creates, is not reported that way, so add it here by hand.</small>
+<!--/hai:devices-new-->
+<!--hai:stop-rule-->
 <small>Here as well as in the editor, so a rule can always be stopped from the hub even when the editor cannot be served. Deactivate stops the rule and anything it is part way through: its waits, delays and repeats do not carry on.</small>
-
+<!--/hai:stop-rule-->
+<!--hai:diag-everyday-->
+Everyday words in use: dark under {{darkBelow}} lux, dusk or dawn to {{overcastFrom}}, bright from {{brightFrom}} lux, hot from {{hotFrom}}{{deg}}, cold to {{coldTo}}{{deg}}, windy from {{windyFrom}}.
+<!--/hai:diag-everyday-->
+<!--hai:diag-no-weather-->
+Weather device: none chosen; the editor uses an approved device that reports like one, if there is one.
+<!--/hai:diag-no-weather-->
+<!--hai:diag-no-switch-->
+Migration watch: no Rule Machine rule is switched over to an HAI copy.
+<!--/hai:diag-no-switch-->
+<!--hai:migration-not-yet-->
+<b>Press Done at the bottom to finish installing HAI Engine, then open it again and press Turn on HAI Migration.</b>
+<!--/hai:migration-not-yet-->
+<!--hai:migration-missing-->
+<b>HAI Migration is not on this hub. Install it with Hubitat Package Manager (Modify, HAI Engine) or add its app code under Apps Code, then press Turn on HAI Migration again.</b>
+<!--/hai:migration-missing-->
+<!--hai:newer-->
+<b style='color:#1565c0'>HAI {{newer}} is available.</b> Update it in Hubitat Package Manager (Update).
+<!--/hai:newer-->
+<!--hai:ai-off-->
+<b style='color:#b00020'>AI Rule Assistant is off: {{why}}.</b> {{act}} under AI token and cost management.
+<!--/hai:ai-off-->
+<!--hai:editor-not-yet-->
+<small>Press Done at the bottom to finish installing. Until then the editor can write and check rules, but not put them on the hub.</small>
+<!--/hai:editor-not-yet-->
+<!--hai:editor-no-oauth-->
+Enable OAuth for this app code (Apps Code, HAI Engine, OAuth), then open this page again to create the editor link.
+<!--/hai:editor-no-oauth-->
+<!--hai:all-devices-->
+<b>HAI can use all {{count}} devices on this hub.</b> Open Approved devices below to untick any you want to keep it away from, then press Done.
+<!--/hai:all-devices-->
+<!--hai:all-devices-unread-->
+<b>HAI could not read this hub's device list ({{error}}), so no device is approved yet.</b> Select the devices your rules may use.
+<!--/hai:all-devices-unread-->
+<!--hai:ai-stopped-->
+<b>Drafting is stopped.</b> {{reason}}. Type the limit again to clear it; what has already been spent still counts.
+<!--/hai:ai-stopped-->
+<!--hai:ai-optional-->
 <small>Optional. HAI works fully without it. Add your own Claude API key here if you want the AI Rule Assistant to draft rules from plain words.</small>
-
+<!--/hai:ai-optional-->
+<!--hai:ai-keys-->
 <small>Your Claude API keys, and new ones, are at <a href='{{keys}}' target='_blank'>{{keysShort}}</a>.</small>
-
+<!--/hai:ai-keys-->
+<!--hai:ai-no-limit-->
 <span style='color:#c62828'><b>Set a spending limit below.</b> A key is stored, but the AI Rule Assistant does not draft until there is a limit on what it may spend.</span>
-
+<!--/hai:ai-no-limit-->
+<!--hai:endpoints-->
 Let other things run your HAI rules: a dashboard button, a phone shortcut, another hub, or another app on this hub such as Rule Machine. They can start, stop, pause or resume a rule. They can't create, change or delete one.
-
+<!--/hai:endpoints-->
+<!--hai:endpoints-apps-->
 <small><b>Technical:</b> other apps send a request as a hub location event, and HAI answers with the rule list or the result. Off means HAI refuses every request.</small>
-
-<small>Each request from another app must carry this token, or HAI ignores it and says so once in the log. Paste it into the app that sends the requests. With the HAI Rule API library, that is its <b>HAI API token</b> setting.</small>
-
+<!--/hai:endpoints-apps-->
+<!--hai:endpoints-token-->
+<small>Each request from another app must be signed with this token, or HAI ignores it and says so once in the log. Paste it into the app that sends the requests. With the HAI Rule API library, that is its <b>HAI API token</b> setting.</small>
+<!--/hai:endpoints-token-->
+<!--hai:endpoints-off-->
 <small>Off: the web address does nothing. Turn it on to show it.</small>
-
+<!--p-->
+<small>This is for other systems (dashboards, phone shortcuts, other hubs) to start your rules. You don't need it to use HAI yourself, at home or away.</small>
+<!--/hai:endpoints-off-->
+<!--hai:endpoints-on-->
 Anyone who has this address can run your rules, so treat it like a password. Don't post it in the community or in screenshots.
-<small><b>Technical:</b> open the address as it is to list your rules and their ids. To act on one, put the rule id and an action after <code>/endpoint/rules</code> and before the <code>?</code>: <code>/endpoint/rules/&lt;rule id&gt;/run</code>. The other actions are <code>/stop</code>, <code>/pause</code>, <code>/resume</code>, <code>/trigger</code>, and <code>/boolean/true</code> or <code>/boolean/false</code> for the rule's Private Boolean. <code>/endpoint/variables/&lt;name&gt;/&lt;value&gt;</code> sets a hub variable, but only one ticked under Approved hub variables. Works on your home network only.</small>
-
+<!--p-->
+<small><b>Technical:</b> open the address as it is to list your rules and their ids. To act on one, send a POST with the rule id and an action after <code>/endpoint/rules</code> and before the <code>?</code>: <code>/endpoint/rules/&lt;rule id&gt;/run</code>. The other actions are <code>/stop</code>, <code>/pause</code>, <code>/resume</code>, <code>/trigger</code>, and <code>/boolean/true</code> or <code>/boolean/false</code> for the rule's Private Boolean. <code>/endpoint/variables/&lt;name&gt;/&lt;value&gt;</code> sets a hub variable, but only one ticked under Approved hub variables. Works on your home network; through Hubitat's cloud only when you turn on Allow through Hubitat's cloud below.</small>
+<!--/hai:endpoints-on-->
+<!--hai:endpoints-get-off-->
+<small>Off: an address that runs, stops, pauses, resumes or triggers a rule, or sets a hub variable, works only as a POST, so a link that a browser, a link preview or a search engine opens on its own does nothing. Turn it on only for a dashboard or device that can send nothing but a plain link, as Rule Machine's end points work.</small>
+<!--/hai:endpoints-get-off-->
+<!--hai:endpoints-get-on-->
+<small>On: the addresses also work as plain links (GET), as Rule Machine's do. Anything that opens the link runs the rule, link previews in messaging apps included.</small>
+<!--/hai:endpoints-get-on-->
+<!--hai:everyday-->
 The levels behind the words the rule editor offers for conditions: how dark is dark, how hot is hot. The values below are generic starting points: change them to suit your own climate and preferences. Rules follow these settings: after a change, every rule that uses a changed word is updated to it, one at a time, each as a new version. A running rule stays running and a stopped one stays stopped.
-
+<!--/hai:everyday-->
+<!--hai:everyday-light-->
 <small>Light is read from a light sensor (illuminance), so artificial light and dull weather count.</small>
+<!--p-->
 Weather words read an OpenWeatherMap device. Hubitat has a built-in OpenWeatherMap driver: create a Virtual Device with that driver, enter your OpenWeatherMap API key in it, then choose it here.
-
+<!--/hai:everyday-light-->
+<!--hai:everyday-weather-->
 <small>Choosing it here also approves it for HAI, under Approved devices. With none chosen, the editor uses an approved device that reports temperature, wind speed and the weather.</small>
-
+<!--/hai:everyday-weather-->
+<!--hai:mcp-->
 Connect an AI assistant, such as Claude Desktop, so you can describe a rule in a conversation and have it written for you. The assistant can see your approved devices and your rules, and send HAI a rule to check. HAI checks it, reads it back in plain English, and keeps it as a draft in the editor for you to review. The assistant can't turn a rule on or run one; only you can, in the editor.
-
+<!--/hai:mcp-->
+<!--hai:mcp-off-->
 <small>Off: nothing can connect. Turn it on to show the address to give your AI assistant.</small>
-
+<!--/hai:mcp-off-->
+<!--hai:mcp-done-->
 <small>Press Done to create the address.</small>
-
-<small><b>Technical:</b> add this address as an MCP server (Streamable HTTP) in your AI client. It offers <code>hai_describe</code> (the rule format and your devices), <code>hai_propose_rule</code> (check, read back and simulate a draft), <code>hai_get_rule</code> and <code>hai_render_rule</code>. Works on your home network only. It uses your AI client's own account, not the API key above.</small>
-
-Use this if you think someone has a link to HAI they should not have, for example from a screenshot, a shared message or an old phone. Pressing the button changes every HAI link at once, so the old ones stop working. Your rules keep running as before.
-This does not change the AI API key under AI token and cost management. It changes only the links and token used by apps and pages on your home network.
+<!--/hai:mcp-done-->
+<!--hai:mcp-on-->
+<small><b>Technical:</b> add this address as an MCP server (Streamable HTTP) in your AI client. It offers <code>hai_describe</code> (the rule format and your devices), <code>hai_propose_rule</code> (check, read back and simulate a draft), <code>hai_get_rule</code> and <code>hai_render_rule</code>. Works on your home network; through Hubitat's cloud only when you turn on Allow through Hubitat's cloud below. It uses your AI client's own account, not the API key above.</small>
+<!--/hai:mcp-on-->
+<!--hai:cloud-off-->
+<b>Off (recommended).</b> A request through Hubitat's cloud (cloud.hubitat.com) is refused, so <b>this web address</b> works only on your home network.
+<!--p-->
+<b>This does not affect using HAI away from home.</b> The rule editor and the Migration page keep working through Hubitat Remote Access or a VPN with this switch off. It only decides whether something outside your home can start a rule by calling a web address.
+<!--/hai:cloud-off-->
+<!--hai:cloud-on-->
+<small>On: this cloud address works from anywhere on the internet, for anyone who has it. Treat it like a password, and turn this off when you no longer need it.</small>
+<!--/hai:cloud-on-->
+<!--hai:access-->
+Use this if you think someone has a link to HAI they should not have, for example from a screenshot, a shared message or an old phone. Pressing the button changes every HAI link at once, and the old ones stop working within a minute. Your rules keep running as before.
+<!--p-->
+This does not change the AI API key under AI token and cost management. It changes only HAI's own links and token. The editor and Migration pages also answer through Hubitat's cloud: anyone who has one of their links and your hub's cloud address can use it from anywhere, so keep those links private too.
+<!--p-->
 <b style="color:#c62828">What stops working until you update it:</b> bookmarks and saved links to the HAI editor, editor pages you already have open, and any dashboard, shortcut, AI assistant or other app that controls HAI.
+<!--p-->
 <b style="color:#1565c0">What you need to do after changing it:</b> open the editor from this page again, and copy the new links and token shown on this page to wherever you use them.
+<!--p-->
 <b>Technical</b>
-<small>The editor, end point and MCP addresses, the API token for other apps and the Rule Machine Migration address all change at once. After you press it, editor tabs that are open, saved links and bookmarks, dashboard buttons and shortcuts that use the end point address, your AI assistant's MCP address, and other apps' API token stop working. Copy the new addresses and token from this page to where you use them. Rule apps receive their new editor link automatically. The Claude API key is a separate credential and is not rotated.</small>
-
+<!--p-->
+<small>The editor, end point and MCP addresses, the API token for other apps and the Rule Machine Migration address all change at once. After you press it, editor tabs that are open, saved links and bookmarks, dashboard buttons and shortcuts that use the end point address, your AI assistant's MCP address, and other apps' API token stop working within a minute (the hub accepts an old link for up to 60 seconds). Copy the new addresses and token from this page to where you use them. Rule apps receive their new editor link automatically. The Claude API key is a separate credential and is not rotated.</small>
+<!--/hai:access-->
+<!--hai:diagnostics-on-->
 <b>Diagnostics are on.</b> They turn themselves off an hour after being switched on.
-
+<!--/hai:diagnostics-on-->
+<!--hai:diagnostics-off-->
 <small>Diagnostics record far more detail and turn themselves off an hour later, so they cannot be left on by forgetting.</small>
-
+<!--/hai:diagnostics-off-->
 </body>
 </html>

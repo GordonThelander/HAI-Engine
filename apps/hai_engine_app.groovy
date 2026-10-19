@@ -10,7 +10,7 @@ import java.time.Instant
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 
-@Field static final String HAI_CHANNEL = 'dev'
+@Field static final String HAI_CHANNEL = 'preview'
 definition(
 name: 'HAI Engine (Preview)',
 namespace: 'gordonthelander',
@@ -52,9 +52,9 @@ path('/editor/api/export') { action: [POST: 'editorExportPost'] }
 path('/editor/api/import') { action: [POST: 'editorImportPost'] }
 path('/editor/api/draft') { action: [POST: 'editorDraftPost', GET: 'editorDraftGet'] }
 path('/endpoint/rules') { action: [GET: 'endpointRulesGet'] }
-path('/endpoint/rules/:id/:op') { action: [GET: 'endpointRuleGet', POST: 'endpointRuleGet'] }
-path('/endpoint/rules/:id/:op/:value') { action: [GET: 'endpointRuleGet', POST: 'endpointRuleGet'] }
-path('/endpoint/variables/:name/:value') { action: [GET: 'endpointVariableGet'] }
+path('/endpoint/rules/:id/:op') { action: [GET: 'endpointRuleGet', POST: 'endpointRulePost'] }
+path('/endpoint/rules/:id/:op/:value') { action: [GET: 'endpointRuleGet', POST: 'endpointRulePost'] }
+path('/endpoint/variables/:name/:value') { action: [GET: 'endpointVariableGet', POST: 'endpointVariablePost'] }
 }
 @Field static final String HAI_ENVIRONMENT = 'PREVIEW'
 @Field static final String HAI_COMMUNITY_URL = ''
@@ -91,7 +91,7 @@ path('/endpoint/variables/:name/:value') { action: [GET: 'endpointVariableGet'] 
 '/endpoint/variables/:name/:value' : 'endpoint'
 ]
 def installed() { haiApproveAllOnce(); haiInit() }
-def updated() { engineKeySweep(); haiWeatherApprove(); haiInit(); haiEverydayFollow(); if (state.haiApproveAll instanceof Map && state.haiApproveAll.seen != true) { Map m = new LinkedHashMap((Map) state.haiApproveAll); m.seen = true; state.haiApproveAll = m } }
+def updated() { engineKeySweep(); haiWeatherApprove(); haiNoteDeclined(); haiLogsSchedule(); haiInit(); haiEverydayFollow(); if (state.haiApproveAll instanceof Map && state.haiApproveAll.seen != true) { Map m = new LinkedHashMap((Map) state.haiApproveAll); m.seen = true; state.haiApproveAll = m } }
 void haiApproveAllOnce() {
 if (state.haiApproveAll != null) return
 if (((List) (settings.runtimeAllowDevices ?: [])).size() > 0) { state.haiApproveAll = [skipped: true, at: now()]; return }
@@ -103,7 +103,7 @@ httpGet([uri: 'http://127.0.0.1:8080/hub2/devicesList', timeout: 30]) { resp -> 
 if (!ids && err == null) err = 'the hub listed no devices'
 if (ids) app.updateSetting('runtimeAllowDevices', [type: 'capability', value: ids])
 state.haiApproveAll = [count: ids.size(), error: err, at: now()]
-if (ids) log.info "HAI Engine: new install, so all ${ids.size()} devices on the hub are approved; untick any under Approved devices"
+if (ids) haiInfo "HAI Engine: new install, so all ${ids.size()} devices on the hub are approved; untick any under Approved devices"
 else log.warn "HAI Engine: new install, but the hub's device list could not be read (${err}), so no device is approved yet"
 }
 List haiOtherEngines() {
@@ -141,17 +141,56 @@ if (wx == null) return
 List have = ((settings.runtimeAllowDevices ?: []) as List).findAll { it != null }
 if (have.any { it.id.toString() == wx.id.toString() }) return
 app.updateSetting('runtimeAllowDevices', [type: 'capability', value: have.collect { it.id.toString() } + [wx.id.toString()]])
-log.info "HAI Engine: Everyday words: ${wx.displayName} is the weather device, so it is now an approved device"
+haiInfo "HAI Engine: Everyday words: ${wx.displayName} is the weather device, so it is now an approved device"
 }
 def haiDeviceJoined(evt) {
 if (settings.haiAutoApproveNew == false) return
 String id = null
-try { id = evt?.deviceId != null ? evt.deviceId.toString() : null } catch (Exception e) { id = null }
-if (!(id ==~ /[0-9]{1,12}/)) { log.info "HAI Engine: a device joined the hub, but its id could not be read, so it was not approved (${evt?.value})"; return }
+try { id = evt?.deviceId != null ? evt.deviceId.toString() : (evt?.value as String)?.trim() } catch (Exception e) { id = null }
+if (!(id ==~ /[0-9]{1,12}/)) { log.warn "HAI Engine: a device-joined event named no device id, so nothing was approved"; return }
 List have = ((settings.runtimeAllowDevices ?: []) as List).findAll { it != null }.collect { it.id.toString() }
 if (have.contains(id)) return
+if (((List) (state.haiDeclined ?: [])).contains(id)) {
+haiInfo "HAI Engine: device ${id} joined, but it was taken off Approved devices before, so it was not approved again"
+return
+}
+String why = haiJoinRefusal(id)
+if (why != null) { log.warn "HAI Engine: a device-joined event named device ${id}, but ${why}, so it was not approved"; return }
 app.updateSetting('runtimeAllowDevices', [type: 'capability', value: have + [id]])
-log.info "HAI Engine: device ${id} joined the hub and is now an approved device (Approve new devices automatically is on)"
+haiInfo "HAI Engine: device ${id} joined the hub and is now an approved device (Approve new devices automatically is on)"
+}
+@Field static final long HAI_JOIN_NEW_MS = 900000L
+String haiJoinRefusal(String id) {
+Object data = null
+try {
+httpGet([uri: "http://127.0.0.1:8080/device/fullJson/${id}".toString(), contentType: 'application/json', timeout: 8]) { resp ->
+if (resp?.status == 200) data = resp.data
+}
+} catch (Exception e) { return "the hub's record of it could not be read (${e.message})".toString() }
+Map d = data instanceof Map ? (((Map) data).device instanceof Map ? ((Map) data).device : data) : null
+if (d == null || d.id == null || d.id.toString() != id) return 'the hub has no such device'
+Long made = null
+for (String k : ['createTime', 'createdDate', 'dateCreated', 'created']) {
+Object v = d.get(k)
+if (v instanceof Number) { made = v as long; break }
+if (v instanceof String && v ==~ /\d{10,13}/) { made = v as long; break }
+if (v instanceof String) { try { made = Date.parse("yyyy-MM-dd'T'HH:mm:ss", (v as String).take(19)).time; break } catch (Exception e) { made = null } }
+}
+if (made != null && made < 100000000000L) made = made * 1000L
+if (made != null && now() - made > HAI_JOIN_NEW_MS) return 'the hub says it was added earlier, not just now'
+return null
+}
+void haiNoteDeclined() {
+List chosen = ((settings.runtimeAllowDevices ?: []) as List).findAll { it != null }.collect { it.id.toString() }
+List before = state.haiAllowSeen instanceof List ? state.haiAllowSeen : null
+List declined = new ArrayList((List) (state.haiDeclined ?: []))
+boolean moved = false
+if (before != null) {
+before.findAll { !chosen.contains(it) }.each { if (!declined.contains(it)) { declined << it; moved = true } }
+}
+if (declined.removeAll { chosen.contains(it) }) moved = true
+if (moved) state.haiDeclined = declined.size() > 500 ? declined.subList(declined.size() - 500, declined.size()) : declined
+if (before == null || before.sort(false) != chosen.sort(false)) state.haiAllowSeen = chosen
 }
 void haiEverydayFollow() {
 Map vals = everydayValues(haiEverydayLevels())
@@ -189,7 +228,7 @@ res.unchanged = (res.unchanged as int) + 1
 if (e.index == null || !((Map) e.index).containsKey('everyday')) rtRegistryTransition(pp, id, [e.state as String], e.state as String, [doc: doc])
 } else {
 Map kept = runtimeKeepText(pp, groovy.json.JsonOutput.toJson(f.doc))
-if (kept.kept > 0) { res.updated = (res.updated as int) + 1; log.info "HAI Engine: Everyday words: ${id} updated to the new levels" }
+if (kept.kept > 0) { res.updated = (res.updated as int) + 1; haiInfo "HAI Engine: Everyday words: ${id} updated to the new levels" }
 else { res.failed = (res.failed as int) + 1; log.warn "HAI Engine: Everyday words: ${id} not updated: ${kept.notice ?: 'refused'}" }
 }
 } catch (Exception ex) {
@@ -212,11 +251,23 @@ if (f) parts << "${f} could not be updated (see the log)".toString()
 return parts.join('; ') + '.'
 }
 void haiInit() {
+state.haiCodeVersion = ENGINE_APP_VERSION
 runtimePermissionDefaults()
 haiAudiencesInit()
 engineInit()
 runtimeInit()
 try { checkerChild() } catch (Exception e) { log.warn "HAI Engine: HAI Checker could not be added yet (${e.message})" }
+}
+void haiCodeCheck() {
+if (state.haiCodeVersion == ENGINE_APP_VERSION) return
+String was = state.haiCodeVersion as String
+try {
+haiInit()
+haiInfo "HAI Engine: updated from ${was ?: 'an earlier build'} to ${ENGINE_APP_VERSION}; its subscriptions and schedules are set up again."
+} catch (Exception e) {
+state.haiCodeVersion = ENGINE_APP_VERSION
+log.warn "HAI Engine: setting up ${ENGINE_APP_VERSION} after a code update failed (${e.message}); press Done on the HAI Engine page."
+}
 }
 void runtimePermissionDefaults() {
 if (state.permissionDefaultsApplied) return
@@ -259,6 +310,7 @@ return "<small>Need help or found a problem? ${report}${thread}.</small>".toStri
 }
 def appButtonHandler(String btn) {
 if (btn == null) return
+if (HAI_PAGE_BUTTONS.containsKey(btn)) state.haiPageOpen = HAI_PAGE_BUTTONS.get(btn)
 if (btn == 'engineClearSpendStop') { engineClearSpendStop(); return }
 if (btn == 'engineTestApiKey') { engineTestApiKey(); return }
 if (btn == 'haiDiagnostics') { haiDiagnosticsOn(); return }
@@ -268,8 +320,7 @@ try { addChildApp('gordonthelander', MIGRATION_CHILD_NAME, 'HAI Migration'); sta
 catch (Exception e) {
 boolean notYet = false
 try { notYet = app.getInstallationState() != 'COMPLETE' } catch (Exception x) { notYet = false }
-state.haiNotice = notYet ? 'Press Done at the bottom to finish installing HAI Engine, then open it again and press Turn on HAI Migration.'
-: 'HAI Migration is not on this hub. Install it with Hubitat Package Manager (Modify, HAI Engine) or add its app code under Apps Code, then press Turn on HAI Migration again.'
+state.haiNotice = notYet ? 'help:migration-not-yet' : 'help:migration-missing'
 }
 return
 }
@@ -307,6 +358,29 @@ runtimeRuleName(a) <=> runtimeRuleName(b)
 [(e.ruleId.toString()): runtimeRuleName(e)]
 }
 }
+@Field static final Map HAI_PAGE_SECTIONS = [
+devices: ['runtimeAllowDevices', 'haiAutoApproveNew'],
+powers: ['runtimeAllowSetMode', 'runtimeAllowHsm', 'runtimeAllowHubPower', 'runtimeWritableVariables'],
+stop: ['haiDeactivateTarget'],
+endpoints: ['haiEndpointOn', 'haiEndpointGet', 'haiEndpointCloud'],
+mcp: ['haiMcpOn', 'haiMcpCloud']]
+@Field static final Map HAI_PAGE_BUTTONS = [haiDeactivate: 'stop', engineClearSpendStop: 'ai', engineTestApiKey: 'ai',
+haiRotateAccess: 'access', haiDiagnostics: 'health']
+String haiPageOpenSection() {
+String pressed = state.remove('haiPageOpen') as String
+Map seen = state.haiPageSeen instanceof Map ? state.haiPageSeen : null
+Map marks = [:]
+HAI_PAGE_SECTIONS.each { String k, List keys ->
+marks.put(k, keys.collect { String n ->
+Object v = settings[n]
+v instanceof List ? ((List) v).collect { x -> x instanceof String || x instanceof Number ? x : x?.id }.join(',') : "${v}"
+}.join('|').hashCode())
+}
+boolean recent = seen != null && now() - ((seen.at ?: 0L) as long) < 1800000L
+String changed = recent ? (String) marks.keySet().find { String k -> seen.get(k) != null && seen.get(k) != marks.get(k) } : null
+state.haiPageSeen = marks + [at: now()]
+return pressed ?: changed
+}
 def haiMainPage() {
 boolean haiPending = false
 try { haiPending = app.getInstallationState() != 'COMPLETE' } catch (Exception e) { haiPending = false }
@@ -316,6 +390,7 @@ String haiHelpText = editorHelpPage()
 Map haiHelpFill = [docs: HAI_DOCS_URL, issues: HAI_ISSUES_URL, amRepo: AM_REPO_URL, amRepoShort: AM_REPO_URL.replace('https://', ''),
 keys: CLAUDE_KEYS_URL, keysShort: CLAUDE_KEYS_URL.replace('https://', '')]
 Closure pageHelp = { String part -> editorHelpParts(haiHelpText, part, haiHelpFill) }
+String haiOpen = haiPageOpenSection()
 dynamicPage(name: 'haiMainPage', title: "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT})", install: !haiOthers, uninstall: true) {
 if (haiHelpText == null) {
 section() {
@@ -330,13 +405,13 @@ paragraph "<b style='color:#b00020'>HAI Engine is already on this hub (app ${hai
 String haiNewer = haiNewerVersion()
 if (haiNewer) {
 section() {
-paragraph "<b style='color:#1565c0'>HAI ${esc(haiNewer)} is available.</b> Update it in Hubitat Package Manager (Update)."
+editorHelpParts(haiHelpText, 'newer', haiHelpFill + [newer: esc(haiNewer)]).each { paragraph it }
 }
 }
 Map haiAi = haiAiStatus()
 if (haiAi.available != true && haiAi.code != 'nokey') {
 section() {
-paragraph "<b style='color:#b00020'>AI Rule Assistant is off: ${esc(haiAi.why as String)}.</b> ${esc(haiAi.act as String)} under AI token and cost management."
+editorHelpParts(haiHelpText, 'ai-off', haiHelpFill + [why: esc(haiAi.why as String), act: esc(haiAi.act as String)]).each { paragraph it }
 }
 }
 boolean haiNotYet = false
@@ -345,13 +420,13 @@ if (!state.accessToken) { try { createAccessToken() } catch (Exception e) { /* O
 section('The rule editor') {
 if (state.accessToken) {
 href name: 'haiEditorHref', title: 'Open the rule editor', required: false,
-url: "${getFullLocalApiServerUrl()}/editor?access_token=${state.accessToken}&aud=${haiAudienceSecret('editor')}&v=${EDITOR_PAGE_SHA256.take(12)}".toString(),
+url: haiEditorAddress(),
 description: 'Write, check, simulate and run your rules.'
-if (haiNotYet) paragraph '<small>Press Done at the bottom to finish installing. Until then the editor can write and check rules, but not put them on the hub.</small>'
+if (haiNotYet) pageHelp('editor-not-yet').each { paragraph it }
 } else {
-paragraph 'Enable OAuth for this app code (Apps Code, HAI Engine, OAuth), then open this page again to create the editor link.'
+pageHelp('editor-no-oauth').each { paragraph it }
 }
-if (state.haiNotice) paragraph "<b>${esc(state.haiNotice as String)}</b>"
+if (state.haiNotice) ("${state.haiNotice}".startsWith('help:') ? pageHelp("${state.haiNotice}".substring(5)) : ["<b>${esc(state.haiNotice as String)}</b>"]).each { paragraph it }
 paragraph haiHelpLine()
 }
 section('HAI Overview', hideable: true, hidden: true) {
@@ -381,10 +456,10 @@ int haiDeviceCount = ((List) (settings.runtimeAllowDevices ?: [])).size()
 Map haiAll = state.haiApproveAll instanceof Map ? state.haiApproveAll : null
 if (haiDeviceCount == 0 && haiAll?.count) haiDeviceCount = haiAll.count as int
 boolean haiAllNew = haiAll != null && haiAll.seen != true && !haiAll.skipped
-if (haiAllNew && haiAll.count) section() { paragraph "<b>HAI can use all ${haiAll.count} devices on this hub.</b> Open Approved devices below to untick any you want to keep it away from, then press Done." }
+if (haiAllNew && haiAll.count) section() { editorHelpParts(haiHelpText, 'all-devices', haiHelpFill + [count: haiAll.count]).each { paragraph it } }
 section(haiPermissionTitle('Approved devices:', "(${haiDeviceCount})"),
-hideable: true, hidden: haiDeviceCount > 0) {
-if (haiAllNew && haiAll.error) paragraph "<b>HAI could not read this hub's device list (${haiAll.error}), so no device is approved yet.</b> Select the devices your rules may use."
+hideable: true, hidden: haiDeviceCount > 0 && haiOpen != 'devices') {
+if (haiAllNew && haiAll.error) editorHelpParts(haiHelpText, 'all-devices-unread', haiHelpFill + [error: haiAll.error]).each { paragraph it }
 input 'runtimeAllowDevices', 'capability.*', title: 'Devices', multiple: true, required: false, submitOnChange: true
 input 'haiAutoApproveNew', 'bool', title: 'Approve new devices automatically', defaultValue: true, submitOnChange: true
 pageHelp('devices-new').each { paragraph it }
@@ -393,18 +468,22 @@ Map haiVarOptions = runtimeHubVariableOptions()
 List haiVarsChosen = settings.runtimeWritableVariables == null ? (haiVarOptions.keySet() as List) : settings.runtimeWritableVariables
 boolean haiModeOn = settings.runtimeAllowSetMode != false
 boolean haiHsmOn = settings.runtimeAllowHsm != false
-section(haiPermissionTitle('Mode', "[${haiModeOn ? 'ON' : 'OFF'}],", 'HSM', "[${haiHsmOn ? 'ON' : 'OFF'}]",
+boolean haiPowerOn = settings.runtimeAllowHubPower != false
+section(haiPermissionTitle('Mode', "[${haiModeOn ? 'ON' : 'OFF'}],", 'HSM', "[${haiHsmOn ? 'ON' : 'OFF'}],",
+'Reboot', "[${haiPowerOn ? 'ON' : 'OFF'}]",
 'and approved hub variables', "(${haiVarsChosen.size()})"),
-hideable: true, hidden: true) {
+hideable: true, hidden: haiOpen != 'powers') {
 List haiModeNames = location.modes.collect { it.name.toString() }
 input 'runtimeAllowSetMode', 'bool', defaultValue: true, submitOnChange: true,
 title: "Allow rules to change the mode${haiModeNames ? " (${haiModeNames.join(', ')})" : ''}".toString()
 input 'runtimeAllowHsm', 'bool', defaultValue: true, submitOnChange: true,
 title: 'Allow rules to arm and disarm Hubitat Safety Monitor'
+input 'runtimeAllowHubPower', 'bool', defaultValue: true, submitOnChange: true,
+title: 'Allow rules to reboot or shut down the hub'
 input 'runtimeWritableVariables', 'enum', title: 'Approved hub variables', submitOnChange: true,
 options: haiVarOptions, multiple: true, required: false, defaultValue: haiVarOptions.keySet() as List
 }
-section('Stop a rule', hideable: true, hidden: true) {
+section('Stop a rule', hideable: true, hidden: haiOpen != 'stop') {
 pageHelp('stop-rule').each { paragraph it }
 input 'haiDeactivateTarget', 'enum', title: 'Rule', options: runtimeRuleOptions(), required: false, submitOnChange: true
 if (settings.haiDeactivateTarget) input 'haiDeactivate', 'button', title: 'Deactivate'
@@ -416,7 +495,7 @@ if (state.engineKeyTestedMark != mark) { state.engineKeyTestedMark = mark; engin
 }
 Long aiTestAt = (state.engineKeyTest instanceof Map ? ((Map) state.engineKeyTest).at : null) as Long
 boolean aiOpen = (haiAi.available != true && haiAi.code != 'nokey') || (aiTestAt != null && now() - aiTestAt < 120000L)
-section('AI token and cost management', hideable: true, hidden: !aiOpen) {
+section('AI token and cost management', hideable: true, hidden: !aiOpen && haiOpen != 'ai') {
 if (!engineHasKey()) pageHelp('ai-optional').each { paragraph it }
 input 'engineApiKey', 'password', required: false, submitOnChange: true,
 title: state.engineKeyTail ? "Claude API key - one ending ...${state.engineKeyTail} is stored. Type a new one to replace it.".toString()
@@ -426,7 +505,7 @@ if (engineHasKey() && settings.engineSpendLimitUsd == null) pageHelp('ai-no-limi
 input 'engineSpendLimitUsd', 'decimal', title: 'Total spending allowed for drafting (US$)', required: false
 paragraph "<small>${esc(engineDraftAverageText())}</small>"
 if (state.engineSpendStop) {
-paragraph "<b>Drafting is stopped.</b> ${esc((state.engineSpendStop.reason ?: 'the spending limit was reached') as String)}. Type the limit again to clear it; what has already been spent still counts."
+editorHelpParts(haiHelpText, 'ai-stopped', haiHelpFill + [reason: esc((state.engineSpendStop.reason ?: 'the spending limit was reached') as String)]).each { paragraph it }
 input 'engineSpendLimitConfirmUsd', 'decimal', title: 'Type the spending limit again to confirm', required: false
 input 'engineClearSpendStop', 'button', title: 'Clear spending stop'
 }
@@ -434,7 +513,7 @@ input 'engineEffort', 'enum', title: 'Effort', options: ['low', 'medium', 'high'
 input 'engineTestApiKey', 'button', title: 'Test the API key'
 if (state.engineKeyTest) paragraph engineKeyTestLine()
 }
-section('Rule end points', hideable: true, hidden: true) {
+section('Rule end points', hideable: true, hidden: haiOpen != 'endpoints') {
 pageHelp('endpoints').each { paragraph it }
 input 'runtimeAppApi', 'bool', title: 'Let other apps on this hub run HAI rules', defaultValue: true
 pageHelp('endpoints-apps').each { paragraph it }
@@ -448,6 +527,15 @@ pageHelp('endpoints-off').each { paragraph it }
 } else if (state.accessToken) {
 paragraph "<b>Your private web address</b><br><code>${getFullLocalApiServerUrl()}/endpoint/rules?access_token=${state.accessToken}&aud=${haiAudienceSecret('endpoint')}</code>"
 pageHelp('endpoints-on').each { paragraph it }
+input 'haiEndpointGet', 'bool', title: 'Allow GET links (Rule Machine-style)', defaultValue: false, submitOnChange: true
+pageHelp(settings.haiEndpointGet == true ? 'endpoints-get-on' : 'endpoints-get-off').each { paragraph it }
+input 'haiEndpointCloud', 'bool', title: "Allow through Hubitat's cloud", defaultValue: false, submitOnChange: true
+if (settings.haiEndpointCloud == true) {
+paragraph "<b>Your private cloud address</b><br><code>${getFullApiServerUrl()}/endpoint/rules?access_token=${state.accessToken}&aud=${haiAudienceSecret('endpoint')}</code>"
+pageHelp('cloud-on').each { paragraph it }
+} else {
+pageHelp('cloud-off').each { paragraph it }
+}
 }
 }
 section('Everyday words', hideable: true, hidden: true) {
@@ -467,7 +555,7 @@ pageHelp('everyday-light').each { paragraph it }
 input 'everydayWeatherDevice', 'capability.temperatureMeasurement', title: 'Weather device', required: false, multiple: false
 pageHelp('everyday-weather').each { paragraph it }
 }
-section('MCP endpoint', hideable: true, hidden: true) {
+section('MCP endpoint', hideable: true, hidden: haiOpen != 'mcp') {
 pageHelp('mcp').each { paragraph it }
 input 'haiMcpOn', 'bool', title: 'Let an AI assistant connect (MCP)', defaultValue: false, submitOnChange: true
 if (settings.haiMcpOn != true) {
@@ -477,13 +565,20 @@ pageHelp('mcp-done').each { paragraph it }
 } else {
 paragraph "<code>${getFullLocalApiServerUrl()}/mcp?access_token=${state.accessToken}&aud=${haiAudienceSecret('mcp')}</code>"
 pageHelp('mcp-on').each { paragraph it }
+input 'haiMcpCloud', 'bool', title: "Allow through Hubitat's cloud", defaultValue: false, submitOnChange: true
+if (settings.haiMcpCloud == true) {
+paragraph "<code>${getFullApiServerUrl()}/mcp?access_token=${state.accessToken}&aud=${haiAudienceSecret('mcp')}</code>"
+pageHelp('cloud-on').each { paragraph it }
+} else {
+pageHelp('cloud-off').each { paragraph it }
 }
 }
-section('Change access addresses', hideable: true, hidden: true) {
+}
+section('Change access addresses', hideable: true, hidden: haiOpen != 'access') {
 pageHelp('access').each { paragraph it }
 input 'haiRotateAccess', 'button', title: "Change HAI's access addresses"
 }
-section('Health and diagnostics', hideable: true, hidden: true) {
+section('Health and diagnostics', hideable: true, hidden: haiOpen != 'health') {
 paragraph haiHealthLine()
 haiDiagnosticLines().each { String line -> paragraph "<small>${esc(line)}</small>".toString() }
 if (haiDiagnosticsActive()) {
@@ -492,8 +587,20 @@ pageHelp('diagnostics-on').each { paragraph it }
 pageHelp('diagnostics-off').each { paragraph it }
 input 'haiDiagnostics', 'button', title: 'Turn diagnostics on for an hour'
 }
+input 'txtEnable', 'bool', title: 'Log what HAI Engine does (descriptive text)', defaultValue: true
+input 'debugEnable', 'bool', title: 'Log every request and activation as well (debug; turns itself off after 30 minutes)', defaultValue: false
 }
 }
+}
+void haiInfo(Object text) { if (settings.txtEnable != false) log.info(text as String) }
+void haiDebug(Object text) { if (settings.debugEnable == true) log.debug(text as String) }
+def logsOff() {
+app.updateSetting('debugEnable', [value: 'false', type: 'bool'])
+log.info 'HAI Engine: debug logging is off again'
+}
+void haiLogsSchedule() {
+unschedule('logsOff')
+if (settings.debugEnable == true) runIn(1800, 'logsOff')
 }
 void haiDiagnosticsOn() {
 state.haiDiagnosticsUntil = now() + 3600000L
@@ -516,12 +623,12 @@ return until != null && (until as long) > now()
 }
 List haiDiagnosticLines() {
 List out = []
+String hp = editorHelpPage()
 Map ev = haiEverydayLevels().collectEntries { k, v -> [(k): k == 'scale' ? v : everydayNumber(v)] }
-String deg = "\u00b0${ev.scale}".toString()
-out << "Everyday words in use: dark under ${ev.darkBelow} lux, dusk or dawn to ${ev.overcastFrom}, bright from ${ev.brightFrom} lux, hot from ${ev.hotFrom}${deg}, cold to ${ev.coldTo}${deg}, windy from ${ev.windyFrom}.".toString()
+out.addAll(editorHelpParts(hp, 'diag-everyday', ev + [deg: "\u00b0${ev.scale}"]))
 def wx = settings.everydayWeatherDevice
 if (wx == null) {
-out << 'Weather device: none chosen; the editor uses an approved device that reports like one, if there is one.'
+out.addAll(editorHelpParts(hp, 'diag-no-weather'))
 } else {
 Long at = null
 try { at = wx.getLastActivity()?.getTime() } catch (Exception e) { at = null }
@@ -538,9 +645,9 @@ Map runs = [:]
 int wrong = switched.count { Object p -> ((Map) (runs.get(((Map) p).haiRuleId as String) ?: [:])).lastRunProblem } as int
 int ran = switched.count { Object p -> ((Map) (runs.get(((Map) p).haiRuleId as String) ?: [:])).lastRunAt != null } as int
 int n = switched.size()
-out << "Migration watch: ${n} Rule Machine rule${n == 1 ? '' : 's'} switched over to ${n == 1 ? 'its' : 'their'} HAI cop${n == 1 ? 'y' : 'ies'}; ${ran} ha${ran == 1 ? 's' : 've'} run, ${wrong} last run${wrong == 1 ? '' : 's'} went wrong${wrong ? ' (see HAI Migration)' : ''}.".toString()
+out << "Migration watch: Rule Machine rules switched over to HAI ${n}, run ${ran}, last run went wrong ${wrong}${wrong ? ' (see HAI Migration)' : ''}.".toString()
 } else {
-out << 'Migration watch: no Rule Machine rule is switched over to an HAI copy.'
+out.addAll(editorHelpParts(hp, 'diag-no-switch'))
 }
 return out
 }
@@ -551,7 +658,7 @@ Object last = state.runtimeAnnouncedAt
 String when = last == null ? 'not yet' : runtimeClock().call(last as long)
 return "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT}). ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
 }
-@Field static final String ENGINE_APP_VERSION = '0.5.116-dev'
+@Field static final String ENGINE_APP_VERSION = '0.5.122-dev'
 @Field static final int ENGINE_MAX_PROPOSALS = 20
 @Field static final java.util.concurrent.ConcurrentHashMap ENGINE_DRAFT_INV = new java.util.concurrent.ConcurrentHashMap()
 @Field static final int ENGINE_MAX_ATTRIBUTES = 64
@@ -563,7 +670,34 @@ void engineInit() {
 unsubscribe()
 ['engineDispatchNow', 'runtimeRuleIndex', 'runtimeAnnounced'].each { state.remove(it) }
 if (!state.accessToken) {
-try { createAccessToken() } catch (Exception e) { log.warn "HAI Engine: OAuth is not enabled for this app code (${e.message})" }
+try { createAccessToken() } catch (Exception e) { haiOAuthSelf('HAI Engine') }
+}
+}
+boolean haiOAuthSelf(String who) {
+if (state.oauthSelfAt != null && now() - (state.oauthSelfAt as long) < 60000L) return false
+state.oauthSelfAt = now()
+try {
+Object typeId = null
+httpGet([uri: "http://127.0.0.1:8080/installedapp/json/${app.id}".toString(), contentType: 'application/json', timeout: 10]) { resp ->
+Map d = resp?.data instanceof Map ? resp.data : [:]
+typeId = (d.app instanceof Map ? ((Map) d.app).id : null) ?: (d.appType instanceof Map ? ((Map) d.appType).id : null) ?:
+(d.installedApp instanceof Map ? (((Map) d.installedApp).appTypeId ?: ((Map) d.installedApp).appId) : null) ?: d.appTypeId
+}
+if (!("${typeId}" ==~ /\d{1,12}/)) throw new IllegalStateException("this app's code id was not found")
+Object version = null
+httpGet([uri: "http://127.0.0.1:8080/app/ajax/code?id=${typeId}".toString(), contentType: 'application/json', timeout: 10]) { resp ->
+version = resp?.data instanceof Map ? ((Map) resp.data).version : null
+}
+if (version == null) throw new IllegalStateException("the code's version was not read")
+httpPost([uri: 'http://127.0.0.1:8080/app/edit/update', requestContentType: 'application/x-www-form-urlencoded', timeout: 20,
+body: [id: typeId as String, version: version as String, oauthEnabled: 'true', webServerRedirectUri: '', displayLink: '',
+_action_update: 'Update']]) { resp -> }
+createAccessToken()
+log.info "${who}: OAuth was off for this app's code, so HAI turned it on"
+return true
+} catch (Exception e) {
+log.warn "${who}: OAuth is not enabled for this app code, and could not be turned on (${e.message}); turn it on in Apps Code"
+return false
 }
 }
 Map engineDispatchSubmission(Map payload, Map inProcess = null) {
@@ -827,7 +961,7 @@ engineSend()
 void engineResend(Map data) {
 String why = authorStaleReason(filed('engineSession'), data, true)
 if (why != null) {
-log.info "HAI Engine: a scheduled resend was dropped because ${why}"
+haiDebug "HAI Engine: a scheduled resend was dropped because ${why}"
 return
 }
 engineSend()
@@ -862,7 +996,7 @@ void engineReply(resp, data) {
 Map session = filed('engineSession')
 String why = authorStaleReason(session, data)
 if (why != null) {
-log.info "HAI Engine: a provider reply was ignored because ${why}"
+haiDebug "HAI Engine: a provider reply was ignored because ${why}"
 return
 }
 authorMarkReceived(session)
@@ -908,7 +1042,7 @@ Object spent = ((Map) session.budget)?.spentUsd
 state.engineDraftResult = engineRemember(proposal, editorRuleFromHistory(history, proposal.ruleHash as String),
 session.outcome.status == 'failed', spent instanceof Number ? (spent as double) : null)
 }
-log.info "HAI Engine: drafting finished, ${session.outcome.status}, ${session.outcome.attempts} attempt(s)"
+haiInfo "HAI Engine: drafting finished, ${session.outcome.status}, ${session.outcome.attempts} attempt(s)"
 return
 }
 state.engineStatus = "Drafting, attempt ${(session.attempts as int) + 1}. Refresh to see the result."
@@ -1025,7 +1159,7 @@ if (refused != null) {
 state.engineStatus = "The spending stop was not cleared: ${refused}.".toString()
 return
 }
-log.info "HAI Engine: spending stop cleared (${state.engineSpendStop.reason})"
+haiInfo "HAI Engine: spending stop cleared (${state.engineSpendStop.reason})"
 state.engineSpendStop = null
 state.engineStatus = 'The spending stop was cleared. The amount already counted still applies.'
 }
@@ -1106,10 +1240,12 @@ if (name == 'engineSession' && state.engineSessionMark == null) filedMark(filed(
 }
 }
 void engineStoreSession(Map session) {
-filedPut('engineSession', authorBoundSession(session))
+Map b = checkerCall([op: 'bound', session: session])
+filedPut('engineSession', b.checkerError ? session : b.session)
 }
 void engineStoreOutcome(Map outcome) {
-filedPut('engineOutcome', authorBoundOutcome(outcome))
+Map b = checkerCall([op: 'bound', outcome: outcome])
+filedPut('engineOutcome', b.checkerError ? outcome : b.outcome)
 }
 Map engineRemember(Map proposal, Map rule = null, boolean needsFixing = false, Double costUsd = null) {
 List kept = (filed('proposals') ?: [])
@@ -1192,14 +1328,14 @@ data: groovy.json.JsonOutput.toJson([ok: false, error: 'MCP_OFF', message: 'The 
 def mcpGet() {
 if (!haiAudienceOk('/mcp')) return haiRefuse('/mcp')
 if (settings.haiMcpOn != true) return mcpOff()
+if (haiViaCloud() && settings.haiMcpCloud != true) return haiCloudOff('MCP')
 render(status: 405, contentType: 'text/plain', data: 'This server does not offer a server-to-client stream.')
 }
 def mcpPost() {
 if (!haiAudienceOk('/mcp')) return haiRefuse('/mcp')
 if (settings.haiMcpOn != true) return mcpOff()
-String raw = null
-try { raw = request.body as String } catch (Exception e) { raw = null }
-if (raw == null) return mcpRender(null, null, mcpError(-32700, 'Parse error', 'the request had no body'))
+if (haiViaCloud() && settings.haiMcpCloud != true) return haiCloudOff('MCP')
+String raw = haiBody()
 if (raw.length() > ENGINE_MAX_MCP_BODY_CHARS) {
 return mcpRender(null, null, mcpError(-32600, 'Invalid Request', "the body is larger than ${ENGINE_MAX_MCP_BODY_CHARS} characters".toString()))
 }
@@ -1341,7 +1477,10 @@ return keys.get(audience) as String
 }
 void haiAudiencesInit() {
 HAI_ROUTE_AUDIENCE.values().toList().unique().each { Object a -> haiAudienceSecret(a as String) }
-if (!(state.haiApiToken instanceof String) || !((String) state.haiApiToken ==~ /[a-f0-9]{32}/)) state.haiApiToken = rtNewApiToken()
+if (!(state.haiApiToken instanceof String) || !((String) state.haiApiToken ==~ /[a-f0-9]{32}/) || state.haiApiSigned != true) {
+state.haiApiToken = rtNewApiToken()
+state.haiApiSigned = true
+}
 }
 void haiRotateAccess() {
 String before = state.accessToken as String
@@ -1357,14 +1496,17 @@ state.haiAudienceKeys = [:]
 state.remove('haiApiToken')
 haiAudiencesInit()
 HAI_API_REFUSED.remove(app.id as String)
-boolean migration = true
-try { def m = haiMigrationChild(); if (m != null) migration = m.haiRotateAccess() != false }
-catch (Exception e) { migration = false; log.warn "HAI Engine: HAI Migration kept its old address: ${e.message}" }
+state.haiMigrationEpoch = ((state.haiMigrationEpoch ?: 0) as int) + 1
+state.remove('haiMigrationLink')
+boolean migration = haiMigrationChild() != null
+if (migration) sendLocationEvent(name: MIGRATION_ROTATE_EVENT, value: 'rotate', isStateChange: true, displayed: false)
+haiRuleKeyNew()
+rtPushAllow(runtimePlat())
 runtimeRefreshEditorLinks()
 rtLog(runtimePlat(), [what: 'accessRotated'])
-log.info 'HAI Engine: the access addresses and the API token were changed. Old links and the old API token no longer work.'
+haiInfo 'HAI Engine: the access addresses and the API token were changed. Old links and the old API token stop working within a minute.'
 state.haiNotice = "HAI's addresses changed. Open the editor from this page again, and give other apps the new API token. " +
-(migration ? '' : 'HAI Migration kept its old address; press the button again to retry. ')
+(migration ? 'HAI Migration changes its own address within a few seconds. ' : '')
 }
 boolean haiAudienceOk(String route) {
 String want = HAI_ROUTE_AUDIENCE.get(route) as String
@@ -1372,7 +1514,22 @@ if (want == null) return false
 if (want == 'feed') return true
 String given = null
 try { given = params?.aud as String } catch (Exception e) { given = null }
+if (given == null) given = haiRequestHeader('X-HAI-Aud')
 return jsonSameSecret(haiAudienceSecret(want), given)
+}
+String haiRequestHeader(String name) {
+Object hs = null
+try { hs = request?.headers } catch (Exception e) { hs = null }
+if (!(hs instanceof Map)) return null
+Object v = ((Map) hs).find { k, x -> k != null && k.toString().equalsIgnoreCase(name) }?.value
+if (v instanceof List) v = ((List) v).isEmpty() ? null : ((List) v)[0]
+return v == null ? null : v.toString()
+}
+String haiBody() {
+Object b = null
+try { b = request?.body } catch (Exception e) { b = null }
+String t = b instanceof byte[] ? new String((byte[]) b, 'UTF-8') : b?.toString()
+return t == null || t.trim().isEmpty() ? '{}' : t
 }
 Map haiAudienceRefusal(String route) {
 return [status: 403, body: [ok: false, error: 'WRONG_AUDIENCE',
@@ -1385,10 +1542,16 @@ data: groovy.json.JsonOutput.toJson(r.body), headers: ['Cache-Control': 'no-stor
 }
 def editorPageGet() {
 if (!haiAudienceOk('/editor')) return haiRefuse('/editor')
+haiCodeCheck()
 String page = editorPage()
+if (haiTooBigForCloud(page)) return haiCloudTooBig(page, true)
 boolean current = (params?.v as String) == EDITOR_PAGE_SHA256.take(12) && EDITOR_FILE_CACHE.containsKey('page:' + EDITOR_PAGE_SHA256)
+String tag = "\"${EDITOR_PAGE_SHA256.take(16)}\"".toString()
+if (current && haiRequestHeader('If-None-Match') == tag) {
+return render(status: 304, contentType: 'text/html', data: '', headers: ['Cache-Control': 'private, no-cache', 'ETag': tag])
+}
 return render(status: 200, contentType: 'text/html', data: page,
-headers: ['Cache-Control': current ? 'private, max-age=31536000, immutable' : 'no-store, must-revalidate'])
+headers: current ? ['Cache-Control': 'private, no-cache', 'ETag': tag] : ['Cache-Control': 'no-store, must-revalidate'])
 }
 @Field static final String HAI_REPORT_URL = 'https://github.com/GordonThelander/HAI-Engine/issues/new/choose'
 @Field static final String MIGRATION_CHILD_NAME = 'HAI Migration (Preview)'
@@ -1396,10 +1559,16 @@ headers: ['Cache-Control': current ? 'private, max-age=31536000, immutable' : 'n
 String haiMigrationPageUrl() {
 def m = haiMigrationChild()
 if (m == null) return null
-String page = null
-try { page = m.haiMigrationPageLink() as String } catch (Exception e) { page = null }
-return page ?: "/installedapp/configure/${m.id}".toString()
+String page = state.haiMigrationLink instanceof String ? (String) state.haiMigrationLink : null
+if (page == null || !page.startsWith("/apps/api/${m.id}/".toString())) return "/installedapp/configure/${m.id}".toString()
+String editor = haiEditorAddress()
+return editor == null ? page : "${page}#editor=${URLEncoder.encode(editor, 'UTF-8')}".toString()
 }
+Map haiMigrationAccess(String link) {
+if (link instanceof String && link != state.haiMigrationLink) state.haiMigrationLink = link
+return [epoch: (state.haiMigrationEpoch ?: 0) as int]
+}
+@Field static final String MIGRATION_ROTATE_EVENT = 'haiMigrationRotate'
 def haiMigrationChild() {
 return getChildApps()?.find { it.name == MIGRATION_CHILD_NAME }
 }
@@ -1448,8 +1617,14 @@ message: 'HAI Engine and HAI Checker are from different versions. Update HAI so 
 return out
 }
 String haiRuleKey() {
-if (!(state.haiRuleKey instanceof String)) state.haiRuleKey = UUID.randomUUID().toString()
+if (!(state.haiRuleKey instanceof String)) haiRuleKeyNew()
 return state.haiRuleKey as String
+}
+void haiRuleKeyNew() {
+state.haiRuleKey = (UUID.randomUUID().toString() + UUID.randomUUID().toString()).replace('-', '')
+}
+String haiSignedData(String name, Object value, Map payload) {
+return rtSignedData(haiRuleKey(), name, value, payload, now(), UUID.randomUUID().toString())
 }
 Map haiMigrationFacts(Boolean pairsOnly = false) {
 if (pairsOnly) return [contract: MIGRATION_CONTRACT, pairs: haiMigrationPairs()]
@@ -1500,10 +1675,20 @@ return [contract: MIGRATION_CONTRACT, pairs: haiMigrationPairs(), paused: paused
 disabled: disabled, appsComplete: listed.ok == true,
 pausedWhy: listed.ok == true ? null : listed.why, haiRules: haiRules, allowed: allowed,
 limits: [writable: runtimeIdList(settings.runtimeWritableVariables), modeAllowed: settings.runtimeAllowSetMode == true,
-disabled: disabledIds],
-editorUrl: state.accessToken ? "/apps/api/${app.id}/editor?access_token=${state.accessToken}&aud=${haiAudienceSecret('editor')}&v=${EDITOR_PAGE_SHA256.take(12)}".toString() : null]
+hubPowerAllowed: settings.runtimeAllowHubPower != false, hubAddresses: haiHubAddresses(), disabled: disabledIds]]
 }
+List haiHubAddresses() {
+String ip = null
+try { ip = location.hub?.localIP as String } catch (Exception e) { ip = null }
+return ip ? [ip] : []
+}
+String haiEditorAddress() {
+return state.accessToken ? "/apps/api/${app.id}/editor?access_token=${state.accessToken}&aud=${haiAudienceSecret('editor')}&v=${EDITOR_PAGE_SHA256.take(12)}".toString() : null
+}
+String haiEditorPageLink() { return haiEditorAddress() }
 Map haiAppsPaused() {
+Map had = HAI_APPS_SEEN.get(app.id as String)
+if (had != null && now() - (had.at as long) < HAI_APPS_FRESH_MS) return had.read
 Object data = null
 try {
 httpGet([uri: 'http://127.0.0.1:8080/hub2/appsList', contentType: 'application/json', timeout: 20]) { resp ->
@@ -1512,8 +1697,12 @@ if (resp?.status == 200) data = resp.data
 } catch (Exception e) {
 return [ok: false, why: "the hub's app list could not be read (${e.message})".toString()]
 }
-return haiAppsPausedFrom(data)
+Map read = haiAppsPausedFrom(data)
+if (read.ok == true) HAI_APPS_SEEN.put(app.id as String, [at: now(), read: read])
+return read
 }
+@Field static final java.util.concurrent.ConcurrentHashMap HAI_APPS_SEEN = new java.util.concurrent.ConcurrentHashMap()
+@Field static final long HAI_APPS_FRESH_MS = 30000L
 Map haiAppsPausedFrom(Object data) {
 if (!(data instanceof Map) || !(((Map) data).apps instanceof List)) return [ok: false, why: "the hub's app list came back empty or in an unexpected shape"]
 List paused = []
@@ -1561,6 +1750,7 @@ if (keep.size() != pairs.size()) { state.migPairs = keep; haiAnnounceSwitched() 
 }
 void haiAutomationMapSeen(Object seen) { state.haiAmSeen = seen == true }
 void haiMigrationRecord(Map pairs, String rmId = null, Boolean rmPaused = null) {
+HAI_APPS_SEEN.remove(app.id as String)
 if (pairs != null) { state.migPairs = pairs; haiAnnounceSwitched() }
 if (pairs != null && state.migPairsRestored != true) state.migPairsRestored = true
 if (rmId != null && rmPaused != null) {
@@ -1584,7 +1774,7 @@ if (sent?.build == ENGINE_APP_VERSION && sent?.pairs == now) return
 state.migSwitchedSent = [build: ENGINE_APP_VERSION, pairs: now]
 if (now.isEmpty() && sent == null) return
 sendLocationEvent(name: RT_SWITCHED_EVENT, value: 'switched', isStateChange: true, displayed: false,
-data: groovy.json.JsonOutput.toJson([pairs: now, key: haiRuleKey()]),
+data: haiSignedData(RT_SWITCHED_EVENT, 'switched', [pairs: now]),
 descriptionText: "HAI: ${now.size()} Rule Machine rule${now.size() == 1 ? '' : 's'} switched over".toString())
 }
 List haiMigrationRenames(Map doc) {
@@ -1617,6 +1807,7 @@ if (m.type == 'command') out << m
 m.values().each { Object x -> if (x instanceof List || x instanceof Map) haiCollectCommands(x, out) }
 }
 Map haiMigrationCall(String name, Map arg) {
+HAI_APPS_SEEN.remove(app.id as String)
 Map hooks = [
 haiRuleOp: { Map c ->
 Map pp = runtimePlat()
@@ -1713,6 +1904,7 @@ return r instanceof Map ? r : [ok: true]
 }
 def editorStateGet() {
 if (!haiAudienceOk('/editor/api/state')) return haiRefuse('/editor/api/state')
+haiCodeCheck()
 editorRespond('state') }
 def editorFixedGet() {
 if (!haiAudienceOk('/editor/api/fixed')) return haiRefuse('/editor/api/fixed')
@@ -1721,7 +1913,8 @@ try { text = editorFixedText() } catch (Exception e) {
 return render(status: 500, contentType: 'application/json',
 data: groovy.json.JsonOutput.toJson([ok: false, error: 'NO_TABLES', message: e.message]))
 }
-boolean current = (params?.v as String) == editorFixedVersion()
+if (haiTooBigForCloud(text)) return haiCloudTooBig(text)
+boolean current = (params?.v as String) == editorFixedVersion() && params?.access_token == null
 return render(status: 200, contentType: 'application/json', data: text,
 headers: ['Cache-Control': current ? 'private, max-age=31536000, immutable' : 'no-store, must-revalidate'])
 }
@@ -1746,8 +1939,7 @@ if (!haiAudienceOk('/editor/api/run-step')) return haiRefuse('/editor/api/run-st
 Map out
 int status = 200
 try {
-String raw = null
-try { raw = request.body as String } catch (Exception e) { raw = null }
+String raw = haiBody()
 Map read = editorReadBody(raw)
 Map made = read.error ? read.error : editorRunStepDoc((Map) read.value)
 if (made.status != null) { status = made.status as int; out = made.body }
@@ -1786,7 +1978,7 @@ if (v == null) return editorRunStepNo('VARIABLE_VALUE', "'${step.value}' is not 
 if (setGlobalVar(name, v) == false) return editorRunStepNo('VARIABLE_REFUSED', "The hub refused to set the hub variable '${name}'.".toString())
 sent << "${name} set to ${v}".toString()
 } else if (step.type == 'log') {
-if (step.level == 'warn') log.warn(step.text as String) else log.info(step.text as String)
+if (step.level == 'warn') log.warn(step.text as String) else haiInfo(step.text as String)
 sent << 'logged'
 } else {
 String cmd = step.command as String
@@ -1955,7 +2147,7 @@ try { deleteHubFile(old.name as String) } catch (Exception e) { log.warn "HAI En
 }
 state.haiBackups = idx
 if (unread == 0) state.haiBackupPrint = stamp
-log.info "HAI Engine: rule backup ${name}: ${rules.size()} rule${rules.size() == 1 ? '' : 's'}, ${drafts.size()} draft${drafts.size() == 1 ? '' : 's'}, " +
+haiInfo "HAI Engine: rule backup ${name}: ${rules.size()} rule${rules.size() == 1 ? '' : 's'}, ${drafts.size()} draft${drafts.size() == 1 ? '' : 's'}, " +
 "${pairs.size()} migration pair${pairs.size() == 1 ? '' : 's'}, ${bytes.length} bytes${unread ? ", ${unread} could not be read" : ''}"
 return [ok: true, written: true, name: name, bytes: bytes.length, rules: rules.size(), drafts: drafts.size(), pairs: pairs.size(), unread: unread]
 }
@@ -1992,7 +2184,7 @@ if (add.isEmpty() && from == null) continue
 if (!add.isEmpty()) {
 state.migPairs = new LinkedHashMap(have) + add
 haiAnnounceSwitched()
-log.info "HAI Engine: ${add.size()} migration pair${add.size() == 1 ? '' : 's'} restored from ${b.name}" +
+haiInfo "HAI Engine: ${add.size()} migration pair${add.size() == 1 ? '' : 's'} restored from ${b.name}" +
 "${got.dropped ? "; ${got.dropped} wait for a rule of the pair to be on the hub" : ''}"
 }
 state.migPairsRestoreFrom = b.name
@@ -2028,7 +2220,7 @@ idx << [name: n, at: at, bytes: size instanceof Number ? size : null, rules: nul
 } catch (Exception e) { log.warn "HAI Engine: File Manager could not be listed to find earlier backups (${e.message})" }
 state.haiBackups = idx.sort { ((Map) it).name as String }
 if (read) state.haiBackupsScanned = true
-if (idx.size() > have.size()) log.info "HAI Engine: found ${idx.size() - have.size()} earlier rule backup${idx.size() - have.size() == 1 ? '' : 's'} in File Manager"
+if (idx.size() > have.size()) haiInfo "HAI Engine: found ${idx.size() - have.size()} earlier rule backup${idx.size() - have.size() == 1 ? '' : 's'} in File Manager"
 }
 def editorBackupsGet() {
 if (!haiAudienceOk('/editor/api/backups')) return haiRefuse('/editor/api/backups')
@@ -2073,10 +2265,9 @@ Map sendTiming = timeRun ? [:] : null
 boolean wasRun = false
 Map out
 try {
-String raw = null
-try { raw = request.body as String } catch (Exception e) { raw = null }
+String raw = haiBody()
 out = editorSubmission(raw, haiSigningKey(), now(),
-state.accessToken ? "/apps/api/${app.id}/editor?access_token=${state.accessToken}&aud=${haiAudienceSecret('editor')}&v=${EDITOR_PAGE_SHA256.take(12)}".toString() : null)
+haiEditorAddress())
 if (timeRun) {
 sendTiming.submitMs = now() - phaseStarted
 phaseStarted = now()
@@ -2112,22 +2303,42 @@ String response = groovy.json.JsonOutput.toJson(out.body)
 if (timeRun && wasRun) {
 sendTiming.serializeMs = now() - phaseStarted
 sendTiming.totalMs = now() - sendStarted
-log.info "HAI editor run timings (ms): submit=${sendTiming.submitMs ?: 0}, keep=${sendTiming.keepMs ?: 0}, dispatch=${sendTiming.dispatchMs ?: 0}, serialize=${sendTiming.serializeMs}, total=${sendTiming.totalMs}"
+log.info "HAI editor run timings (ms): ${'submitMs keepMs dispatchMs'.split(' ').collect { "${it[0..-3]}=${sendTiming[it] ?: 0}" }.join(', ')}, serialize=${sendTiming.serializeMs}, total=${sendTiming.totalMs}"
 }
 return editorJson(out.status as int, response)
 }
 def endpointRulesGet() {
 if (!haiAudienceOk('/endpoint/rules')) return haiRefuse('/endpoint/rules')
 if (settings.haiEndpointOn != true) return endpointOff()
+if (haiViaCloud() && settings.haiEndpointCloud != true) return haiCloudOff('end point')
 endpointRespond([kind: 'rules']) }
-def endpointRuleGet() {
+def endpointRuleGet() { if (settings.haiEndpointGet != true) return endpointGetOff(); return endpointRulePost() }
+def endpointRulePost() {
 if (!haiAudienceOk('/endpoint/rules/:id/:op')) return haiRefuse('/endpoint/rules/:id/:op')
 if (settings.haiEndpointOn != true) return endpointOff()
+if (haiViaCloud() && settings.haiEndpointCloud != true) return haiCloudOff('end point')
 endpointRespond([kind: 'rule', id: endpointParam(params?.id), op: params?.op, value: endpointParam(params?.value)]) }
-def endpointVariableGet() {
+def endpointVariableGet() { if (settings.haiEndpointGet != true) return endpointGetOff(); return endpointVariablePost() }
+def endpointVariablePost() {
 if (!haiAudienceOk('/endpoint/variables/:name/:value')) return haiRefuse('/endpoint/variables/:name/:value')
 if (settings.haiEndpointOn != true) return endpointOff()
+if (haiViaCloud() && settings.haiEndpointCloud != true) return haiCloudOff('end point')
 endpointRespond([kind: 'variable', id: endpointParam(params?.name), value: endpointParam(params?.value)]) }
+Object endpointGetOff() {
+return render(status: 405, contentType: 'application/json', headers: ['Cache-Control': 'no-store', 'Allow': 'POST'],
+data: groovy.json.JsonOutput.toJson([ok: false, error: 'POST_ONLY',
+message: 'This end point changes something, so it takes POST. To use it as a plain link (GET), as Rule Machine does, turn on Allow GET links (Rule Machine-style) on the HAI Engine page.']))
+}
+boolean haiViaCloud() {
+String src = null
+try { src = request?.requestSource as String } catch (Exception e) { src = null }
+return src != null && src.toLowerCase() == 'cloud'
+}
+Object haiCloudOff(String what) {
+return render(status: 403, contentType: 'application/json', headers: ['Cache-Control': 'no-store'],
+data: groovy.json.JsonOutput.toJson([ok: false, error: 'CLOUD_OFF',
+message: "This ${what} address works on the home network only. To use it through Hubitat's cloud, turn on Allow through Hubitat's cloud for it on the HAI Engine page.".toString()]))
+}
 Object endpointOff() {
 return render(status: 403, contentType: 'application/json', headers: ['Cache-Control': 'no-store'],
 data: groovy.json.JsonOutput.toJson([ok: false, error: 'ENDPOINT_OFF', message: 'The rule web address is turned off on the HAI Engine page.']))
@@ -2143,7 +2354,7 @@ try {
 out = editorEndpoint(p, haiSigningKey(), now(), state.runtimeSummary)
 if (out.payload != null) {
 Map receipt = engineDispatchSubmission((Map) out.payload)
-log.info "HAI Engine: end point ${((Map) out.payload).op} ${((Map) out.payload).ruleId}: ${receipt?.ok ? 'done' : (receipt?.notice ?: receipt?.code)}"
+haiDebug "HAI Engine: end point ${((Map) out.payload).op} ${((Map) out.payload).ruleId}: ${receipt?.ok ? 'done' : (receipt?.notice ?: receipt?.code)}"
 if (receipt?.ok != true) {
 out = [status: 409, body: [ok: false, error: (receipt?.code ?: 'REFUSED') as String, op: ((Map) out.payload).op,
 ruleId: ((Map) out.payload).ruleId,
@@ -2154,7 +2365,7 @@ message: (receipt?.notice ?: receipt?.message ?: 'The hub refused this.') as Str
 log.warn "HAI Engine: end point failed: ${e.message}"
 out = [status: 500, body: [ok: false, error: 'INTERNAL', message: 'The hub could not complete this request.']]
 }
-render(status: out.status as int, contentType: 'application/json', data: groovy.json.JsonOutput.toJson(out.body))
+render(status: out.status as int, contentType: 'application/json', data: groovy.json.JsonOutput.toJson(out.body), headers: ['Cache-Control': 'no-store'])
 }
 def editorSavePost() {
 if (!haiAudienceOk('/editor/api/save')) return haiRefuse('/editor/api/save')
@@ -2167,7 +2378,7 @@ editorRespond('delete') }
 def editorDeleteManyPost() {
 if (!haiAudienceOk('/editor/api/delete-many')) return haiRefuse('/editor/api/delete-many')
 Map body = null
-try { body = new groovy.json.JsonSlurper().parseText((request.body ?: '{}') as String) } catch (Exception e) { body = null }
+try { body = new groovy.json.JsonSlurper().parseText(haiBody()) } catch (Exception e) { body = null }
 List rules = body?.rules instanceof List ? ((List) body.rules).findAll { it instanceof String }.unique() : []
 List drafts = body?.drafts instanceof List ? ((List) body.drafts).findAll { it instanceof String }.unique() : []
 if (rules.size() + drafts.size() == 0 || rules.size() + drafts.size() > ED_DEL_MAX) {
@@ -2267,8 +2478,7 @@ def editorDraftPost() {
 if (!haiAudienceOk('/editor/api/draft')) return haiRefuse('/editor/api/draft')
 Map out
 try {
-String raw = null
-try { raw = request.body as String } catch (Exception e) { raw = null }
+String raw = haiBody()
 Map parsed = jsonParse(raw ?: '{}')
 Map body = parsed.ok && parsed.value instanceof Map ? parsed.value : [:]
 String text = (body.request ?: '') as String
@@ -2346,7 +2556,7 @@ Map timing = timeCheck ? [:] : null
 try {
 String raw = null
 if (route in ['check', 'save', 'delete', 'export', 'import']) {
-try { raw = request.body as String } catch (Exception e) { raw = null }
+raw = haiBody()
 }
 Map store = route == 'state' ?
 [drafts: filed('editorDrafts') ?: [], draftSeq: state.editorDraftSeq ?: 0, proposals: [], proposalRules: [], outcome: null] :
@@ -2417,12 +2627,28 @@ if (timeCheck) {
 if (timing.digestCanonicalJsonMs != null) state.haiDigestProfiledUntil = state.haiDiagnosticsUntil
 timing.serializeMs = now() - serializeStarted
 timing.totalMs = now() - checkStarted
-log.info "HAI editor check timings (ms): inventory=${timing.inventoryMs ?: 0}, options=${timing.optionsMs ?: 0}, validate=${timing.validateMs ?: 0}, render=${timing.renderMs ?: 0}, sentences=${timing.sentencesMs ?: 0}, hash=${timing.hashMs ?: 0}, proposal=${timing.proposalMs ?: 0}, proposalValidate=${timing.proposeValidateMs ?: 0}, proposalChecklist=${timing.proposeChecklistMs ?: 0}, proposalRenderDiff=${timing.proposeRenderDiffMs ?: 0}, proposalScenarios=${timing.proposeScenariosMs ?: 0}, proposalEvidence=${timing.proposeEvidenceMs ?: 0}, proposalInventoryDigest=${timing.proposeInventoryDigestMs ?: 0}, digestTyped=${timing.digestTypedMs ?: 0}, digestFastJson=${timing.digestFastJsonMs ?: 0}, digestCanonicalJson=${timing.digestCanonicalJsonMs ?: 0}, digestHash=${timing.digestHashMs ?: 0}, digestFallback=${timing.digestFallback ?: false}, proposalPacketHash=${timing.proposePacketHashMs ?: 0}, receipt=${timing.receiptMs ?: 0}, serialize=${timing.serializeMs}, total=${timing.totalMs}"
+List timed = 'inventoryMs optionsMs validateMs renderMs sentencesMs hashMs proposalMs proposeValidateMs proposeChecklistMs proposeRenderDiffMs proposeScenariosMs proposeEvidenceMs proposeInventoryDigestMs digestTypedMs digestFastJsonMs digestCanonicalJsonMs digestHashMs'.split(' ').collect { String k -> "${k[0..-3].replace('propose', 'proposal')}=${timing[k] ?: 0}" }
+timed += ["digestFallback=${timing.digestFallback ?: false}", "proposalPacketHash=${timing.proposePacketHashMs ?: 0}", "receipt=${timing.receiptMs ?: 0}", "serialize=${timing.serializeMs}", "total=${timing.totalMs}"]
+log.info "HAI editor check timings (ms): ${timed.join(', ')}"
 }
 return editorJson(out.status as int, response)
 }
 Object editorJson(int status, String data) {
+if (haiTooBigForCloud(data)) return haiCloudTooBig(data)
 return render(status: status, contentType: 'application/json', data: data, headers: ['Cache-Control': 'no-store'])
+}
+@Field static final int HAI_CLOUD_MAX_BYTES = 120000
+boolean haiTooBigForCloud(String data) {
+if (data == null || data.length() * 3 <= HAI_CLOUD_MAX_BYTES || !haiViaCloud()) return false
+return data.length() > HAI_CLOUD_MAX_BYTES || data.getBytes('UTF-8').length > HAI_CLOUD_MAX_BYTES
+}
+Object haiCloudTooBig(String data, boolean html = false) {
+int kb = (int) Math.ceil(data.getBytes('UTF-8').length / 1024.0d)
+String msg = "This answer is ${kb} KB, more than Hubitat's cloud relay carries (about 128 KB), so it would fail there. Open this page on your home network.".toString()
+if (html) return render(status: 413, contentType: 'text/html', headers: ['Cache-Control': 'no-store'],
+data: "<!doctype html><meta charset=\"utf-8\"><title>HAI</title><p>${msg}</p>".toString())
+return render(status: 413, contentType: 'application/json', headers: ['Cache-Control': 'no-store'],
+data: groovy.json.JsonOutput.toJson([ok: false, error: 'TOO_LARGE_FOR_CLOUD', message: msg]))
 }
 Map editorCheckReceipt(Map doc, String ruleHash = null) {
 try {
@@ -2440,7 +2666,7 @@ unschedule()
 try {
 List ids = ((Map) (state.migPairs ?: [:])).findAll { k, v -> v instanceof Map && (((Map) v).phase == 'switched') && ((Map) v).rmWasPaused != true }
 .collect { k, v -> k as String }
-if (ids) { RMUtils.sendAction(ids, 'resumeRule', app.label, '5.0'); log.info "HAI Engine: resumed ${ids.size()} Rule Machine rule(s) whose HAI copy is being removed" }
+if (ids) { RMUtils.sendAction(ids, 'resumeRule', app.label, '5.0'); haiInfo "HAI Engine: resumed ${ids.size()} Rule Machine rule(s) whose HAI copy is being removed" }
 } catch (Exception e) { log.warn "HAI Engine: Rule Machine rules switched over to HAI could not be resumed (${e.message}); resume them in Rule Machine" }
 ENGINE_FILED.each { String n -> try { deleteHubFile(engineFiledFile(n)) } catch (Exception ignored) { } }
 getChildApps()?.each { deleteChildApp(it.id) }
@@ -2473,6 +2699,14 @@ void runtimeInit() {
 unschedule('haiWatchdog')
 unsubscribe()
 schedule(RT_WATCHDOG_CRON, 'haiWatchdog')
+unschedule('haiReconcileSoon')
+unschedule('haiAutoActivateQueued')
+unschedule('haiWatchdogMore')
+try {
+List staging = ((Map) rtRegistry(runtimePlat()).rules).values().findAll { ((Map) it).state == 'staging' }.collect { ((Map) it).ruleId as String }
+if (staging) runIn(5, 'haiReconcileSoon', [overwrite: true, data: [ids: staging]])
+} catch (Exception e) { log.warn "HAI Runtime: pending reconciles not re-armed (${e.message})" }
+if (state.runtimeAutoQueue) runIn(5, 'haiAutoActivateQueued', [overwrite: true])
 runIn(8, 'haiWriteAmStateNow')
 subscribe(location, 'systemStart', 'haiSystemStart')
 haiSigningKey()
@@ -2485,9 +2719,10 @@ unschedule('haiUpdateCheck')
 if (HAI_ENVIRONMENT == 'PREVIEW') { schedule(HAI_UPDATE_CRON, 'haiUpdateCheck'); if (state.haiLatest == null) runIn(30, 'haiUpdateCheck') }
 if (settings.haiAutoApproveNew != false) subscribe(location, 'deviceJoin', 'haiDeviceJoined')
 if (!state.accessToken) {
-try { createAccessToken() } catch (Exception e) { log.warn "HAI Runtime: OAuth is not enabled for this app code (${e.message})" }
+try { createAccessToken() } catch (Exception e) { haiOAuthSelf('HAI Engine') }
 }
 runtimeSyncVariableRegistration()
+haiRuleKeyNew()
 rtPushAllow(runtimePlat())
 runtimeRefreshEditorLinks()
 }
@@ -2607,6 +2842,7 @@ return [ok: false, code: reply.code ?: 'ABANDONED', ruleId: reply.ruleId,
 sentAt: current?.sentAt, accepted: true, notice: reply.notice]
 }
 def haiRuleSubmit(evt) {
+haiCodeCheck()
 state.remove('runtimeKeptJustNow')
 try {
 runtimeSubmit(evt)
@@ -2648,7 +2884,7 @@ stopped: e?.state == 'disabled', notice: kept.notice]
 String op = [pause: 'pause', resume: 'resume', stop: 'disable', start: 'enable', remove: 'remove', runNow: 'runNow'].get(chk.op)
 Map r = op == 'remove' && chk.rule == 'stopFirst' ? rtRemoveStoppingFirst(pp, chk.ruleId as String)
 : op != null ? rtRuleOp(pp, chk.ruleId as String, op) : rtEndpointOp(pp, chk.op as String, chk.ruleId as String, chk.rule as String)
-if (op == null) log.info "HAI Runtime: end point ${chk.op} ${chk.ruleId}: ${r?.ok ? 'done' : (r?.code ?: 'refused')}"
+if (op == null) haiDebug "HAI Runtime: end point ${chk.op} ${chk.ruleId}: ${r?.ok ? 'done' : (r?.code ?: 'refused')}"
 result = [ok: r?.ok == true, notice: r?.ok ? 'done' : (r?.message ?: r?.code ?: 'refused')]
 }
 state.runtimeLastSubmit = rtSubmitRecord(null, chk.ruleId as String,
@@ -2667,25 +2903,31 @@ return [ok: result.ok == true, code: result.ok == true ? 'ACCEPTED' : 'REFUSED',
 sentAt: chk.sentAt, op: chk.op, accepted: true, notice: result.notice]
 }
 @Field static final java.util.concurrent.ConcurrentHashMap HAI_API_REFUSED = new java.util.concurrent.ConcurrentHashMap()
+@Field static final java.util.concurrent.ConcurrentHashMap HAI_API_SEEN = new java.util.concurrent.ConcurrentHashMap()
 def haiRuleApi(evt) {
-Map req = [:]
-try { req = new groovy.json.JsonSlurper().parseText(evt.data as String) } catch (Exception e) { req = [:] }
-String refused = rtAppApiTokenRefusal(req, state.haiApiToken as String)
+haiCodeCheck()
+String token = state.haiApiToken as String
+Map seen = HAI_API_SEEN.get(app.id as String)
+if (seen == null) { seen = new LinkedHashMap(); HAI_API_SEEN.put(app.id as String, seen) }
+Map checked = rtAppApiVerify(token, evt.value, evt.data, now(), seen)
+String refused = checked.refused as String
 if (refused != null) {
-String from = ((req.from ?: 'an app') as String).take(80).replaceAll(/[<>]/, '')
-Map seen = HAI_API_REFUSED.get(app.id as String)
-if (seen == null) { seen = new java.util.concurrent.ConcurrentHashMap(); HAI_API_REFUSED.put(app.id as String, seen) }
-if (rtAppApiFirstRefusal(seen, from, 50)) {
-log.warn "HAI Engine: ignored a request from ${from}: ${refused == 'NO_TOKEN' ? 'it carries no API token' : 'its API token is wrong'}. " +
-"Copy the API token from the HAI Engine page, under Rule end points, into that app. Said once for each app until the hub restarts."
+String from = ((checked.from ?: 'an app') as String).take(80).replaceAll(/[<>]/, '')
+Map once = HAI_API_REFUSED.get(app.id as String)
+if (once == null) { once = new java.util.concurrent.ConcurrentHashMap(); HAI_API_REFUSED.put(app.id as String, once) }
+if (rtAppApiFirstRefusal(once, from, 50)) {
+log.warn "HAI Engine: ignored a request from ${from}: ${refused == 'TOKEN_IN_CLEAR' ? 'it sends the API token in clear; update its hai_rule_api.groovy' : refused == 'NO_SIGNATURE' ? 'it is not signed with the API token' : 'its signature is wrong, old or repeated'}. " +
+"Copy the API token from the HAI Engine page (Rule end points) into that app. Said once per app until the hub restarts."
 }
 return
 }
+Map req = checked.req
 if (!req.op) req.op = evt.value
 Map pp = runtimePlat()
 Map out = rtAppApi(pp, req, settings.runtimeAppApi != false, (state.runtimePaused ?: []))
-log.info "HAI Runtime: ${out.from} asked to ${out.op}${out.rule ? ' ' + out.rule : ''}: ${out.ok ? 'done' : out.code}"
-sendLocationEvent(name: RT_API_REPLY, value: (req.id ?: out.op ?: 'reply') as String, data: groovy.json.JsonOutput.toJson(out),
+haiDebug "HAI Runtime: ${out.from} asked to ${out.op}${out.rule ? ' ' + out.rule : ''}: ${out.ok ? 'done' : out.code}"
+String value = (req.id ?: out.op ?: 'reply') as String
+sendLocationEvent(name: RT_API_REPLY, value: value, data: rtAppApiReplyData(token, value, out, now(), UUID.randomUUID().toString()),
 isStateChange: true, displayed: false, descriptionText: "HAI Runtime answered ${out.from}".toString())
 if (out.ok && out.op != 'list') runIn(2, 'haiReconcileSoon', out.rule ? [overwrite: false, data: [ids: [out.rule as String]]] : [overwrite: false])
 }
@@ -2712,7 +2954,7 @@ Map cand = rtCandidate(pp, candidateId)
 state.runtimeLastActivation = [ruleId: cand?.ruleId, ok: out.ok || out.code == 'STAGE_UNCONFIRMED', code: out.code,
 message: out.message, claimId: out.claimId, challengeId: out.challengeId,
 activatedAt: now()]
-log.info "HAI Engine: activated ${cand?.ruleId} (${out.code ?: (out.ok ? 'staged' : 'refused')})"
+haiDebug "HAI Engine: activated ${cand?.ruleId} (${out.code ?: (out.ok ? 'staged' : 'refused')})"
 Map soon = cand?.ruleId ? [overwrite: false, data: [ids: [cand.ruleId as String]]] : [overwrite: false]
 runIn(1, 'haiReconcileSoon', soon)
 if (out.code == 'STAGE_UNCONFIRMED') runIn(15, 'haiReconcileSoon', soon)
@@ -2723,15 +2965,27 @@ return [ok: ok, code: out.code, note: ok ?
 }
 List runtimeLiveUsers(Object deviceId) {
 List out = []
+String devId = rtBareId(deviceId as String)
+Closure take = { Object a ->
+String label = null
+String id = null
 try {
-httpGet([uri: "http://127.0.0.1:8080/device/fullJson/${rtBareId(deviceId as String)}".toString(),
-timeout: 8, textParser: false]) { resp ->
-((List) (resp?.data?.appsUsing ?: [])).each { Object a ->
-String label = (((Map) a).label ?: ((Map) a).name ?: '').toString().replaceAll('<[^>]+>', '').trim()
-String id = ((Map) a).id?.toString()
+label = ((a instanceof Map ? (((Map) a).label ?: ((Map) a).name) : (a?.label ?: a?.name)) ?: '').toString().replaceAll('<[^>]+>', '').trim()
+id = (a instanceof Map ? ((Map) a).id : a?.id)?.toString()
+} catch (Exception e) { label = null }
 if (!label || id == app.id?.toString() || label.startsWith('[HAI]') || label.startsWith('HAI ')) return
 out << label
 }
+List inProc = null
+try { inProc = getAppsUsingDevice(devId as Long) } catch (Exception e) { inProc = null }
+if (inProc != null) {
+inProc.each { take(it) }
+return out.unique()
+}
+try {
+httpGet([uri: "http://127.0.0.1:8080/device/fullJson/${devId}".toString(),
+timeout: 8, textParser: false]) { resp ->
+((List) (resp?.data?.appsUsing ?: [])).each { take(it) }
 }
 } catch (Exception e) {
 log.warn "HAI Runtime: could not read who else uses ${deviceId} (${e.message})"
@@ -2750,7 +3004,7 @@ Map r = rtRecordCommit(pp, [challengeId: e.challengeId, claimId: e.claimId, epoc
 ruleHash: n.ruleHash, at: n.at, disabled: n.disabled == true])
 if (r.ok && !r.already) {
 runtimeSettleAwait(pp)
-log.info "HAI Runtime: ${ruleId} reported its commit (version ${n.epoch})"
+haiDebug "HAI Runtime: ${ruleId} reported its commit (version ${n.epoch})"
 try { runtimeAnnounce(pp, true, [ruleId]) } catch (Exception ex) { log.warn "HAI Runtime: summary not announced: ${ex.message}" }
 }
 }
@@ -2795,6 +3049,7 @@ List all = ((Map) rtRegistry(pp).rules).keySet().collect { it as String }
 try { runtimeAnnounce(pp, false, ids ?: all) } catch (Exception e) { log.warn "HAI Runtime: summary not announced: ${e.message}" }
 }
 def haiWatchdog() {
+haiCodeCheck()
 if (state.runtimeWatchdogBusy == true) {
 state.runtimeWatchdogSkipped = ((state.runtimeWatchdogSkipped ?: 0) as int) + 1
 return
@@ -2806,10 +3061,33 @@ haiWatchdogTick()
 state.runtimeWatchdogBusy = false
 }
 }
+def haiWatchdogMore(Map data) {
+if (state.runtimeWatchdogBusy == true) return
+state.runtimeWatchdogBusy = true
+try {
+int round = ((data?.round ?: 1) as int)
+Map pp = runtimePlat([hold: true, budgetMs: RT_WATCHDOG_BUDGET_MS])
+pp.deferredOnly = { Object u -> true }
+Map wd = rtWatchdog(pp)
+Map lights = wd.lights
+rtReconcileAll(pp, lights, lights.keySet().collect { it as String })
+Map cache = (state.rtSumRows ?: [:])
+List moved = lights.findAll { k, v -> ((Map) cache.get(k as String))?.mark != ((Map) v).mark }.keySet().collect { it as String }
+if (moved) { try { runtimeAnnounce(pp, false, moved, false, lights) } catch (Exception e) { log.warn "HAI Runtime: summary not announced: ${e.message}" } }
+haiWatchdogContinue(wd, round)
+} finally {
+state.runtimeWatchdogBusy = false
+}
+}
+void haiWatchdogContinue(Map wd, int round) {
+if (((List) (wd?.deferred ?: [])).isEmpty() || round >= RT_WATCHDOG_MORE_MAX) return
+runIn(3, 'haiWatchdogMore', [overwrite: true, data: [round: round + 1]])
+}
 void haiWatchdogTick() {
 Map pp = runtimePlat([hold: true, budgetMs: RT_WATCHDOG_BUDGET_MS])
 Map wd = rtWatchdog(pp)
 Map lights = wd.lights
+haiWatchdogContinue(wd, 0)
 rtReconcileAll(pp, lights)
 runtimeSettleAwait(pp)
 runtimeRmPausedPoll(pp)
@@ -2848,12 +3126,13 @@ Object body = null
 try { if (resp.status == 200) body = resp.json } catch (Exception e) { body = null }
 Map got = body == null ? [ok: false] : haiAppsPausedFrom(body)
 if (got.ok != true || !((List) got.checked).contains(app.id.toString())) return
+HAI_APPS_SEEN.put(app.id as String, [at: now(), read: got])
 Map read = rtRmListReading((List) (data?.ids ?: []), got, (state.runtimeRmPaused ?: [:]), (state.runtimeRmGone ?: []))
 List events = read.events
 if ((List) read.gone != (state.runtimeRmGone ?: [])) state.runtimeRmGone = read.gone
 if ((Map) read.seen != (state.runtimeRmPaused ?: [:])) state.runtimeRmPaused = read.seen
 events.each { Map ev ->
-sendLocationEvent(name: RT_PAUSED_EVENT, value: ev.id, isStateChange: true, displayed: false, data: groovy.json.JsonOutput.toJson([paused: ev.paused, key: haiRuleKey()]),
+sendLocationEvent(name: RT_PAUSED_EVENT, value: ev.id, isStateChange: true, displayed: false, data: haiSignedData(RT_PAUSED_EVENT, ev.id, [paused: ev.paused]),
 descriptionText: "Rule Machine rule ${ev.id} ${ev.paused ? 'paused' : 'resumed'}".toString())
 }
 }
@@ -2871,7 +3150,7 @@ Map seen = new LinkedHashMap((Map) (state.runtimeRmPaused ?: [:]))
 if (paused == null || id == null || seen.get(id) == paused) return
 Object was = seen.put(id, paused)
 state.runtimeRmPaused = seen
-if (was != null) sendLocationEvent(name: RT_PAUSED_EVENT, value: id, isStateChange: true, displayed: false, data: groovy.json.JsonOutput.toJson([paused: paused, key: haiRuleKey()]),
+if (was != null) sendLocationEvent(name: RT_PAUSED_EVENT, value: id, isStateChange: true, displayed: false, data: haiSignedData(RT_PAUSED_EVENT, id, [paused: paused]),
 descriptionText: "Rule Machine rule ${id} ${paused ? 'paused' : 'resumed'}".toString())
 }
 Map runtimeRecentLine(Object ruleId) {
@@ -2942,7 +3221,7 @@ if (keptLinks.size() != links.size()) state.runtimeChildLinks = keptLinks
 state.runtimePaused = rows.findAll { it.paused == true && it.state == 'active' }.collect { it.id as String }.sort()
 runtimeQueueAmState(pp)
 Map sum = tlSummaryCompose(rows, now())
-if (now() - t0 > 1000L) log.info "HAI Runtime: summary took ${now() - t0} ms, ${reads} of ${rows.size()} rules read"
+if (now() - t0 > 1000L) haiDebug "HAI Runtime: summary took ${now() - t0} ms, ${reads} of ${rows.size()} rules read"
 sum.lastSubmit = state.runtimeLastSubmit
 sum.stageFailure = rtStageFailure(pp)
 if (readFailed) {
@@ -3076,6 +3355,7 @@ error: 'FEED_FAILED', message: "the feed could not be built: ${t.message ?: t}".
 }
 }
 def haiSystemStart(evt) {
+haiCodeCheck()
 Map pp = runtimePlat()
 ((Map) rtRegistry(pp).rules).values().each { e ->
 if (e.state == 'removed' || runtimeChild(e.childId) == null) return
@@ -3087,8 +3367,25 @@ schedule(RT_WATCHDOG_CRON, 'haiWatchdog')
 if (state.everydayQueue) runIn(5, 'haiEverydayStep', [overwrite: true])
 if (state.runtimeAutoQueue) runIn(5, 'haiAutoActivateQueued', [overwrite: true])
 }
+@Field static final List RT_STATE_KEYS = ['rtLog', 'rtWatchdog', 'rtShown', 'rtCandidates']
+Object runtimeStoreGet(String key) {
+if (!RT_STATE_KEYS.contains(key)) return atomicState[key]
+Object v = state[key]
+if (v == null && !(((List) (state.rtMovedKeys ?: [])).contains(key))) {
+v = atomicState[key]
+if (v != null) state[key] = v
+state.rtMovedKeys = ((List) (state.rtMovedKeys ?: [])) + [key]
+}
+return v
+}
+void runtimeStorePut(String key, Object value) {
+if (!RT_STATE_KEYS.contains(key)) { atomicState[key] = value; return }
+state[key] = value
+if (!(((List) (state.rtMovedKeys ?: [])).contains(key))) state.rtMovedKeys = ((List) (state.rtMovedKeys ?: [])) + [key]
+}
 @Field static final long RT_CHILD_SLOW_MS = 10000L
-@Field static final long RT_WATCHDOG_BUDGET_MS = 30000L
+@Field static final long RT_WATCHDOG_BUDGET_MS = 5000L
+@Field static final int RT_WATCHDOG_MORE_MAX = 20
 Map runtimePlat(Map opts = null) {
 Map memo = [:]
 boolean hold = opts?.hold == true
@@ -3102,13 +3399,15 @@ Map plat = [
 now : { Object u -> now() },
 atomicGet : { Object k ->
 String key = k as String
-if (!hold) return atomicState[key]
-if (!held.containsKey(key)) held[key] = runtimeCopy(atomicState[key])
+if (!hold) return runtimeStoreGet(key)
+if (!held.containsKey(key)) held[key] = runtimeCopy(runtimeStoreGet(key))
 return runtimeCopy(held[key])
 },
 atomicPut : { List a ->
-atomicState[a[0] as String] = a[1]
-if (hold) held[a[0] as String] = runtimeCopy(a[1])
+String key = a[0] as String
+if (hold && held.containsKey(key) && held[key] == a[1]) return
+runtimeStorePut(key, a[1])
+if (hold) held[key] = runtimeCopy(a[1])
 },
 inventory : { Object d ->
 String k = "inv:${d == null || rtDocUsesRmRules((Map) d)}".toString()
@@ -3128,6 +3427,8 @@ writableVariables: { Object u -> runtimeIdList(settings.runtimeWritableVariables
 pausedRules : { Object u -> (state.runtimePaused ?: []) + ((Map) (state.runtimeRmPaused ?: [:])).findAll { k, v -> v == true }.keySet().toList() },
 modeAllowed: { Object u -> settings.runtimeAllowSetMode == true },
 hsmAllowed : { Object u -> settings.runtimeAllowHsm != false },
+hubPowerAllowed: { Object u -> settings.runtimeAllowHubPower != false },
+ruleKey : { Object u -> haiRuleKey() },
 rmSwitched : { Object u -> haiSwitchedPairs() },
 liveUsers : { Object dv -> runtimeLiveUsers(dv) },
 hubVariables: { Object u -> getAllGlobalVars() },
@@ -3606,6 +3907,25 @@ int diff = 0
 for (int i = 0; i < x.length(); i++) diff |= ((int) x.charAt(i)) ^ ((int) y.charAt(i))
 return diff == 0
 }
+String jsonHmac(String key, String text) {
+byte[] k = (key ?: '').getBytes('UTF-8')
+if (k.length > 64) k = MessageDigest.getInstance('SHA-256').digest(k)
+byte[] ipad = new byte[64]
+byte[] opad = new byte[64]
+for (int i = 0; i < 64; i++) {
+int b = i < k.length ? (int) k[i] : 0
+ipad[i] = (byte) (b ^ 0x36)
+opad[i] = (byte) (b ^ 0x5c)
+}
+MessageDigest inner = MessageDigest.getInstance('SHA-256')
+inner.update(ipad)
+inner.update((text ?: '').getBytes('UTF-8'))
+byte[] ih = inner.digest()
+MessageDigest outer = MessageDigest.getInstance('SHA-256')
+outer.update(opad)
+outer.update(ih)
+return outer.digest().collect { String.format('%02x', it) }.join('')
+}
 String jsonSign(String key, String text) {
 byte[] bytes = "${key}\n${text}".toString().getBytes('UTF-8')
 return MessageDigest.getInstance('SHA-256').digest(bytes).collect { String.format('%02x', it) }.join('')
@@ -3847,6 +4167,7 @@ m.values().each { walk(it) }
 walk(copy)
 return [doc: copy, changed: n]
 }
+@Field static final List HUB_POWER_TYPES = ['hubReboot', 'hubShutdown']
 @Field static final int NET_DEFAULT_TIMEOUT_SECONDS = 10
 @Field static final Map CATALOGUE = { Map dflt, Map diffs ->
 Map out = [:]
@@ -4497,6 +4818,12 @@ case 'deviceEnabled':
 List dnames = ((List) (a.refs ?: [])).collect { rName(doc, it) }
 out << "${n}${a.enabled == true ? 'Enable' : 'Disable'} ${dnames ? dnames.join(', ') : '(no devices chosen)'}${a.enabled == true ? '' : ': the hub ignores them, for every app, until they are enabled again'}".toString()
 break
+case 'hubReboot':
+out << "${n}Reboot the hub".toString()
+break
+case 'hubShutdown':
+out << "${n}Shut down the hub".toString()
+break
 case 'hsm':
 out << "${n}Tell Hubitat Safety Monitor to ${a.op ?: '(nothing chosen)'}".toString()
 break
@@ -4722,12 +5049,7 @@ return []
 @Field static final String AUTHOR_API_URL = 'https://api.anthropic.com/v1/messages'
 @Field static final String AUTHOR_API_VERSION = '2023-06-01'
 @Field static final String AUTHOR_BETA = 'server-side-fallback-2026-07-01'
-@Field static final int AUTHOR_MAX_REPAIRS = 2
-@Field static final int AUTHOR_MAX_REPAIR_FINDINGS = 8
 @Field static final int AUTHOR_MAX_REQUEST_CHARS = 2000
-@Field static final int AUTHOR_MAX_STORED_OUTCOME_BYTES = 200000
-@Field static final int AUTHOR_MAX_STORED_SESSION_BYTES = 700000
-@Field static final int AUTHOR_MIN_STORED_OUTCOME_BYTES = 512
 @Field static final String AUTHOR_TOOL_NAME = 'submit_rule'
 List authorRuleIndex(List haiRules, Map detail, Collection rmIds, Map rmNames) {
 Closure dev = { Object id -> String s = id as String; s.startsWith('dev:') ? s : "dev:${s}".toString() }
@@ -4828,90 +5150,10 @@ return 'the confirmation is not a number'
 if (Math.abs(limit - confirm) > 1e-9d) return 'the confirmation does not match the saved spending limit'
 return null
 }
-int authorBytes(Object v) {
-return JsonOutput.toJson(v).getBytes('UTF-8').length
-}
 String aCut(Object v, int max) {
 if (v == null) return null
 String s = v.toString()
 return s.length() > max ? s.substring(0, max) + '...' : s
-}
-Map authorBoundOutcome(Map outcome, int maxBytes = AUTHOR_MAX_STORED_OUTCOME_BYTES) {
-if (outcome == null) return null
-int cap = Math.max(maxBytes, AUTHOR_MIN_STORED_OUTCOME_BYTES)
-Map full = new LinkedHashMap(outcome)
-full.retained = 'full'
-if (authorBytes(full) <= cap) return full
-maxBytes = cap
-Map p = outcome.proposal
-Map summary = [status: outcome.status, message: aCut(outcome.message, 512), attempts: outcome.attempts,
-repairs: outcome.repairs, transportRetries: outcome.transportRetries, usage: outcome.usage,
-models: ((List) (outcome.models ?: [])).take(8), fallbackUsed: outcome.fallbackUsed,
-retained: 'summary',
-retainedNote: 'the full evidence packet was too large to keep; its id names it, but it cannot be rebuilt from here']
-if (outcome.lastFindings) summary.lastFindings = aCut(outcome.lastFindings, 2000)
-List reasons = (outcome.repairReasons ?: [])
-if (reasons) {
-summary.repairReasons = reasons.take(AUTHOR_MAX_REPAIRS + 1).collect { Object o ->
-Map r = o
-[attempt: r.attempt, repair: r.repair, findingsTotal: r.findingsTotal,
-findings: ((List) (r.findings ?: [])).take(AUTHOR_MAX_REPAIR_FINDINGS).collect { Object f ->
-[code: aCut(((Map) f).code, 48), message: aCut(((Map) f).message, 80)]
-}]
-}
-}
-if (outcome.repairReasonsNote) summary.repairReasonsNote = aCut(outcome.repairReasonsNote, 120)
-List checklistSource = (p?.checklist ?: outcome.checklist ?: [])
-summary.checklist = checklistSource.take(32).collect { Map c ->
-[id: aCut(c.id, 64), text: aCut(c.text, 200), status: c.status, where: ((List) (c.where ?: [])).take(8), note: aCut(c.note, 200)]
-}
-if (p != null) {
-summary.proposal = [
-evidenceId: p.evidenceId, evidenceFormat: p.evidenceFormat, ruleHash: p.ruleHash, ready: p.ready,
-request: aCut(p.request, 1000), effects: p.effects,
-rendering: ((List) (p.rendering ?: [])).take(60).collect { aCut(it, 200) },
-checklist: summary.checklist,
-findings: ((List) (p.findings ?: [])).take(24).collect { [code: it.code, severity: it.severity, message: aCut(it.message, 200)] },
-simulation: ((List) (p.simulation ?: [])).take(8).collect { Map s ->
-[description: aCut(s.description, 200), outcome: s.outcome, admitted: s.admitted,
-commands: ((List) (s.commands ?: [])).take(12), why: aCut(s.why, 200), gateNote: aCut(s.gateNote, 200)]
-},
-counts: [findings: ((List) (p.findings ?: [])).size(), checklist: checklistSource.size(),
-simulation: ((List) (p.simulation ?: [])).size()],
-coverage: [note: p.coverage?.note],
-diff: [kind: p.diff?.kind],
-]
-}
-if (authorBytes(summary) <= maxBytes) return summary
-Map minimal = [status: aCut(outcome.status, 32), message: aCut(outcome.message, 64), retained: 'minimal',
-retainedNote: 'only a minimal record could be kept; draft again to see the evidence']
-if (p != null) minimal.proposal = [evidenceId: aCut(p.evidenceId, 40), ready: p.ready == true]
-if (reasons) {
-Map withCodes = new LinkedHashMap(minimal)
-withCodes.repairCodes = reasons.take(AUTHOR_MAX_REPAIRS + 1).collect { Object o ->
-[attempt: ((Map) o).attempt,
-codes: ((List) (((Map) o).findings ?: [])).take(AUTHOR_MAX_REPAIR_FINDINGS).collect { aCut(((Map) it).code, 48) }]
-}
-if (authorBytes(withCodes) <= maxBytes) return withCodes
-}
-if (authorBytes(minimal) <= maxBytes) return minimal
-return [status: aCut(outcome.status, 32), retained: 'none']
-}
-Map authorBoundSession(Map session, int maxBytes = AUTHOR_MAX_STORED_SESSION_BYTES) {
-if (session == null) return null
-Map copy = new LinkedHashMap(session)
-if (copy.nextRequest instanceof Map) copy.nextRequest = true
-copy.log = new ArrayList((List) (session.log ?: []))
-if (copy.outcome != null) copy.outcome = authorBoundOutcome((Map) copy.outcome, maxBytes.intdiv(4))
-if (authorBytes(copy) <= maxBytes) return copy
-if (copy.status == 'awaitingModel') {
-aFinish(copy, 'failed', 'the drafting session grew past its stored size limit')
-copy.outcome = authorBoundOutcome((Map) copy.outcome, maxBytes.intdiv(4))
-}
-if (authorBytes(copy) <= maxBytes) return copy
-return [status: 'done', generation: session.generation, request: aCut(session.request, 256), budget: session.budget,
-repairReasons: session.repairReasons,
-outcome: [status: 'failed', message: 'the drafting session could not be stored', retained: 'minimal']]
 }
 @Field static final String EDITOR_VERSION = '0.1.0'
 @Field static final int TL_SUMMARY_ITEMS_EDITOR = 5
@@ -4924,9 +5166,9 @@ outcome: [status: 'failed', message: 'the drafting session could not be stored',
 @Field static final int EDITOR_MAX_ID_CHARS = 64
 @Field static final String EDITOR_EFFECTS = "Save draft keeps this rule here, in the editor, and changes nothing on the hub. Activate on hub (Update on hub for a rule already there) is the one that puts it live, and HAI checks it before it runs. Run rule runs the hub's version once, now."
 @Field static final String EDITOR_PAGE_FILE = 'hai-editor.html'
-@Field static final String EDITOR_PAGE_SHA256 = '1db62ccb21804871eb6944cf0db530ffc8fe157cc9f7245c22c575a2cf6ded83'
+@Field static final String EDITOR_PAGE_SHA256 = 'e2848f8f58124df7e35f2edc55dd137c04b10b488712809340a285dd4af86817'
 @Field static final String EDITOR_SPECS_FILE = 'hai-editor-specs.json'
-@Field static final String EDITOR_SPECS_SHA256 = 'bf549b1316d42380482af8aa1a2030936728d6058f8b2a017266f3f552106ba8'
+@Field static final String EDITOR_SPECS_SHA256 = 'd24031d13143e19736db036db89e38ff3bf9c86a628f578a0666d89ad5f12f23'
 @Field static final List EDITOR_DEVICE_CLASSES = [
 [key: 'acceleration', label: 'Acceleration', capability: 'AccelerationSensor', attribute: 'acceleration', values: ['active', 'inactive']],
 [key: 'battery', label: 'Battery', capability: 'Battery', attribute: 'battery', numeric: true],
@@ -5142,33 +5384,21 @@ return [status: status, body: [ok: false, error: code, message: message]]
 Map editorReadBody(Object raw) {
 if (!(raw instanceof String) || ((String) raw).trim().isEmpty()) return [error: edError(400, 'EMPTY_BODY', 'The request had no body.')]
 String text = (String) raw
+int kb = (int) Math.ceil(text.length() / 1024.0d)
 if (text.length() > EDITOR_MAX_BODY_CHARS) {
-return [error: edError(413, 'BODY_TOO_LARGE', "The request is larger than ${EDITOR_MAX_BODY_CHARS} characters.".toString())]
+return [error: edError(413, 'BODY_TOO_LARGE', "The request is ${kb} KB (${text.length()} characters), larger than the ${EDITOR_MAX_BODY_CHARS} characters the hub takes.".toString())]
 }
 Map parsed = jsonParse(text)
+if (!parsed.ok && (parsed.code in ['LIMIT_SIZE', 'LIMIT_WORK'] || (text.length() >= 32768 && (parsed.code == 'JSON_TRUNCATED' || (parsed.offset as int) >= text.trim().length() - 1)))) {
+return [error: edError(413, 'BODY_TOO_LARGE', "The request is ${kb} KB (${text.length()} characters), too large for the hub to read in one piece (${parsed.message}).".toString())]
+}
 if (!parsed.ok) return [error: edError(400, 'INVALID_JSON', "The request is not valid JSON for this hub: ${parsed.message}".toString())]
 if (!(parsed.value instanceof Map)) return [error: edError(400, 'INVALID_SHAPE', 'The request must be a JSON object.')]
 return [value: parsed.value]
 }
 @Field static final String EDITOR_RECEIPT_FORMAT = 'hai-receipt/1'
 String editorHmac(String key, String text) {
-byte[] k = (key ?: '').getBytes('UTF-8')
-if (k.length > 64) k = MessageDigest.getInstance('SHA-256').digest(k)
-byte[] ipad = new byte[64]
-byte[] opad = new byte[64]
-for (int i = 0; i < 64; i++) {
-int b = i < k.length ? (int) k[i] : 0
-ipad[i] = (byte) (b ^ 0x36)
-opad[i] = (byte) (b ^ 0x5c)
-}
-MessageDigest inner = MessageDigest.getInstance('SHA-256')
-inner.update(ipad)
-inner.update((text ?: '').getBytes('UTF-8'))
-byte[] ih = inner.digest()
-MessageDigest outer = MessageDigest.getInstance('SHA-256')
-outer.update(opad)
-outer.update(ih)
-return outer.digest().collect { String.format('%02x', it) }.join('')
+return jsonHmac(key, text)
 }
 String edReceiptText(Object ruleHash, Object inventory, Object engine) {
 return "${EDITOR_RECEIPT_FORMAT}\n${ruleHash}\n${inventory}\n${engine}".toString()
@@ -5195,9 +5425,11 @@ Map editorRunStepDoc(Map body) {
 Map step = body?.step instanceof Map ? body.step : null
 if (step == null) return edError(400, 'NO_STEP', 'There was no step to run.')
 if (step.disabled == true) return edError(409, 'STEP_SKIPPED', 'This step is skipped. Enable it first.')
-boolean risky = step.type in ['hsm', 'deviceEnabled'] ||
+boolean risky = step.type in ['hsm', 'deviceEnabled'] || HUB_POWER_TYPES.contains(step.type) ||
 (step.type in ['command', 'customCommand'] && step.command instanceof String && (schemaOperation(step.command as String)?.risk ?: 'none') != 'none')
-if (risky) return edError(409, 'RISKY_STEP', 'This step is not run on its own because it can open, unlock, sound or disarm something. Run the whole rule for it.')
+if (risky) return edError(409, 'RISKY_STEP', HUB_POWER_TYPES.contains(step.type)
+? 'This step is not run on its own because it reboots or shuts down the hub. Run the whole rule for it.'
+: 'This step is not run on its own because it can open, unlock, sound or disarm something. Run the whole rule for it.')
 if (!(step.type in EDITOR_RUN_STEP_TYPES)) {
 return edError(409, 'NOT_ONE_ACTION', 'Run this step runs a device command, a notification, a mode, a hub variable or a log line on its own. Run the whole rule for this step.')
 }
@@ -5206,6 +5438,9 @@ return edError(400, 'SCHEMA_TYPE', 'A mode step needs the mode to change to.')
 }
 if (step.type in ['command', 'customCommand'] && !(step.command instanceof String && ((String) step.command) ==~ /[A-Za-z][A-Za-z0-9_]{0,63}/)) {
 return edError(400, 'SCHEMA_TYPE', 'A command step needs the name of a command.')
+}
+if (step.type in ['command', 'customCommand'] && schemaOperation(step.command as String) == null) {
+return edError(409, 'UNKNOWN_COMMAND', "Run this step sends only commands HAI knows, and '${step.command}' is the driver's own. Run the whole rule for it.".toString())
 }
 if (step.type == 'setVariable') {
 Map vr = body.refs instanceof Map && ((Map) body.refs).get(step.ref) instanceof Map ? ((Map) body.refs).get(step.ref) : null
@@ -5577,7 +5812,7 @@ out.remove('timing')
 return out
 }
 @Field static final String HELP_PAGE_FILE = 'hai-help.html'
-@Field static final String HELP_PAGE_SHA256 = '46889ea24bda58967934a7295fc1ad74018e5474b314e5eda672c5467526aa01'
+@Field static final String HELP_PAGE_SHA256 = '4c2003c439aedb8120baef697c2d9e27a6d2f30faddae3837fe65abf28a7c8a0'
 String editorHelpPage() {
 String key = 'help:' + HELP_PAGE_SHA256
 String kept = (String) EDITOR_FILE_CACHE.get(key)
@@ -5691,8 +5926,8 @@ return [status: 202, body: body, payload: out.payload]
 }
 @Field static final String RT_ENGINE = 'HAI-1'
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = '52f7eed7c5e5f6e1'
-@Field static final long RT_CADENCE_MS = 60000L
+@Field static final String RT_CHILD_BUILD = '672d9dee27561e42'
+@Field static final long RT_WATCHDOG_EVERY_MS = 900000L
 @Field static final long RT_RECOVERY_MS = 120000L
 @Field static final long RT_CLAIM_MS = 600000L
 @Field static final String RT_INVOKE_EVENT = 'haiRuleInvoke'
@@ -5928,6 +6163,45 @@ rtWalkActions((List) a.otherwise, visit)
 }
 }
 }
+@Field static final long RT_SIG_WINDOW_MS = 120000L
+@Field static final int RT_SIG_SEEN_CAP = 256
+@Field static final String RT_SIG_FIELD = ',"sig":"'
+String rtSignedData(String key, String name, Object value, Map payload, long at, String nonce) {
+if (!(key instanceof String) || key.isEmpty()) return null
+Map body = new LinkedHashMap(payload ?: [:])
+body.remove('sig')
+body.remove('key')
+body.ts = at
+body.n = nonce
+String text = groovy.json.JsonOutput.toJson(body)
+String sig = jsonHmac(key, "${name}|${value}|${text}".toString())
+return text.substring(0, text.length() - 1) + RT_SIG_FIELD + sig + '"}'
+}
+Map rtSignedPayload(List keys, String name, Object value, Object data, long at, Map seen) {
+if (!(data instanceof String)) return null
+String d = (String) data
+int cut = d.lastIndexOf(RT_SIG_FIELD)
+if (cut < 1 || !d.endsWith('"}')) return null
+String sig = d.substring(cut + RT_SIG_FIELD.length(), d.length() - 2)
+String text = d.substring(0, cut) + '}'
+String signed = "${name}|${value}|${text}".toString()
+boolean good = false
+for (Object k in (keys ?: [])) if (k instanceof String && !((String) k).isEmpty() && jsonSameSecret(jsonHmac((String) k, signed), sig)) good = true
+if (!good) return null
+Map body
+try { body = new groovy.json.JsonSlurper().parseText(text) } catch (Exception e) { return null }
+Object ts = body.ts
+Object n = body.n
+if (!(ts instanceof Number) || !(n instanceof String) || Math.abs(at - (ts as long)) > RT_SIG_WINDOW_MS) return null
+if (seen != null) {
+if (seen.containsKey(n)) return null
+List old = seen.findAll { k, v -> !(v instanceof Number) || at - (v as long) > RT_SIG_WINDOW_MS }.collect { it.key }
+old.each { seen.remove(it) }
+while (seen.size() >= RT_SIG_SEEN_CAP) seen.remove(seen.keySet().iterator().next())
+seen.put(n, ts as long)
+}
+return body
+}
 void rtWalkConditions(Map doc, Closure visit) {
 Closure walk
 walk = { Object n ->
@@ -6091,7 +6365,7 @@ if (was != null) events << [id: id, paused: p]
 }
 return [seen: seen, gone: gone, events: events]
 }
-List rtScopeFindings(Map doc, boolean modeAllowed = false, boolean hsmAllowed = true) {
+List rtScopeFindings(Map doc, boolean modeAllowed = false, boolean hsmAllowed = true, boolean hubPowerAllowed = true) {
 List out = []
 ((List) (doc.triggers instanceof List ? doc.triggers : [])).eachWithIndex { Object t, int i ->
 String kind = t instanceof Map ? ((Map) t).kind as String : null
@@ -6115,6 +6389,9 @@ out << rtFinding('RUNTIME_MODE_NOT_ALLOWED', p, 'turn on "Allow rules to change 
 }
 if (!hsmAllowed && a.type == 'hsm') {
 out << rtFinding('RUNTIME_HSM_NOT_ALLOWED', p, 'turn on "Allow rules to arm and disarm Hubitat Safety Monitor" on the HAI Engine page first')
+}
+if (!hubPowerAllowed && HUB_POWER_TYPES.contains(a.type)) {
+out << rtFinding('RUNTIME_HUB_POWER_NOT_ALLOWED', p, 'turn on "Allow rules to reboot or shut down the hub" on the HAI Engine page first')
 }
 if (a.type == 'wait' && a.waitKind == 'forEvent' && !a.attribute) {
 out << rtFinding('RUNTIME_SCOPE_WAIT_ATTRIBUTE', p, 'an event wait must name its attribute, so the child can subscribe to it')
@@ -6633,7 +6910,8 @@ simulation = []
 List refusals = []
 vBlocking(v).each { refusals << rtFinding(it.code as String, it.path as String, it.message as String) }
 if (!v.complete) refusals << rtFinding('VALIDATION_INCOMPLETE', '', (v.incompleteReason ?: 'validation did not finish') as String)
-refusals.addAll(rtScopeFindings(doc, rtpCall(pp, 'modeAllowed', null) == true, rtpCall(pp, 'hsmAllowed', null) != false))
+refusals.addAll(rtScopeFindings(doc, rtpCall(pp, 'modeAllowed', null) == true, rtpCall(pp, 'hsmAllowed', null) != false,
+rtpCall(pp, 'hubPowerAllowed', null) != false))
 refusals.addAll(rtDeviceRefusals(doc, allow))
 proposeActivationBlockers((List) v.findings).each { refusals << rtFinding(it.code as String, it.path as String, it.message as String) }
 if (problem != null) refusals << rtFinding('REVIEW_FAILED', '', problem)
@@ -6866,17 +7144,21 @@ return rtRefuse(pp, 'REGISTRY_STATE', 'The rule registry changed. Review it agai
 List devices = rtDeviceIds((Map) cand.doc).findAll { ((List) review.allow).contains(it) }
 rtpMark(pp, 'claim')
 Map res = null
+Object set = null
 try {
-rtpCall(pp, 'child', [childId, 'haiSetup', [devices, review.allow, rtpCall(pp, 'purposes', null) ?: [:], rtSetupOptions(pp, cand.doc)]])
+set = rtpCall(pp, 'child', [childId, 'haiSetup', [devices, review.allow, rtpCall(pp, 'purposes', null) ?: [:], rtSetupOptions(pp, cand.doc)]])
 rtpMark(pp, 'setup')
+if (rtSetupConfirmed(set)) {
 rtpHook(pp, 'beforeStage')
 res = rtpCall(pp, 'child', [childId, 'haiStage', [cand.doc, binding.ruleHash, challengeId, claimId, baseEpoch, expiresAt, rtStageIntent(ch)]])
 rtpMark(pp, 'stage')
+}
 } catch (Exception e) {
 rtLog(pp, [what: 'stageCallFailed', ruleId: ruleId, message: e.message])
 return [ok: false, code: 'STAGE_UNCONFIRMED', challengeId: challengeId, claimId: claimId,
 message: 'Staging was not confirmed. The runtime reconciles it on the next pass.', chainWarnings: review.chainWarnings]
 }
+if (!rtSetupConfirmed(set)) return rtSetupRefused(pp, ch, ruleId, claimId, [chainWarnings: review.chainWarnings])
 rtpHook(pp, 'afterStage')
 if (res == null || !res.ok) {
 rtVoidClaim(pp, ch, claimId, "stage refused: ${res?.code}".toString())
@@ -7099,12 +7381,27 @@ List allow = rtpCall(pp, 'allowList', null)
 Map e = eo
 if (e.state == 'removed' || !(rtpCall(pp, 'childExists', e.childId) as boolean)) return
 List devices = ((List) (rtIndex(pp, e)?.deviceIds ?: [])).findAll { allow.contains(it) }
-try { rtpCall(pp, 'child', [e.childId, 'haiSetup', [devices, allow, rtpCall(pp, 'purposes', null) ?: [:], rtSetupOptions(pp)]]) }
+try {
+Object set = rtpCall(pp, 'child', [e.childId, 'haiSetup', [devices, allow, rtpCall(pp, 'purposes', null) ?: [:], rtSetupOptions(pp)]])
+if (!rtSetupConfirmed(set)) rtLog(pp, [what: 'allowPushFailed', ruleId: e.ruleId, message: 'the rule app did not confirm its setup'])
+}
 catch (Exception ex) { rtLog(pp, [what: 'allowPushFailed', ruleId: e.ruleId, message: ex.message]) }
 }
 }
+boolean rtSetupConfirmed(Object set) {
+return set instanceof Map && ((Map) set).ok == true
+}
+Map rtSetupRefused(Map pp, Map ch, String ruleId, String claimId, Map extra = [:]) {
+rtLog(pp, [what: 'setupUnconfirmed', ruleId: ruleId])
+rtVoidClaim(pp, ch, claimId, 'setup not confirmed')
+rtRegistryBack(pp, ruleId, claimId)
+return rtRefuse(pp, 'SETUP_UNCONFIRMED', 'The rule app did not confirm its devices and permissions, so nothing was staged. Try again.', extra)
+}
 Map rtSetupOptions(Map pp, Map doc = null) {
-Map out = [writableVariables: rtpCall(pp, 'writableVariables', null) ?: [], modeAllowed: rtpCall(pp, 'modeAllowed', null) == true]
+Map out = [writableVariables: rtpCall(pp, 'writableVariables', null) ?: [], modeAllowed: rtpCall(pp, 'modeAllowed', null) == true,
+hubPowerAllowed: rtpCall(pp, 'hubPowerAllowed', null) != false]
+Object key = rtpCall(pp, 'ruleKey', null)
+if (key instanceof String) out.ruleKey = key
 if (doc != null) {
 Set named = ((Map) (doc.refs ?: [:])).values().findAll { it instanceof Map && ((Map) it).id != null }.collect { ((Map) it).id.toString() } as Set
 out.rules = rtKnownRuleIds(pp).findAll { named.contains(it) }
@@ -7154,10 +7451,30 @@ String from = ((req?.from ?: 'an app') as String).take(80)
 if (op != 'list') rtLog(pp, [what: 'appApi', op: op, ruleId: rule, from: from, ok: out.ok == true, code: out.code])
 return [ok: out.ok == true, op: op, rule: rule, id: req?.id, from: from] + out.findAll { k, v -> k in ['code', 'message', 'rules'] }
 }
-String rtAppApiTokenRefusal(Map req, String token) {
-Object given = req?.token
-if (!(given instanceof String) || ((String) given).isEmpty()) return 'NO_TOKEN'
-return jsonSameSecret(token, given) ? null : 'WRONG_TOKEN'
+Map rtAppApiVerify(String token, Object value, Object data, long at, Map seen) {
+Map loose = [:]
+try { loose = data instanceof String ? new groovy.json.JsonSlurper().parseText((String) data) : [:] } catch (Exception e) { loose = [:] }
+if (loose?.containsKey('token')) return [refused: 'TOKEN_IN_CLEAR', from: loose.from]
+if (!(loose?.sig instanceof String)) return [refused: 'NO_SIGNATURE', from: loose?.from]
+if (!(token instanceof String) || token.isEmpty()) return [refused: 'BAD_SIGNATURE', from: loose.from]
+Map req = rtSignedPayload([token], RT_API_EVENT, value, data, at, seen)
+return req == null ? [refused: 'BAD_SIGNATURE', from: loose.from] : [req: req]
+}
+String rtAppApiReplyData(String token, Object value, Map out, long at, String nonce) {
+Map body = [ok: out.ok == true, op: out.op, rule: out.rule, id: out.id]
+if (out.code != null) body.code = out.code
+if (out.message != null) body.message = out.message
+if (out.rules instanceof List) body.sealed = rtSeal(token, nonce, groovy.json.JsonOutput.toJson(out.rules))
+return rtSignedData(token, RT_API_REPLY, value, body, at, nonce)
+}
+String rtSeal(String key, String nonce, String text) {
+byte[] b = (text ?: '').getBytes('UTF-8')
+byte[] out = new byte[b.length]
+for (int i = 0; i < b.length; i += 32) {
+String ks = jsonHmac(key, "hai-seal/1|${nonce}|${i.intdiv(32)}".toString())
+for (int j = 0; j < 32 && i + j < b.length; j++) out[i + j] = (byte) (((int) b[i + j]) ^ Integer.parseInt(ks.substring(2 * j, 2 * j + 2), 16))
+}
+return out.encodeBase64().toString()
 }
 boolean rtAppApiFirstRefusal(Map seen, String from, int cap) {
 String key = ((from ?: 'an app') as String).take(80)
@@ -7255,7 +7572,7 @@ List flags = []
 if (prev.lastWatchdogAt != null) {
 long gap = now - (prev.lastWatchdogAt as long)
 if (gap < 0) flags << [what: 'clockBackward', gapMs: gap]
-if (gap > 5L * RT_CADENCE_MS) flags << [what: 'clockForward', gapMs: gap]
+if (gap > 2L * RT_WATCHDOG_EVERY_MS) flags << [what: 'clockForward', gapMs: gap]
 }
 List allow = rtpCall(pp, 'allowList', null)
 String allowHash = jsonHash(((allow ?: []) as List).collect { it.toString() }.sort()).take(16)
@@ -7267,7 +7584,8 @@ List deferred = []
 int quiet = 0
 Set waited = ((List) (prev.deferred ?: [])).collect { it as String } as Set
 List entries = ((Map) rtRegistry(pp).rules).values().toList()
-entries = entries.findAll { waited.contains(((Map) it).ruleId as String) } + entries.findAll { !waited.contains(((Map) it).ruleId as String) }
+boolean more = rtpCall(pp, 'deferredOnly', null) == true
+entries = entries.findAll { waited.contains(((Map) it).ruleId as String) } + (more ? [] : entries.findAll { !waited.contains(((Map) it).ruleId as String) })
 entries.each { Object eo ->
 Map e = eo
 if (!(e.state in ['active', 'staging'])) return
@@ -7292,6 +7610,12 @@ health << [ruleId: e.ruleId, what: 'childError', message: ex.message]
 }
 }
 List keep = ((List) (prev.samples ?: [])) + samples
+if (more) {
+children = ((Map) (prev.children ?: [:])) + children
+health = ((List) (prev.health ?: [])) + health
+flags = ((List) (prev.flags ?: [])) + flags
+quiet += ((prev.quiet ?: 0) as int)
+}
 Map rec = [lastWatchdogAt: now, passMs: rtpNow(pp) - now, children: children, flags: flags,
 samples: keep.size() > 64 ? keep.subList(keep.size() - 64, keep.size()) : keep,
 health: health, healthy: health.isEmpty(), quiet: quiet]
@@ -7550,6 +7874,21 @@ return ((List) (doc.triggers ?: [])).any { Object t ->
 t instanceof Map && ((Map) t).kind == 'ruleInvocation' && ((Map) t).disabled != true
 }
 }
+String tlHubPower(Map doc) {
+if (doc == null) return null
+String found = null
+Closure walk
+walk = { Object x ->
+if (x instanceof List) { ((List) x).each { walk(it) }; return }
+if (!(x instanceof Map) || ((Map) x).disabled == true) return
+Map m = x
+if (m.type == 'hubShutdown') found = 'shutdown'
+else if (m.type == 'hubReboot' && found == null) found = 'reboot'
+m.each { k, v -> if (k != 'refs' && k != 'condition' && (v instanceof Map || v instanceof List)) walk(v) }
+}
+walk([doc.actions, doc.onFailure, doc.onCancel])
+return found
+}
 List tlNewestFirst(Collection entries) {
 return new ArrayList(entries).sort { Object o -> -((((Map) o).updatedAt ?: 0L) as long) }
 }
@@ -7562,6 +7901,8 @@ Map out = [id: e.ruleId, name: row.name, state: e.state, version: e.epoch, ruleH
 paused: s?.paused ?: false, readable: s != null, invocable: tlInvocable((Map) (s?.doc ?: e.doc)), recent: recent]
 Map last = tlLastRun(s)
 if (last != null) out.putAll(last)
+String power = tlHubPower((Map) (s?.doc ?: e.doc))
+if (power != null) out.hubPower = power
 return out
 }
 Map tlLastRun(Map s) {
@@ -7669,7 +8010,7 @@ Partial: 'Some of it works. The note says what is missing.',
 Missing: 'Not built. HAI has no equivalent; the note says why.',
 Scoped : 'Not built, and the route is known. The parts already exist and the note says what it would be assembled from. Nothing here works yet.',
 ]
-@Field static final String AM_CAPS_SHA256 = 'da3a0db15b46e2becd9d44f524423cd2fe8ed431bfc8d8fc6bea6a09e5ad2822'
+@Field static final String AM_CAPS_SHA256 = '6e03a4942ac9e395e5242f0d4182e2c1904a17b80fdf31b5215c7344cfd8f1e3'
 @Field static final Map AM_FIELDS = [
 'trigger:deviceAttribute' : [ref: 'read', value: 'value', condition: 'cond'],
 'trigger:threshold' : [ref: 'read', value: 'value', condition: 'cond'],
@@ -7731,6 +8072,8 @@ Scoped : 'Not built, and the route is known. The parts already exist and the not
 'action:stopGradual' : [:],
 'action:track' : [refs: 'command'],
 'action:deviceEnabled' : [refs: 'command'],
+'action:hubReboot' : [:],
+'action:hubShutdown' : [:],
 ]
 @Field static final Map AM_RULE_LINKS = [runRule: 'runs', setRuleBoolean: 'setspb', pause: 'pauseResume', resume: 'pauseResume',
 cancelTimers: 'cancelTimedActions', runActions: 'runs']
@@ -7955,8 +8298,12 @@ return new groovy.json.JsonSlurper().parseText(new String(b, 'UTF-8'))
 @Field static final List HAM_SCHEMAS = [1, 2, 3, 4]
 @Field static final int HAM_SCHEMA = 3
 @Field static final int HAM_VOCABULARY = 2
+String hamAmChannel(String channel) {
+if (channel == null) return null
+return channel in ['production', 'preview'] ? 'production' : 'dev'
+}
 String hamDetailFileFor(String channel) {
-return channel == 'production' ? 'ham-decode-detail.json' : 'ham-decode-detail-dev.json'
+return hamAmChannel(channel) == 'production' ? 'ham-decode-detail.json' : 'ham-decode-detail-dev.json'
 }
 Map hamDetail(Map plat, String channel) {
 return hamRead(plat, channel, HAM_DETAIL_CONTRACT, hamDetailFileFor(channel))
@@ -8005,7 +8352,7 @@ return hamNo('HAM_VOCABULARY', ("Automation Map describes Rule Machine with voca
 }
 Map inst = (doc.instance ?: [:])
 String theirs = inst.buildChannel as String
-if (theirs != null && channel != null && theirs != channel) {
+if (theirs != null && channel != null && theirs != hamAmChannel(channel)) {
 return hamNo('HAM_CHANNEL', ("This decode came from the ${theirs} Automation Map and HAI is ${channel}. " +
 'Both are installed on this hub and they hold different estates.').toString(),
 [instance: inst])
@@ -8104,4 +8451,4 @@ Map m = [ok: false, code: code, message: message]
 m.putAll(extra ?: [:])
 return m
 }
-@Field static final String CHECKER_BUILD = '75da22ab46fc617d'
+@Field static final String CHECKER_BUILD = '73f251768e9023e2'

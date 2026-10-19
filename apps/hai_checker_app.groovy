@@ -823,12 +823,15 @@ fadeSeconds : [1, 86400],
 'action:modeCase' : ['modes', 'then'],
 'action:flashSwitches' : ['type', 'refs', 'seconds', 'times', 'disabled'],
 'action:deviceEnabled' : ['type', 'refs', 'enabled', 'disabled'],
+'action:hubReboot' : ['type', 'disabled'],
+'action:hubShutdown' : ['type', 'disabled'],
 'action:fade' : ['type', 'refs', 'attribute', 'to', 'seconds', 'stepSeconds', 'disabled'],
 'action:stopGradual' : ['type', 'what', 'disabled'],
 'action:track' : ['type', 'refs', 'attribute', 'disabled'],
 ]
 @Field static final List ACTION_TYPES = ['command', 'setVariable', 'wait', 'if', 'runRule', 'exit', 'comment', 'setRuleBoolean', 'controlRule', 'return', 'log', 'setMode', 'customCommand', 'capture', 'restore', 'repeat', 'stopRepeat', 'http', 'ping', 'file', 'later', 'cancelDelays', 'hsm',
-'byMode', 'flashSwitches', 'fade', 'stopGradual', 'track', 'deviceEnabled']
+'byMode', 'flashSwitches', 'fade', 'stopGradual', 'track', 'deviceEnabled', 'hubReboot', 'hubShutdown']
+@Field static final List HUB_POWER_TYPES = ['hubReboot', 'hubShutdown']
 @Field static final List RULE_CONTROL_OPS = ['pause', 'resume', 'cancelTimers', 'runActions', 'disable', 'enable']
 @Field static final List WAIT_KINDS = ['delay', 'forEvent', 'forEvents', 'until']
 @Field static final List WAIT_EVENT_KINDS = ['deviceAttribute', 'threshold', 'button', 'mode', 'hubVariable', 'schedule', 'duration']
@@ -975,30 +978,6 @@ return m.matches() ? m.group(1).toLowerCase() : null
 boolean schemaCoercionIsLossless(String from, String to) {
 if (from == to) return true
 return LOSSLESS_COERCIONS.contains(from + '>' + to)
-}
-boolean schemaHubMaintenance(Object url) {
-return url instanceof String && (url =~ /(?i)^https?:\/\/[^\/]+\/hub\/[^?#]*(reboot|shutdown|restart|update|restore|reset|backup|delete)/).find()
-}
-boolean schemaHubSelfHost(Object host) {
-String h = ((host ?: '') as String).trim().toLowerCase()
-if (h.startsWith('[') && h.endsWith(']')) h = h.substring(1, h.length() - 1)
-if (h.endsWith('.')) h = h.substring(0, h.length() - 1)
-if (h.isEmpty()) return false
-if (h == 'localhost' || h.endsWith('.localhost')) return true
-if (h.contains(':')) {
-if (h.startsWith('::ffff:')) return schemaHubSelfHost(h.substring(7))
-return h ==~ /[0:]*:[0:]*1?/
-}
-if (!(h ==~ /(0x[0-9a-f]+|[0-9]+)(\.(0x[0-9a-f]+|[0-9]+)){0,3}/)) return false
-List parts
-try {
-parts = h.tokenize('.').collect { String x ->
-x.startsWith('0x') ? new BigInteger(x.substring(2) ?: '0', 16) : (x.length() > 1 && x.startsWith('0') ? new BigInteger(x, 8) : new BigInteger(x))
-}
-} catch (NumberFormatException e) { return false }
-BigInteger first = (BigInteger) parts[0]
-if (parts.size() == 1) return first.shiftRight(24) == 127G || first == 0G
-return first == 127G || (first == 0G && parts.every { it == 0G })
 }
 @Field static final Map USE_KIND = [
 command: 'device', forEvent: 'device', deviceAttribute: 'device', threshold: 'device', button: 'device',
@@ -1920,6 +1899,7 @@ if (hasRef && !(a.ref instanceof String)) vBlock(r, 'SCHEMA_TYPE', "${path}.ref"
 return
 }
 if (type == 'exit' || type == 'cancelDelays') { vFields(r, a, "action:${type}".toString(), path); return }
+if (HUB_POWER_TYPES.contains(type)) { vFields(r, a, "action:${type}".toString(), path); return }
 if (type == 'hsm') {
 vFields(r, a, 'action:hsm', path)
 if (!HSM_ARM_OPS.contains(a.op)) vBlock(r, 'SCHEMA_ENUM', "${path}.op", "'${a.op}' is not an HSM operation; allowed are ${HSM_ARM_OPS.join(', ')}")
@@ -2643,6 +2623,10 @@ if (a.type == 'hsm') {
 risky = true
 return
 }
+if (HUB_POWER_TYPES.contains(a.type)) {
+risky = true
+return
+}
 if (a.type == 'deviceEnabled') {
 risky = true
 return
@@ -3167,7 +3151,7 @@ if (kind == 'rmRule') {
 if (a.type == 'controlRule' && a.op in ['disable', 'enable']) {
 boolean off = a.op == 'disable'
 if (((Map) w.port).containsKey('appDisable')) {
-Closure ad = corePort(w, 'appDisable'); ad([appId: target, disable: off])
+Closure ad = corePort(w, 'appDisable'); ad([appId: target, disable: off, run: run.id])
 }
 coreLog(w, 'rmRuleDisabled', [run: run.id, rule: target, disable: off, path: path])
 return
@@ -3837,6 +3821,14 @@ if (type == 'deviceEnabled') {
 String problem = !((Map) w.port).containsKey('net') ? 'this runtime cannot send requests' :
 coreDeviceEnabledSend(w, run, doc, a, path, 0, 'set')
 if (problem != null) coreFail(w, run, 'DEVICE_ENABLE_FAILED', "${path}: ${problem}".toString())
+return
+}
+if (type == 'hubReboot' || type == 'hubShutdown') {
+String op = type == 'hubShutdown' ? 'shutdown' : 'reboot'
+if (((Map) w.port).containsKey('hubPower')) {
+try { Closure f = corePort(w, 'hubPower'); f(op) } catch (Exception e) { coreFail(w, run, 'HUB_POWER_FAILED', "${path}: ${e.message}".toString()); return }
+}
+coreLog(w, 'hubPowerSent', [run: run.id, op: op, path: path])
 return
 }
 if (type == 'hsm') {
@@ -4521,8 +4513,6 @@ String to
 if (http) {
 req.method = a.method ?: 'get'
 req.url = coreExpandText(w, run, doc, a.url as String)
-if (schemaHubMaintenance(a.url)) req.approvedMaintenance = true
-if (schemaHubSelfHost(schemaUrlHost(a.url))) req.namedHubSelf = true
 Map hs = [:]
 ((Map) (a.headers ?: [:])).each { k, v -> hs.put(k as String, coreExpandText(w, run, doc, v as String)) }
 if (hs) req.headers = hs
@@ -4624,7 +4614,7 @@ String id = (((Map) ((Map) (doc.refs ?: [:])).get(key))?.id ?: '') as String
 String bare = id.startsWith('dev:') ? id.substring(4) : id
 if (!(bare ==~ /\d{1,12}/)) return "${key} is not a hub device".toString()
 String token = coreNewToken(w)
-Map req = [kind: 'http', rule: doc.id, run: run.id, token: token, timeoutSeconds: NET_DEFAULT_TIMEOUT_SECONDS, namedHubSelf: true]
+Map req = [kind: 'http', rule: doc.id, run: run.id, token: token, timeoutSeconds: NET_DEFAULT_TIMEOUT_SECONDS, hubOwnCall: true]
 if (phase == 'set') {
 req.putAll([method: 'post', url: CORE_DEVICE_DISABLE_URL, contentType: 'application/json',
 body: groovy.json.JsonOutput.toJson([id: bare as long, disable: a.enabled != true])])
@@ -5717,6 +5707,7 @@ sun : [:],
 requests : [],
 replies : [:],
 files : [:],
+hubPower : [],
 ])
 sim.port = simPort(sim)
 return sim
@@ -5761,6 +5752,7 @@ trace : { Map entry -> ((List) sim.trace) << entry },
 net : { Map req -> simNet(sim, req) },
 file : { Map req -> simFile(sim, req) },
 readFile : { Object name -> (String) sim.files.get(name as String) },
+hubPower : { Object op -> ((List) sim.hubPower) << [at: sim.clock, op: op as String] },
 ]
 }
 void simSetReply(Map sim, String host, Map reply) { sim.replies.put(host.toLowerCase(), reply) }
@@ -5885,9 +5877,16 @@ partial: ['confirmation uses a scripted acknowledgement model, not independent p
 assumptions: ['the command model describes how these devices acknowledge',
 'events arrive in the order they were injected',
 'sun times are exactly as supplied',
-'no controller other than the ones injected acts on these devices'],
+'no controller other than the ones injected acts on these devices'] + simHubPowerWords(sim),
 simulatedTo: sim.clock,
 ]
+}
+List simHubPowerWords(Map sim) {
+List asked = (sim.hubPower ?: [])
+if (asked.isEmpty()) return []
+boolean down = asked.any { ((Map) it).op == 'shutdown' }
+return [("the rule would ${down ? 'shut down' : 'reboot'} the hub here; the simulation did not, and on the hub it " +
+'happens only while "Allow rules to reboot or shut down the hub" is on in HAI Engine').toString()]
 }
 void simEmit(Map sim, Map effect) {
 ((List) sim.effects) << effect
@@ -6552,6 +6551,12 @@ break
 case 'deviceEnabled':
 List dnames = ((List) (a.refs ?: [])).collect { rName(doc, it) }
 out << "${n}${a.enabled == true ? 'Enable' : 'Disable'} ${dnames ? dnames.join(', ') : '(no devices chosen)'}${a.enabled == true ? '' : ': the hub ignores them, for every app, until they are enabled again'}".toString()
+break
+case 'hubReboot':
+out << "${n}Reboot the hub".toString()
+break
+case 'hubShutdown':
+out << "${n}Shut down the hub".toString()
 break
 case 'hsm':
 out << "${n}Tell Hubitat Safety Monitor to ${a.op ?: '(nothing chosen)'}".toString()
@@ -7300,7 +7305,7 @@ return result
 @Field static final int AUTHOR_MAX_RETRY_AFTER_SECONDS = 120
 @Field static final String AUTHOR_TOOL_NAME = 'submit_rule'
 @Field static final String AUTHOR_GUIDE_FILE = 'hai-author-guide.txt'
-@Field static final String AUTHOR_GUIDE_SHA256 = '980db1ff83d8c96128a9229d343fc0574e11b3612e01f0c48d48f8ef8b7e8cf1'
+@Field static final String AUTHOR_GUIDE_SHA256 = '99ef64a463011bdc7fb9d8d8ac7cacd565e3dcf97ef04e50c65be8c05cddb0b3'
 String authorSystem() {
 String kept = (String) AUTHOR_GUIDE_CACHE.get(AUTHOR_GUIDE_SHA256)
 if (kept != null) return kept
@@ -8248,10 +8253,14 @@ return [status: status, body: [ok: false, error: code, message: message]]
 Map editorReadBody(Object raw) {
 if (!(raw instanceof String) || ((String) raw).trim().isEmpty()) return [error: edError(400, 'EMPTY_BODY', 'The request had no body.')]
 String text = (String) raw
+int kb = (int) Math.ceil(text.length() / 1024.0d)
 if (text.length() > EDITOR_MAX_BODY_CHARS) {
-return [error: edError(413, 'BODY_TOO_LARGE', "The request is larger than ${EDITOR_MAX_BODY_CHARS} characters.".toString())]
+return [error: edError(413, 'BODY_TOO_LARGE', "The request is ${kb} KB (${text.length()} characters), larger than the ${EDITOR_MAX_BODY_CHARS} characters the hub takes.".toString())]
 }
 Map parsed = jsonParse(text)
+if (!parsed.ok && (parsed.code in ['LIMIT_SIZE', 'LIMIT_WORK'] || (text.length() >= 32768 && (parsed.code == 'JSON_TRUNCATED' || (parsed.offset as int) >= text.trim().length() - 1)))) {
+return [error: edError(413, 'BODY_TOO_LARGE', "The request is ${kb} KB (${text.length()} characters), too large for the hub to read in one piece (${parsed.message}).".toString())]
+}
 if (!parsed.ok) return [error: edError(400, 'INVALID_JSON', "The request is not valid JSON for this hub: ${parsed.message}".toString())]
 if (!(parsed.value instanceof Map)) return [error: edError(400, 'INVALID_SHAPE', 'The request must be a JSON object.')]
 return [value: parsed.value]
@@ -8429,7 +8438,7 @@ int toChoose = ((List) imported.resolution).count { Map row -> row.status != BIN
 return [status: 200, body: [ok: true, rules: imported.rules, resolution: imported.resolution, summary: summary,
 toConfirm: toConfirm, toChoose: toChoose]]
 }
-@Field static final String CHECKER_BUILD = '75da22ab46fc617d'
+@Field static final String CHECKER_BUILD = '73f251768e9023e2'
 Map checkerDispatch(Map req) {
 String op = req?.op as String
 switch (op) {
@@ -8441,6 +8450,7 @@ case 'mcp': return checkerMcpTool(req)
 case 'dryRun': return simDryRun((Map) req.doc, (req.now ?: 0L) as long, (req.zone ?: 'UTC') as String, req.inv)
 case 'draftStart': return authorStart((req.request ?: '') as String, req.inv, (req.opts ?: [:]))
 case 'draftSend': return authorPrepareSend((Map) req.session, (req.now ?: 0L) as long)
+case 'bound': return req.session instanceof Map ? [session: authorBoundSession((Map) req.session)] : [outcome: req.outcome instanceof Map ? authorBoundOutcome((Map) req.outcome) : null]
 case 'draftReply':
 return authorOnResponse((Map) req.session, req.inv, (req.status ?: 0) as int, req.body as String,
 (req.headers ?: [:]), (req.now ?: 0L) as long)

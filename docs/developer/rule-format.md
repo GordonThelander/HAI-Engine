@@ -84,7 +84,7 @@ Any trigger may carry `condition`, a condition read just after its event: the tr
 | `hsmStatus` | `to` (optional list of `armedAway`, `armingAway`, `armedHome`, `armingHome`, `armedNight`, `armingNight`, `disarmed`, `allDisarmed`) | Hubitat Safety Monitor's status changes (to one of `to`, if given). The `arming...` statuses are the delayed arming (exit delay) states. |
 | `hsmAlert` | `alerts` (optional list of `intrusion`, `intrusion-delay`, `intrusion-home`, `intrusion-home-delay`, `intrusion-night`, `intrusion-night-delay`, `smoke`, `water`, `rule`, `arming`, `cancel`) | Hubitat Safety Monitor raises an alert (one of `alerts`, if given). Every alert counts, even a repeat. |
 | `locationEvent` | `events` (one or more of `systemStart`, `severeLoad`, `zigbeeOff`, `zigbeeOn`, `zwaveCrashed`, `sunrise`, `sunset`, `sunriseTime`, `sunsetTime`) | The hub reports one of those events. `sunriseTime` and `sunsetTime` are when the hub sets the next sun time; for sunrise or sunset with an offset, use `schedule`. |
-| `endpoint` | none | Its end point is called: an HTTP GET to `/endpoint/rules/<rule id>/trigger` on HAI Engine, optionally with `/<value>`, which the run reads as `%value%` (Rule Machine's Local and Cloud End Point trigger). The rule's conditions apply. See `docs/developer/api.md`. |
+| `endpoint` | none | Its end point is called: an HTTP POST (or, with **Allow GET links (Rule Machine-style)** on, a GET) to `/endpoint/rules/<rule id>/trigger` on HAI Engine, optionally with `/<value>`, which the run reads as `%value%` (Rule Machine's Local and Cloud End Point trigger). The rule's conditions apply. See `docs/developer/api.md`. |
 
 ## Conditions
 
@@ -187,6 +187,8 @@ where a `9999-99-99` date means a time alone) and `HH:mm[:ss]`. Comparisons (`ab
 | `byMode` | `cases` (list of `{modes, then}`: `modes` is a list of mode names, `then` the steps), `otherwise` (optional) | Runs the steps of the first case whose `modes` include the current mode, or else `otherwise`. One step for all of Rule Machine's per-mode forms: set or choose switches, set dimmers and colours, and delays, per mode. A mode not on the hub is refused (`REF_MISSING`); a mode in two cases is warned (`MODE_CASE_REPEATED`). If the mode cannot be read the run fails (`MODE_UNKNOWN`), as for an unknown `if`. |
 | `flashSwitches` | `refs` (1 to 32 switches), `seconds` (1 to 60), `times` (1 to 1000, optional) | Turns the switches on, then off `seconds` later, and again, `times` times (ending off), or without `times` until a `stopGradual` or the rule stops it (warned `FLASH_ENDLESS` if nothing in the rule stops it). Works on any switch; the `flash` command is for drivers with the Flash capability. |
 | `deviceEnabled` | `refs` (1 to 32 devices), `enabled` (true or false) | Disables the devices, so the hub ignores them for every app, or enables them again: the hub's own `POST /device/disable` call with the device's bare number, sent to the hub itself; each device is answered and read back from `/device/fullJson` before the next, and a device that does not read as asked fails the step. Rule Machine's Disable/Enable devices. Only approved devices; the device's own disabled flag in `/device/fullJson` is the read-back. |
+| `hubReboot` | none | Reboots the hub: the rule app's own fixed call to the hub's `POST /hub/reboot`, the one call to a hub power page HAI makes (an `http` step may not reach one). Rule Machine's HTTP request to its own hub's `/hub/reboot` or `/hub/restart` converts to it. Risky: never run on its own (Run this step), the editor asks before such a rule is activated or run, and the Migration page copies one only on "Copy it anyway". It runs only while "Allow rules to reboot or shut down the hub" is on in HAI Engine (on by default): off, activation is refused (`RUNTIME_HUB_POWER_NOT_ALLOWED`) and a live rule's step fails (`HUB_POWER_FAILED`). |
+| `hubShutdown` | none | Shuts the hub down, through `POST /hub/shutdown`, exactly as `hubReboot` does otherwise. Rule Machine's request to its own hub's `/hub/shutdown` converts to it. The hub stays off until it is unplugged and plugged in again. |
 | `fade` | `refs` (1 to 32 devices), `attribute` (`level` default, or `colorTemperature`), `to` (0 to 100, or 1000 to 30000 kelvin), `seconds` (1 to 86400), `stepSeconds` (optional) | Rule Machine's fade over time: each device goes from where it is (a light that is off from 0%) to `to` over `seconds`, in steps sent as `setLevel` or `setColorTemperature`. Without `stepSeconds`, one step per unit of change (1% or 10 K), at most one a second and at most 100; a step that would not change a device is not sent. |
 | `stopGradual` | `what` (`level` \| `colorTemperature` \| `flash`, optional: all of them) | Ends this rule's fades or flashing before their next step (Rule Machine's Stop fade and stop changing colour temperature). Warned `GRADUAL_NOTHING_TO_STOP` if the rule starts none of that kind. |
 | `track` | `refs` (1 to 32 devices), `attribute` (`switch` \| `level`) | Rule Machine's Track event switch and Track event dimmer: the devices follow the device that fired the trigger, on or off as its switch, or at its level. The value is the event's own when it reported that attribute, otherwise the device's reading now. With no such device or value, nothing is sent. The rule needs a device trigger (`EVENT_DEVICE_NONE`). |
@@ -342,7 +344,14 @@ offer.
 Two further switches exist, and neither is an approval:
 - **Changing the mode** needs "Allow rules to change the mode" on the HAI Engine page. It commands no device
   but every automation on the hub reads the mode, so it has its own switch.
-- **HTTP and ping** may reach **any** address. There is no host allow-list; do not plan containment around
-  one. On any host, an address under `/hub/` that restarts, shuts down, updates, restores, resets, backs up or
-  deletes is refused unless the step's own address names it. One reached through a `%value%` filled in at
-  run time is always refused, because no person saw it.
+- **HTTP and ping** may reach **any other** address. There is no host allow-list; do not plan containment around
+  one. Two refusals hold however the address was written, in the step's own text or through a `%value%` filled in
+  at run time (0.5.117, 2026-10-16 audit): on any host, an address under `/hub/` that restarts, shuts down,
+  updates, restores, resets, backs up or deletes; and an HTTP request to this hub itself, at any port: its
+  loopback (`127.0.0.0/8`, `localhost`, `::1`, `0.0.0.0`) and its own LAN address. The hub's admin API answers an
+  app on the hub without a login, so a rule must not reach it. A `deviceEnabled` step's own call to the hub is
+  HAI's, built by the runtime, and is not affected. A ping to the hub is not refused.
+- **Rebooting or shutting down the hub** is a `hubReboot` or `hubShutdown` step, never an `http` step (0.5.118). It
+  needs "Allow rules to reboot or shut down the hub" on the HAI Engine page (on by default), checked when the rule
+  is activated and again when the step runs; the rule app makes the one fixed call to `/hub/reboot` or
+  `/hub/shutdown` itself.

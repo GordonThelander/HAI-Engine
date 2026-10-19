@@ -54,6 +54,7 @@ The document format:
                {"type": "capture", "refs": ["<device key>", ...]}, {"type": "restore", "refs": ["<device key>", ...]},
                {"type": "byMode", "cases": [{"modes": ["<mode name>", ...], "then": [<actions>]}], "otherwise": [<actions>]},
                {"type": "deviceEnabled", "refs": ["<device key>", ...], "enabled": true|false} (disable or enable devices for every app on the hub; each is read back before the rule goes on),
+               {"type": "hubReboot"} and {"type": "hubShutdown"} (reboot or shut down the hub itself; only when the household asks for exactly that, never as a fix for anything else; the person confirms before such a rule is activated),
                {"type": "flashSwitches", "refs": ["<device key>", ...], "seconds": <1 to 60>, "times": <n, omit to flash until stopped>},
                {"type": "fade", "refs": ["<device key>", ...], "attribute": "level|colorTemperature", "to": <level 0 to 100, or kelvin>, "seconds": <total time>, "stepSeconds": <optional>},
                {"type": "stopGradual", "what": "level|colorTemperature|flash, omit for all"}, {"type": "track", "refs": ["<device key>", ...], "attribute": "switch|level"},
