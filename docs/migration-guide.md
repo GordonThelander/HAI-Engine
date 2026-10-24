@@ -7,138 +7,174 @@ the HAI Migration app.
 
 ## Quick start
 
-1. Open the **HAI Migration** page and press **Assess all**.
-2. Press **Conversion report**. It says how many of your rules can move today, and gives every rule one
-   **next step**.
-3. For a rule marked ready, press **Create a disabled HAI copy** on its row (or **Copy the first 6 ready**
-   in the report). The copy is made stopped. **Copying never switches anything over**: your Rule Machine rule
-   keeps running.
-4. Open the copy in the HAI editor and read what it says it will do.
-5. Press **Switch over to HAI**. Rule Machine's rule is paused and the HAI copy starts.
-6. Watch the row for a few days. If anything is wrong, press **Switch back to Rule Machine**.
-7. When you are sure, delete the Rule Machine rule in Rule Machine.
+1. On the HAI Engine page, open **Rule Machine Migration Facility**. The page, **Move your Rule Machine rules
+   to HAI**, reads your rules and sorts each one into a panel.
+2. In **Available to clone**, press **Clone** on a rule's row (or **Clone all** in the card at the top). HAI
+   makes a clone that stays **switched off**. Rule Machine keeps running the rule, so nothing in your house
+   changes.
+3. The clone moves to **Currently being shadowed**. Each time the rule is triggered, HAI works out what its
+   clone would have done and checks that against what Rule Machine actually did. Its light shows how that is
+   going.
+4. When the light is green, press **Promote to HAI**. Rule Machine's rule is paused and the HAI clone starts.
+5. If anything is wrong, press **Back to Rule Machine**. One click, at any time.
+6. When you are sure, delete the Rule Machine rule in Rule Machine yourself. HAI never deletes it.
 
-The rest of this guide explains each step, what the report's next steps mean, the order to move rules in, and
-the two places where you choose how a copy behaves.
+The rest of this guide explains each step, what each panel and button means, the order to move rules in, and
+the places where you choose how a clone behaves.
 
 ## Before you start
 
 - **Automation Map must be installed and must have scanned.** HAI reads what each rule does from Automation
   Map's reading of your rules. The page says how old that scan is. If you change a rule in Rule Machine,
-  scan again before you Assess it.
-- **Never leave both engines driving the same devices.** If the Rule Machine rule and its HAI copy both run,
-  both act, and you get a flickering light or a rule that "sometimes does not work". Switch over and Switch
-  back always pause one side before starting the other, so use them rather than starting things by hand.
+  press **Scan again** at the top of the page.
+- **Never leave both engines driving the same devices.** If the Rule Machine rule and its HAI clone both run,
+  both act, and you get a flickering light or a rule that "sometimes does not work". **Promote to HAI** and
+  **Back to Rule Machine** always pause one side before starting the other, so use them rather than starting
+  things by hand.
 - **Move one rule, or a small group, at a time.** It is much easier to tell which rule is misbehaving.
+
+## The page
+
+At the top, always in view, are **Open the editor**, **Scan again** and a **?** button for **How this works**.
+Under them, one line repeats the promise the whole page keeps: your Rule Machine rules are never deleted,
+Rule Machine keeps running each rule until you promote its clone, and going back is one click.
+
+**Your move to HAI** shows how far you have got, as a percentage and a bar, and a picture of three stations:
+
+- **In Rule Machine**: rules not cloned yet, running as today.
+- **Being shadowed**: clones that are switched off and being checked against Rule Machine.
+- **Running on HAI**: promoted rules. The Rule Machine rule is paused.
+
+Under the three, a curved arrow runs back from Running on HAI to In Rule Machine: **Revert back to Rule
+Machine with one click, at any time**. A red badge on a station, such as "2 need you", counts rules there
+that need something from you. Click a station to open its panel.
+
+Below the picture, one card says what to do next, with one button, for example "61 rules are able to be
+cloned into HAI" with **Clone all 61**, or "3 clones are being shadowed" with **Show the clones**.
+
+Then come the panels, in this order. Each shows how many rules it holds and one line on what they are. A
+panel's header buttons act on every rule in it.
+
+| Panel | What is in it | The row's button |
+|---|---|---|
+| **Available to clone** | Rules HAI can clone as they are. | **Clone** |
+| **Requires some manual intervention** | Rules that need something from you first: a clone the hub would not accept, a rule not cloned last time for a reason a retry would repeat, a device, variable or mode setting to approve in HAI Engine, a device to enable, a rule changed in Rule Machine since it was cloned, or a rule Automation Map has not read yet. The row says what. | Takes you there: **Fix in the editor**, **Clone again**, **Open HAI Engine**, **Open Devices**, **Delete the clone** or **Scan again** |
+| **Risky rules that require your permission** | Rules that reboot or shut down the hub. Their clones would too. | **Clone anyway…** |
+| **Currently being shadowed** | Clones that are switched off and being checked against Rule Machine. | **Promote to HAI** |
+| **Running on HAI** | Promoted rules. | **Back to Rule Machine** |
+| **Staying in Rule Machine** | Empty rules, with nothing to clone, and rules that use something HAI cannot clone yet. | **Tell HAI** |
+
+**More** on a row shows the rest: the full reasons, **Options for the clone** (see [Two choices about how a
+copy behaves](#two-choices-about-how-a-copy-behaves)), and links: **Open in Rule Machine**, **Open the HAI
+clone in the editor**, **Open the draft in the editor**, **See every run**, **Run for real and check** and **Delete the HAI
+clone**, as each applies.
+
+**Choosing several rules.** Tick rows in any panel and a bar appears at the bottom of the screen, for example
+"3 selected · Clone 3". It offers each action that fits the ticked rules, with its count (**Clone**,
+**Promote**, **back to Rule Machine**, **Delete … clones**, **Tell HAI about**), and **Clear**. If a risky rule
+is ticked, the bar says so, and cloning asks once, naming it. **Select all** at the top of an open panel ticks
+every rule in it.
+
+**Search your rules** finds a rule by name. **Open all** and **Fold all** open or fold every panel.
 
 ## The steps in full
 
-### 1. Assess
+### 1. Read your rules
 
-**Assess all** reads every Rule Machine rule and works out what an HAI copy would look like. **Assess
-selected** does the same for the rules you have ticked. Nothing on your hub changes. Each row then shows
-whether the rule is ready, which side is running (**Rule Machine**, **HAI**, **Both at once** or **Nothing
-running**), and anything that reaches beyond the rule, such as other rules that control it.
+The page reads your rules from Automation Map's latest scan when it opens. Nothing on your hub changes.
+**Scan again** asks Automation Map to read your Rule Machine rules again, for example after you have changed
+one; the page updates when the scan finishes.
 
-### 2. Read the report
+### 2. Clone
 
-**Conversion report** starts with the good news: how many of your rules can move to HAI today. Below that,
-each rule has a traffic light and one short next step:
+**Clone** builds an HAI rule from the Rule Machine rule as it is right now and puts it on the hub switched
+off. The page asks first, naming the rule. **Clone all** in a panel's header, or the bar at the bottom, does
+the same for many rules. It runs on the hub as a job, about seven seconds a rule; a box in the middle of the
+page shows the progress and **Stop after this rule**, and you can close the page and come back. When it ends,
+the same box lists what was cloned, any **Drafts to fix**, and anything not cloned, grouped by reason.
 
-- **Green, ready.** It can be copied now.
-- **Amber, after a fix.** Something HAI has to sort out first. There is nothing for you to do.
-- **Red, needs you.** One change from you, and it can move.
-- **Grey, not read yet.** Automation Map has not read it, or it has not been assessed.
+Cloning never switches anything over. The Rule Machine rule is not touched and keeps running; the clone
+waits, switched off.
 
-Rules that look like tests (names starting with `__` or `_HAI `, names containing "(throwaway)" or "(probe",
-or rules with no actions yet) are left out of the counts. **Show test rules** brings them back.
+If the hub will not accept a clone as it is (a device lacking a command, a missing variable), the clone goes
+to the editor's **Drafts**, marked **Needs fixing**, with what to fix. Its row moves to **Requires some manual
+intervention** with **Fix in the editor**.
 
-The report also has a **Worth knowing** part: where a copy behaves differently from Rule Machine, what is left
-out of a copy (actions you turned off in Rule Machine), and the order to move rules in. **Copy as text** copies
-the whole report, for example to paste into a forum post or a note.
+Rules in **Risky rules that require your permission** reboot or shut down the hub. **Clone anyway…** asks
+first, in red. The clone is made switched off, so nothing happens until you promote it.
 
-The next steps are explained in [What each next step means](#what-each-next-step-means) below.
+### 3. Shadowing
 
-### 3. Copy
+A clone being shadowed stays switched off and changes nothing. Each time the rule is triggered, HAI works out
+what its clone would have done and checks that against what Rule Machine actually did. Each clone has a light:
 
-**Create a disabled HAI copy** builds an HAI rule from the Rule Machine rule as it is right now and puts it on
-the hub stopped. In the report, **Copy the first 6 ready** does the same for up to six ready rules at once,
-asks you first, and leaves out test rules and rules already copied. Press it again for the next six.
+- **Green**: at least 3 runs, all matched, and every trigger seen at least once. It is ready to promote.
+- **Amber**: still watching. The row says how far it has got, for example "1 run in 6 days, 2 more matches
+  to go green" or "1 trigger not seen yet".
+- **Red**: a run differed. The row says what differed.
+- **Grey**: it cannot be checked, because nothing the rule does can be watched (notifications, speech, web
+  requests).
 
-Copying never switches anything over. The Rule Machine rule is not touched and keeps running; the copy waits.
+Some triggers give no event HAI can hear, such as a run started by another rule or app, or a call to the
+rule's own web address. The row names them as **can't be checked**. If a row says **Not watching yet**, open
+the HAI Engine page and press **Done** to start it; Rule Machine still runs the rule meanwhile.
 
-If HAI cannot set the copy up on the hub (a device it uses has not been selected for HAI, for example), the
-copy is held, the row says why, and **Switch over** starts it once the cause is fixed.
+The row cannot see a trigger that should have happened but did not. A motion light that has had no runs for
+a day is worth a look; a rule that runs once a year is not.
 
-### 4. Check
+**See every run**, under **More**, lists the clone's runs, newest first. Each is marked **Matched**, **Did
+not match** or **Could not be checked**, with the time. For the last five runs, and any that did not match, it
+shows each step: what HAI worked out it would have done, against what Rule Machine did. The last 20 runs are
+kept. From the editor, the coloured ball beside a shadowed clone in the **On the hub** list opens the same
+runs here.
 
-Open the copy in the HAI editor. HAI reads every rule back in plain English. If that sentence is not what the
-Rule Machine rule does, do not switch over. A copy that converts is not proof that it behaves the same.
+**Run for real and check**, under **More** or in **See every run**, saves waiting for the rule's trigger. **It runs the Rule
+Machine rule once, for real: its devices change as if it had been triggered.** HAI watches and checks what
+its clone would have done, and the result appears in **See every run** a few seconds later. A test counts for
+the rule's actions only; its trigger still needs one real run before the light can go green.
 
-Look at the row's behaviour lines as well. Each says "As in Rule Machine, ..." or says how the copy differs,
-and some offer an **Upgrade** checkbox. See [Two choices about how a copy behaves](#two-choices-about-how-a-copy-behaves).
-Tick an upgrade before you copy. To change it afterwards, either change the same setting in the copy's
-**Rule settings** in the editor, or delete the copy and copy again.
+### 4. Promote to HAI
 
-### 5. Switch over
+**Promote to HAI** pauses the Rule Machine rule, checks that it really has paused, and only then starts the
+HAI clone, with the Rule Machine rule's Private Boolean. If the pause cannot be confirmed, the clone is not
+started and Rule Machine stays in charge. The Rule Machine rule is paused, not deleted: it keeps everything
+you set up in it.
 
-**Switch over to HAI** pauses the Rule Machine rule, checks that it really has paused, and only then starts
-the HAI copy. If the pause cannot be confirmed, HAI is not started and the row says so. The Rule Machine rule
-is paused, not deleted: it keeps everything you set up in it.
+Promote the green ones. You can promote a clone whose light is not green, but the page asks first and says
+why: on amber or grey that it has not been checked enough to be sure, on red what differed. It also warns
+when a rule still in Rule Machine sets this rule's Private Boolean ("Switch that one too"). **Promote all**
+in the panel header, or **Promote** in the bottom bar, does several at once.
 
-### 6. Watch
+After promoting, watch the house itself for a while: did the light come on, did the notification arrive. If
+a promoted rule needs you, for example both rules are running at once, its row moves to **Requires some
+manual intervention** and says what to do.
 
-After a switch over, the row keeps an eye on the HAI copy for you:
+### 5. Back to Rule Machine, at any time
 
-- **"last ran" and a time**, or **"has not run since it was switched over"**. A motion light that has not run
-  for a day is worth a look; a rule that runs once a year is not.
-- **A warning when the last run went wrong**, for example a command a device did not accept. The report's next
-  step is then **Check its last run; switch back if it repeats**.
-- **A warning when the Rule Machine rule has changed since it was copied.** The copy still does what the rule
-  used to do. Delete the HAI copy and copy again.
+**Back to Rule Machine** pauses the HAI clone and starts the Rule Machine rule again. You are back where you
+started in seconds. The clone is kept, so you can promote it again later. That is why promoting pauses Rule
+Machine's rule instead of deleting it.
 
-The row cannot see a trigger that should have started the rule but did not. So also watch the house itself:
-did the light come on, did the notification arrive.
+### 6. Delete, when you are sure
 
-### 7. Switch back, if you need to
+Deleting is always a step you take yourself:
 
-**Switch back to Rule Machine** stops the HAI copy, then resumes the Rule Machine rule. You are back where you
-started in seconds. That is why switching over pauses Rule Machine's rule instead of deleting it.
-
-### 8. Delete, when you are sure
-
-Deleting is always a separate step you take yourself, and never on the migration page:
-
-- **HAI never deletes a Rule Machine rule.** Once you trust the HAI copy, open the rule in Rule Machine and
+- **HAI never deletes a Rule Machine rule.** Once you trust the HAI clone, open the rule in Rule Machine and
   delete it there.
-- **To delete an HAI copy**, open it in the HAI editor and delete it there. Do this when you want to copy a
-  rule again, or have given up on moving it.
+- **To delete a clone that is being shadowed**, open **More** on its row and press **Delete the HAI clone**,
+  or use **Delete all … clones** in the panel header or the bottom bar. The page asks first, in red. Any draft
+  made for the clone goes with it. Your Rule Machine rule is not changed and keeps running.
+- **A promoted clone** cannot be deleted while it is running on HAI. Press **Back to Rule Machine** first;
+  it is then shadowed again and can be deleted as above.
 
-## What each next step means
+Delete a clone when you want to clone the rule again (for example after changing it in Rule Machine), or
+when you have given up on moving it.
 
-The report gives each rule one next step, and each section one for all its rules. Where a step names a device,
-a rule or a setting, the report fills in the real name; the examples here are invented.
+### Rules HAI cannot clone yet
 
-| Next step | What it means | What to do |
-|---|---|---|
-| **Copy, then switch over** | Ready, and the copy behaves as in Rule Machine. | Copy it, read the copy in the editor, then switch over. |
-| **Copy, check its options, then switch over** (or **Check its options, then switch over** once copied) | Ready, but the copy differs from Rule Machine somewhere, or offers an upgrade. | Read the row's behaviour lines and decide on any upgrade before you copy. |
-| **Copy now, switch over after Hall Motion Rule has moved** (or **Switch over last**) | Other rules control this one. Switch it over before them and they keep controlling its paused Rule Machine rule, so the link quietly stops working. | Copy it now; switch it over once the rules that control it have moved. See [Move order](#move-order). |
-| **Switch over** | Already copied and ready. | Switch over when you are ready. |
-| **Select Front Door in HAI Engine, then copy** | The rule uses a device HAI has not been allowed to use. | In HAI Engine, add the device under **Devices rules may use**, then Assess again and copy. |
-| **Approve Away Count in HAI Engine, then copy** | The rule changes a hub variable that HAI rules may not change yet. | Allow that hub variable in HAI Engine, then copy. |
-| **Allow mode changes in HAI Engine, then copy** | The rule sets the hub's mode, which HAI rules may not do yet. | Allow it in HAI Engine, then copy. |
-| **Copy now; enable Porch Light before switching over** (or **Enable Porch Light before switching over** once copied) | The rule uses a device that is disabled on the hub. | You can copy it, but enable the device in Hubitat before you switch over. |
-| **Delete the copy and copy again** | The Rule Machine rule changed after the copy was made, so the copy is out of date. | Delete the HAI copy in the editor, then copy again. |
-| **Check its last run; switch back if it repeats** | The HAI copy is running and its last run went wrong. | Open the copy's run timeline in the editor. If it goes wrong again, press **Switch back to Rule Machine**. |
-| **Fix what held the copy, then switch over** | The copy is held, not on the hub, and the row says why. | Fix that (usually a device to select), then press **Switch over**. |
-| **Nothing to do, wait for the fix** | HAI cannot copy part of this rule yet, and the fix is HAI's to make: either already under way, or waiting for Rule Machine's behaviour to be measured. | Leave it running in Rule Machine. It will turn green after an update. |
-| **Rebuild by hand in the HAI editor, or keep it in Rule Machine** | The rule uses something HAI leaves out on purpose, such as rebooting the hub. | Build it yourself in HAI if you still want it, or keep it in Rule Machine. |
-| **Edit it in Rule Machine (what), then Assess again** | The rule has a setting HAI cannot copy as it stands. The brackets name the part, for example a time HAI cannot read. | Change that part in Rule Machine, let Automation Map scan, then Assess the rule again. |
-| **Keep it in Rule Machine for now** | Something stands in the way that has no change you can make yet. | Leave it in Rule Machine. |
-| **Assess it** (or **Assess them** for a section) | HAI has not read this rule yet. | Press **Assess selected** or **Assess all**. If it stays grey, scan in Automation Map first. |
-| **Nothing to do, it runs on HAI** | Already moved. | Nothing. Delete the Rule Machine rule when you are sure. |
-| **One change each** | The heading of the "Needs you" section. | Each rule in it has its own step from this table. |
+Rules in **Staying in Rule Machine** keep running in Rule Machine. For a rule HAI cannot clone yet, **Tell
+HAI** opens a short report of why, with names, numbers and addresses taken out. You can change anything in
+it, then press **Open GitHub** and submit it there.
 
 ## Move order
 
@@ -146,15 +182,16 @@ Most rules move on their own. A few are tied to other rules, and those need an o
 
 ### Rules that control other rules
 
-If Rule A runs Rule B's actions, pauses Rule B or cancels Rule B's timers, **move Rule A before Rule B**. The
-report gives Rule B the step **switch over after Rule A has moved** (or **Switch over last** when several
-rules control it). Follow it: switch Rule B over once the rules that control it are in HAI.
+A step that acts on another rule (its Private Boolean, running its actions, pausing, resuming or cancelling
+its delayed actions) follows that rule: it acts on the rule's HAI clone once that clone is promoted, and on
+the Rule Machine rule until then. So once Rule A is on HAI, it keeps reaching Rule B whether Rule B is still in
+Rule Machine or has been promoted.
 
-The reason: a rule still in Rule Machine can only reach Rule B's Rule Machine rule. Switch Rule B over first,
-and Rule A goes on controlling the paused Rule Machine rule. Nothing shows an error; the link just stops
-working. HAI is being updated so that a step copied into HAI follows Rule B to its HAI copy when Rule B
-switches over. Until that update reaches you, when both have moved, open Rule A's HAI copy and check that the
-step points at Rule B's HAI copy.
+The one order that matters: if Rule A controls Rule B, **promote Rule A before Rule B, or both together**.
+While Rule A is still in Rule Machine, it can only reach Rule B's Rule Machine rule. Promote Rule B first and
+Rule A goes on controlling the paused Rule Machine rule. Nothing shows an error; the link just stops working.
+When you promote a rule whose Private Boolean is set by a rule still in Rule Machine, the page warns you and
+names that rule.
 
 ### A restart rule that resets Private Booleans
 
@@ -162,20 +199,19 @@ Many hubs have a rule like **System Start**: when the hub restarts, it sets othe
 back to true. It exists because a Rule Machine rule that waits (say "turn off Private Boolean, delay 30
 minutes, turn it back on") loses its delay in a restart and can be left stuck at false.
 
-**An HAI copy does not need that repair.** HAI keeps a rule's delays and its Private Boolean through a
+**An HAI clone does not need that repair.** HAI keeps a rule's delays and its Private Boolean through a
 restart. After the hub comes back, a delay that is still due carries on, and one that fell due while the hub
-was down runs once. So the copy of a rule like that sorts itself out.
+was down runs once. So the clone of a rule like that sorts itself out.
 
 So a rule that only resets Private Booleans **holds nothing up**:
 
 - Move the rules it resets whenever they are ready. You do not need to wait for System Start.
 - Move System Start whenever you like, or leave it in Rule Machine. While it is there it keeps protecting the
-  rules still in Rule Machine. Its reset of a rule that has already moved reaches only the paused Rule
-  Machine rule, which does nothing.
+  rules still in Rule Machine. Its reset of a rule that has already been promoted reaches only the paused
+  Rule Machine rule, which does nothing.
 
-The report row of a rule whose Private Boolean another rule sets says so, and names the rules that set it.
-If one of them sets it for some other reason (not a restart repair), check that step points at the HAI copy
-once both rules are in HAI.
+The page's promote warning names such a rule. If it sets the Private Boolean only as a restart repair, you can
+ignore the warning.
 
 ### Rules that share a hub variable
 
@@ -184,9 +220,10 @@ one. Move rules that share a variable together.
 
 ## Two choices about how a copy behaves
 
-A copy keeps Rule Machine's behaviour by default, so that switching over changes as little as possible. In
-two places HAI's own way is often better, and the row offers it as an **Upgrade** checkbox. Each has a tip on
-the page saying when it is the better choice.
+A clone keeps Rule Machine's behaviour by default, so that promoting it changes as little as possible. In
+two places HAI's own way is often better. **More** on the row, under **Options for the clone**, offers each as
+a tick box. Tick it before you clone. To change it afterwards, change the same setting in the clone's **Rule
+settings** in the editor, or delete the clone and clone again.
 
 ### When the rule is triggered again while it is running
 
@@ -198,49 +235,57 @@ Take a rule: when Hall Motion becomes active, turn on Hall Light, wait 5 minutes
 - **A new HAI rule restarts.** The new trigger cancels the run in progress, delays included, and starts
   again. The light stays on and goes off at 8:08, 5 minutes after the last movement.
 
-A copy keeps Rule Machine's way. Tick **Restart on a new trigger, so only the latest one counts** to get
+A clone keeps Rule Machine's way. Tick **Restart on a new trigger, so only the latest one counts** to get
 HAI's. That is usually what a motion or door rule means. Leave it off if every trigger must count, for example
 a rule that counts door openings or sends a notification each time.
 
-(A rule that waits for an event, rather than a fixed delay, already restarts in Rule Machine, so its copy
+(A rule that waits for an event, rather than a fixed delay, already restarts in Rule Machine, so its clone
 restarts too and there is nothing to choose.)
 
 A third, smaller choice sits beside these: Rule Machine starts a rule on every report from a device, even a
-repeat of the same reading. **Only on a real change, ignoring a device that repeats itself** makes the copy
+repeat of the same reading. **Only on a real change, ignoring a device that repeats itself** makes the clone
 start only when the reading changes.
 
 ### When a device in an IF cannot be read
 
 Sometimes an IF cannot be answered: the device is offline, was removed, or has never reported. Rule Machine
-then treats the condition as not met and runs the ELSE. A copy does the same, and the log says the reading was
-missing.
+then treats the condition as not met and runs the ELSE. A clone does the same, and the log says the reading
+was missing.
 
 Whether that is right depends on what the ELSE does:
 
 - **An ELSE that is a safety catch should run.** "IF Bathroom Heater's temperature is below 22 THEN keep
   Bathroom Heater on ELSE turn Bathroom Heater off." If the thermometer stops reporting, turning the heater
-  off is the safe thing. Leave the copy as it is.
+  off is the safe thing. Leave the clone as it is.
 - **An ELSE that claims something is true should not run.** "IF Front Door is open THEN announce it ELSE
   announce all clear." If Front Door's sensor cannot be read, nobody knows it is all clear. Tick **Stop
   instead of running the ELSE when a reading is missing**: the run then stops at the IF and records why.
 
-You can change this later in the copy's **Rule settings**, under **If a device in an IF can't be read**:
+You can change this later in the clone's **Rule settings**, under **If a device in an IF can't be read**:
 **Stop the run** or **Run the ELSE**. A rule you write yourself in HAI stops the run unless you choose
 otherwise.
 
 ## Questions
 
-**Does copying change anything in my house?** No. A copy is made stopped and Rule Machine keeps running.
-Only **Switch over** changes which rule acts.
+**Does cloning change anything in my house?** No. A clone is made switched off and Rule Machine keeps
+running. Only **Promote to HAI** changes which rule acts.
 
-**What if I edit the Rule Machine rule after copying it?** The row warns that the rule has changed since it
-was copied. Delete the HAI copy and copy again.
+**Does shadowing change anything?** No. A clone being shadowed only listens and compares. **Run for real and check** is
+the exception: it runs the Rule Machine rule once, for real, and the page warns you before it does.
 
-**What happens to my Rule Machine rule when I switch over?** It is paused, not deleted. **Switch back**
-resumes it.
+**What if I edit the Rule Machine rule after cloning it?** The row moves to **Requires some manual
+intervention** and says the rule has changed since it was cloned. Press **Delete the clone**, then clone it
+again.
 
-**Can I move everything at once?** You can copy six ready rules per press, but switch over one rule or a
-small group at a time, and watch them.
+**What happens to my Rule Machine rule when I promote?** It is paused, not deleted. **Back to Rule Machine**
+starts it again.
 
-**Some rules are amber. Should I do anything?** No. Amber means the fix is on HAI's side. Leave them in Rule
-Machine; they turn green after an update.
+**Can I move everything at once?** You can clone everything at once, safely: nothing changes in your house.
+Promote one rule, or a small group, at a time, and watch them.
+
+**My light is amber after several days. What now?** The rule may not have been triggered enough yet, or one
+of its triggers has not happened. **See every run** shows what has been checked. **Run for real and check** covers the
+actions; the trigger still needs one real run. You can also promote it anyway, after the page's warning.
+
+**Some rules are staying in Rule Machine. Should I do anything?** No. They keep running as today. **Tell
+HAI** helps get them supported in a later update.

@@ -98,7 +98,7 @@ There is no "test devices only" fence, no commissioning of locks and sirens, and
 
 ## HAI Checker: the call between the engine and its checker
 
-Since 0.5.115 (to bring the engine under the hub's advisory size: 747 KB shrunk
+Since 0.5.115 (2026-10-18, approved to bring the engine under the hub's advisory size: 747 KB shrunk
 before, about 410 KB after; the checker is about 422 KB):
 
 - **One call per request.** `checkerCall(req)` in the engine finds the child by the id kept in state (one lookup by

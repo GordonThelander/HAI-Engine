@@ -26,6 +26,7 @@ For a one-page picture of Automation Map, the HAI Engine and the optional migrat
 7. [One rule running another](#one-rule-running-another)
 8. [Running, pausing and stopping](#running-pausing-and-stopping), and [rule end points](#rule-end-points)
 8a. [How big a rule can be](#how-big-a-rule-can-be)
+8b. [Using HAI away from home](#using-hai-away-from-home)
 9. [When a rule did not do what you expected](#troubleshooting), and the [refusals you are likely to meet](#refusals-you-are-likely-to-meet-and-what-to-do)
 9a. [Moving from Rule Machine](#moving-from-rule-machine)
     A step-by-step guide for home owners: [Moving your Rule Machine rules to HAI](migration-guide.md)
@@ -165,14 +166,20 @@ they happen: **Starts when**, **Only if** and **Then, in order**. Two more appea
   Z by name (a list grouped by room keeps its rooms). This is only how they are shown: the rule keeps its own order.
   **Then** steps and **Only if** conditions are never sorted, because their order is what the rule does. Triggers
   shown A to Z have no **Move up** or **Move down**.
-- **Unsaved edits** turn **Put on hub** / **Update on hub** and **Save draft** amber, with **Unsaved changes**
-  beside them. **Save draft** is always there and never touches the hub. Leaving a rule with unsaved edits asks whether to put them
-  on the hub, save them as a draft, discard them, or keep editing.
+- **Unsaved edits** turn **Activate on hub** / **Update on hub** and **Save draft** amber, with **Unsaved changes**
+  beside them. **Save draft** is always there and never touches the hub. Leaving a rule with unsaved edits asks
+  what to do with them, with the buttons in this order: **Keep editing**, **Discard changes**, **Save draft**,
+  **Delete draft** (when a draft is open) and **Activate on hub** or **Update on hub**.
 - **Draft or hub version.** A line above the rule says which one is open. A rule under **On the hub** always
   opens the version the hub is running; editing it and saving makes a draft, and the hub keeps running its
   version until you press **Update on hub**. A rule under **Drafts** says whether it is not on the hub, the same
-  as the hub, or different from it, with **Update the hub with this draft** and **Open the hub version** beside it.
+  as the hub, or different from it, with **Activate on hub** or **Update on hub** and **Open the hub version** beside it.
   Each hub rule has one draft: saving the hub's copy again replaces it.
+- **A coloured ball beside a rule** in the **On the hub** list marks a clone of a Rule Machine rule that is
+  being shadowed (see [Moving your Rule Machine rules to HAI](migration-guide.md)): green, every run matched
+  and it is ready to promote; amber, still watching; red, a run did not match Rule Machine; grey, HAI cannot
+  check this one. Click it to see the clone's runs on the Migration page. **Open Migration**, at the top of
+  the editor, opens the Migration page itself.
 - **The rule list and the right-hand panel** each fold away with the small arrow on their inner edge; the arrow
   stays where it was, to bring the panel back.
 
@@ -235,11 +242,12 @@ adds too.
 
 - **Delete** removes the line; **Undo** in the message that follows puts it back. Deleting an If deletes its
   branches and their steps; deleting a condition is done on its card in the If's form, and leaves the If.
-- **Run now** (steps only) runs that one step on the hub straight away: no trigger, no conditions, nothing
-  before or after it. It runs a device command, a mode change, HSM or a log line, exactly as the step says,
-  and reports what it sent or why it failed. Any other step (If, Repeat, a wait, a variable, a web request,
-  another rule, or a value worked out while the rule runs) says it cannot run on its own; run the whole rule
-  instead. A disabled device is not sent to.
+- **Run this step** (steps only) runs that one step on the hub once, now: no trigger, no conditions, nothing
+  before or after it. It is offered only on a step that does something on its own: a device command, a
+  notification, a mode change, setting a hub variable to a value, or a log line. It runs the step as it is in
+  the editor, saved or not, and reports what it sent or why it failed. It is not offered on flow (If,
+  Repeat, a wait), on another rule, or on a risky step: HSM, disabling a device, locks, garage doors, valves,
+  sirens, or rebooting or shutting down the hub. For those, use **Run rule**. A disabled device is not sent to.
 - **Duplicate** puts a copy below. **Copy**, then **Paste after this** on another line, here or in another
   rule; the devices and rules it uses come with it.
 - **Move up**, **Move down**, and **Move to…**, which lists every branch in the rule by the step that holds
@@ -332,15 +340,21 @@ and [model-training policy](https://privacy.claude.com/en/articles/7996885-how-d
 
 **Running a rule:**
 - **Save draft** keeps the rule in the editor and changes nothing on the hub.
-- **Put on hub** saves the rule and puts it live on the hub. After a change, the button reads
-  **Update on hub**. It installs the rule; it does not run it. **Run now** does that.
+- **Activate on hub** saves a new rule and puts it live on the hub for the first time. For a rule already on
+  the hub the same button reads **Update on hub**: it replaces the version there with your changes. Either one
+  makes the rule live; neither runs it. **Run rule** does that.
+- **Run rule** runs the whole rule once, now, without waiting for its trigger and without asking its
+  conditions. It runs the version on the hub, not unsaved changes on the page, and says so when there are
+  any. It works on an active, paused or stopped rule and does not start or stop it: a stopped rule stays
+  stopped.
 - The rule's state shows beside the button: **Being activated**, then **On the hub**, **Paused** or
-  **Stopped**, with **Run now**, then always in this order a **Running / Stopped** switch, **Pause** (or
-  **Resume**) and **Delete**. Pause is greyed on a stopped rule and Delete on a running one.
+  **Stopped**, with **Run rule**, then always in this order a **Running / Stopped** switch, **Pause** (or
+  **Resume**) and **Delete**. Pause is greyed on a stopped rule and Delete on a running one. In the **On the
+  hub** list, the same controls are behind each rule's **Change state** button.
 
-### What happens when you press Put on hub
+### What happens when you press Activate on hub or Update on hub
 
-**Pressing Put on hub is the decision; nothing else asks you.** There is no pairing code, no Candidates
+**Pressing either is the decision; nothing else asks you.** There is no pairing code, no Candidates
 page and no digest to type any more. The editor signs the rule and hands it to the part of HAI Engine that
 runs rules, which checks it and, if it passes, activates it straight away:
 
@@ -363,8 +377,8 @@ Deleting is two steps on purpose, so a running rule cannot vanish under you:
 2. Press **Delete**. The editor asks "Are you sure?", then the rule's app is deleted from the hub, with
    its state and history there.
 
-Both are beside **Update on hub**, on the rule's row in the **On the hub** list and on the **On the hub**
-panel. **Delete from hub** is also in the rule's **⋯** menu. It cannot be pressed until the rule is stopped. The rule stays in the editor as a draft, so you can put it on the hub again later; delete the
+Both are beside **Update on hub**, behind **Change state** on the rule's row in the **On the hub** list, and
+on the **On the hub** panel. **Delete from hub** is also in the rule's **⋯** menu. It cannot be pressed until the rule is stopped. The rule stays in the editor as a draft, so you can put it on the hub again later; delete the
 draft in the editor if you want it gone as well.
 
 ### Replacing a device, adding one beside it, or removing it
@@ -641,7 +655,8 @@ pages answer an app on the hub without a login, so a rule may not call them. The
 **Shut down the hub** step instead (under **Risky: the whole hub**). The editor asks before a rule with one is
 activated or run, Run this step never runs one, and it works only while **Allow rules to reboot or shut down the
 hub** is on in HAI Engine (on unless you turn it off). A Rule Machine rule that reboots or shuts down its hub is
-copied with this step, after you tick **Copy it anyway** on its row.
+cloned with this step, after you press **Clone anyway…** on its row in **Risky rules that require your
+permission** on the migration page.
 
 **Disable** (in a step's or trigger's **⋯** menu) keeps it in the rule but skips it, which is handy for
 trying things out. Rule Machine calls this disabling an action. HAI also lets you disable a trigger.
@@ -675,8 +690,8 @@ the second "off" changes nothing, but on a notification, a counter or a toggle i
 doing something once and doing it twice.
 
 To change it, open **Rule settings** and pick another choice for **If triggered again while running**:
-ignore the new trigger, queue it, or run alongside, which is what Rule Machine does. A rule copied from Rule
-Machine keeps Rule Machine's way, and the migration page offers starting over as an upgrade (see
+ignore the new trigger, queue it, or run alongside, which is what Rule Machine does. A rule cloned from Rule
+Machine keeps Rule Machine's way, and the migration page offers starting over under **Options for the clone** (see
 [Moving from Rule Machine](#moving-from-rule-machine)).
 
 ### When a device in an IF can't be read
@@ -701,8 +716,8 @@ Which is right depends on what the ELSE does:
   announce all clear": if a window sensor cannot be read, nobody knows it is all clear, so keep **stop the
   run**.
 
-A rule copied from Rule Machine is set to **run the ELSE**, as Rule Machine behaves, and the migration page
-offers **Stop instead of running the ELSE when a reading is missing** as an upgrade.
+A rule cloned from Rule Machine is set to **run the ELSE**, as Rule Machine behaves, and the migration page
+offers **Stop instead of running the ELSE when a reading is missing** under **Options for the clone**.
 
 **Repeats:** the steps inside a repeat run, then run again, and the steps after the repeat run once it
 ends. **Repeat every** counts from the start of each time round. **Repeat while** checks its condition
@@ -774,9 +789,10 @@ rule it can also run its actions.
 
 | You press | What happens |
 |---|---|
-| Put on hub | The rule is saved, checked and activated on the hub, usually within seconds. It then runs when its triggers happen. |
+| Activate on hub | A new rule is saved, checked and activated on the hub, usually within seconds. It then runs when its triggers happen. |
 | Update on hub | The changed rule replaces the running version. The old version is kept in history. |
-| Run now | The rule's steps run once, straight away, without a trigger and without checking its conditions. Rule Machine calls this Run Actions. A paused rule does not run. |
+| Run rule | The rule's steps run once, straight away, without a trigger and without checking its conditions, using the version on the hub. Rule Machine calls this Run Actions. A paused or stopped rule runs too, and stays paused or stopped. |
+| Run this step | One step runs once, now, as it is in the editor. Only steps that do something on their own, and never a risky one. |
 | Pause | No new runs start. A run already going finishes, or, if **When paused, runs already going** is set to wait, it stops where it is and carries on from there when you resume. Rule Machine always does the second. |
 | Resume | Runs start again. |
 | Running / Stopped (to Stopped) | The rule stops acting and its subscriptions are removed. It stays on the hub. **Deactivate** under **Stop a rule** on the HAI Engine page does the same. |
@@ -832,7 +848,7 @@ turn on **Allow GET links (Rule Machine-style)** under the address; anything tha
 | Add to the address | What happens |
 |---|---|
 | `/endpoint/rules` | Lists the rules on the hub, with whether each is paused |
-| `/endpoint/rules/<rule id>/run` | Run now, as the button does |
+| `/endpoint/rules/<rule id>/run` | Run rule, as the button does |
 | `/endpoint/rules/<rule id>/stop` | Ends its running runs and their waits and delays (Rule Machine's Stop Rule Actions). The rule stays active; Stop in the editor deactivates it. |
 | `/endpoint/rules/<rule id>/pause`, `/resume` | Pause, Resume |
 | `/endpoint/rules/<rule id>/boolean/true` or `/false` | Sets its Private Boolean |
@@ -908,6 +924,19 @@ Two faults, both fixed on 27 September 2026:
   again. A rule now stops taking **new** work when it is short of room and recovers on its own once its
   history is trimmed, and a run already under way is never abandoned part-done.
 
+## Using HAI away from home
+
+The rule editor and the Migration page work away from home, through Hubitat Remote Access
+(remoteaccess.aws.hubitat.com) or through a VPN to your home network. Open the HAI Engine page that way, then
+**Open the rule editor** or **Rule Machine Migration Facility**, as you would at home. Their links follow the
+address you are using, so a page opened through Remote Access stays on Remote Access, and one opened at home
+stays at home.
+
+The **Allow through Hubitat's cloud** switches on the HAI Engine page, under **Rule end points** and beside
+the MCP address, do not affect this. They only decide whether something outside your home, such as a
+dashboard button or an AI assistant, can reach HAI by calling one of those web addresses through Hubitat's
+cloud. Leave them off unless you need that; you can still use HAI yourself from anywhere.
+
 ## Troubleshooting
 
 - **On the hub** (right, in the editor) lists what the rule did recently, and why each run started. If
@@ -944,9 +973,9 @@ activation, reports there and nowhere else. That is a fault in HAI, not in your 
 
 ## Moving from Rule Machine
 
-**New to moving rules?** Start with [Moving your Rule Machine rules to HAI](migration-guide.md): the steps
-from Assess to Switch over, what each next step in the Conversion report means, the order to move rules in, and
-the choices about how a copy behaves. This section covers installing the app and what the page shows.
+**New to moving rules?** Start with [Moving your Rule Machine rules to HAI](migration-guide.md): each step
+from Clone to Promote to HAI, what the panels and lights mean, the order to move rules in, and the choices
+about how a clone behaves. This section covers installing the app and what the page does, briefly.
 
 Migration is a separate, optional app, **HAI Migration**, for people who want to move Rule Machine rules.
 HAI Engine works the same without it; its **Rule Machine** section then says "Install HAI Migration to
@@ -957,52 +986,47 @@ app**, paste, **Save**), turn on **OAuth** for it, then on the HAI Engine page p
 The HAI Migration app then appears inside HAI Engine; its page has the link to the migration page. HPM
 offers it as an optional app of the package. It uses the same `hai-migration.html` File Manager file.
 
-**Rule Machine Migration Facility**, in the **Rule Machine** section, opens HAI Migration's page; its link
-opens a page listing every Rule Machine rule on the hub. It reads what each rule does from Automation Map's
-decode of your rules, so Automation Map must be installed and must have scanned; the page says how old that
-scan is. When both the production and the Dev Automation Map have written a decode, it reads the one from
-the newer Automation Map version, and says which file and version it read.
-Without a decode the page still lists the rules and which side is running, with no reading of what each does.
+**Rule Machine Migration Facility**, in the **Rule Machine** section, opens the migration page, **Move your
+Rule Machine rules to HAI**. It reads what each rule does from Automation Map's decode of your rules, so
+Automation Map must be installed and must have scanned; the page says how old that scan is, and **Scan
+again** reads your rules afresh. When both the production and the Dev Automation Map have written a decode,
+it reads the one from the newer Automation Map version.
 
-For each rule the page shows:
+The page shows each rule's place on a track of three stations, **In Rule Machine**, **Being shadowed** and
+**Running on HAI**, and sorts the rules into panels: **Available to clone**, **Requires some manual
+intervention**, **Risky rules that require your permission**, **Currently being shadowed**, **Running on HAI**
+and **Staying in Rule Machine**. Each row has one button for its next step, and **More** for the rest.
 
-- **What HAI makes of it:** **Ready to read**, **Needs a decision**, **Cannot be read** or **Not
-  assessed**, how involved the rule is in words, and the reasons. Where HAI can rebuild the rule's
-  conditions it says so and shows them in HAI's own words, beside a link to the rule in Rule Machine.
-- **Warnings that reach beyond the rule:** other rules that reach into this one (move it alone and they go
-  on commanding the paused Rule Machine copy), and devices it uses that are not selected under **Devices
-  rules may use**.
-- **Which side is running:** **Rule Machine**, **HAI**, **Both at once** or **Nothing running**.
+- **Clone** builds an HAI rule from the Rule Machine rule as it stands and puts it on the hub switched off.
+  The Rule Machine rule is not touched and keeps running. Actions that are turned off in Rule Machine are
+  left out, as Rule Machine leaves them out. A clone the hub will not accept goes to the editor's **Drafts**,
+  marked **Needs fixing**.
+- **Shadowing** starts by itself. Each time the rule is triggered, HAI works out what the clone would have
+  done and checks it against what Rule Machine did. A light shows the result: green, at least 3 runs, all
+  matched, every trigger seen; amber, still watching; red, a run differed; grey, it cannot be checked. **See
+  every run** lists the runs; **Run for real and check** runs the Rule Machine rule once, for real, to check the actions
+  sooner.
+- **Promote to HAI** pauses the Rule Machine rule, checks that it really has paused, and only then starts
+  the clone. If the pause cannot be confirmed, HAI is not started.
+- **Back to Rule Machine** pauses the clone and starts the Rule Machine rule again. One click, at any time.
+- **Deleting.** HAI never deletes a Rule Machine rule; delete it in Rule Machine when you are ready. A
+  clone being shadowed can be deleted from the page with **Delete the HAI clone**, under **More**.
 
-And it offers these steps, each greyed out with the reason when it cannot be used:
-
-- **Create a disabled HAI copy** builds an HAI rule from the Rule Machine rule as it stands at that
-  moment and puts it on the hub stopped. The copy is not running, and the Rule Machine rule is not touched.
-  Actions that are turned off in Rule Machine are left out, as Rule Machine leaves them out. The page says
-  what happened, and the row then shows the copy. If HAI cannot set the copy up on the hub (a device it uses
-  is not selected, for example), the copy is held for review, the page says why, and **Switch over** starts
-  it.
-- **Switch over to HAI** pauses the Rule Machine rule, checks that it really has paused, and only then
-  starts the HAI copy. If the pause cannot be confirmed, HAI is not started.
-- **Switch back to Rule Machine** stops the HAI copy, then resumes the Rule Machine rule.
-- **Deleting either side** is not done here. HAI never deletes a Rule Machine rule; delete it in Rule
-  Machine when you are ready. Delete the HAI copy in the editor.
-
-**A copy that converts is not proof that it behaves identically.** No converted rule has been run side by
-side with its Rule Machine original. Check the read-back before you rely on one.
+**A clone that converts is not proof that it behaves identically.** That is what shadowing is for: promote
+the green ones, and check the read-back in the editor before you rely on one.
 
 **The one rule that matters: never leave two engines driving the same devices.** A Rule Machine rule and
 an HAI rule watching the same motion sensor and commanding the same light will both fire, and the result
 is whichever ran last. It looks like a flickering light or a rule that "sometimes does not work".
 
-A changeover that stays safe, one rule at a time:
+If you rebuild a rule by hand instead of cloning it, a changeover that stays safe, one rule at a time:
 
 1. **Read the Rule Machine rule** and write the same intent in HAI. The table at the end of this guide
    gives the HAI name for each Rule Machine feature.
 2. **Check the read-back, not the diagram.** HAI describes in plain English what it will do. If that
    sentence is not what you meant, the rule is wrong however right the flow looks.
 3. **Pause the Rule Machine rule** — do not delete it. It stops acting and keeps its definition.
-4. **Put the HAI rule on the hub** and live with it for a few days. Both rules exist; only one is acting.
+4. **Activate the HAI rule on the hub** and live with it for a few days. Both rules exist; only one is acting.
 5. **If it misbehaves**, stop the HAI rule with its **Running** switch and resume the Rule Machine one. You are back where you
    started in seconds, which is why step 3 is a pause.
 6. **Delete the Rule Machine rule** only once you are sure.
@@ -1025,9 +1049,9 @@ Two things to check before you start:
   - a device trigger fires **when the value changes**, where Rule Machine fires on every report of it. If
     your rule depends on repeats, switch the trigger to **start on every report**.
 
-  A rule copied by the migration page keeps Rule Machine's behaviour in both, and in a third: when a
-  device in an IF can't be read, the copy runs the ELSE, as Rule Machine does. Each is offered as an
-  upgrade on the page, with a tip saying when it is the better choice.
+  A rule cloned by the migration page keeps Rule Machine's behaviour in both, and in a third: when a
+  device in an IF can't be read, the clone runs the ELSE, as Rule Machine does. Each is offered under
+  **Options for the clone**, behind **More** on the rule's row, before you clone it.
 
   `docs/developer/rm-semantics.md` lists every behavioural difference known, and is honest about which are
   tested and which are only claimed.
@@ -1067,7 +1091,7 @@ not tell you the command will wait for anyone. It will simply run.
   - **Matched devices:** a device that matches one on that hub by name is filled in, and you are asked to
     check it.
   - **Unmatched devices:** anything else shows as a problem for you to choose.
-  - **Nothing runs by itself:** nothing runs until you press **Put on hub**.
+  - **Nothing runs by itself:** nothing runs until you press **Activate on hub**.
 - **Duplicate** (under **⋯**) makes a copy of the rule on this hub, as a separate rule.
 
 ## Rule Machine names and HAI names
@@ -1104,7 +1128,7 @@ What HAI has not built yet:
 | Feature | Why not yet |
 |---|---|
 
-Every row, with its evidence, is in the parity tracker. These figures are generated from the same file as the hub's capability feed; do not edit them by hand.
+Every row, with its evidence, is in [`ideation/rm51_parity.md`](../ideation/rm51_parity.md). These figures are generated from the same file as the hub's capability feed; do not edit them by hand.
 <!-- hai-status:end -->
 
 ## Appendix: Quick start
@@ -1134,11 +1158,11 @@ the HAI Engine page. See
 **5. Check it.** The **Check** panel lists anything that must be fixed, line by line, and reads the rule back
 in plain English. A line tinted red needs attention before the rule can go on the hub.
 
-**6. Put it on the hub.** **Put on hub** saves, checks and starts the rule, usually within seconds. From then
-on it runs whenever its trigger happens. After a change, the same button reads **Update on hub**.
+**6. Put it on the hub.** **Activate on hub** saves, checks and starts the rule, usually within seconds. From
+then on it runs whenever its trigger happens. After a change, the same button reads **Update on hub**.
 
-**7. Try it.** **Run now** runs the steps once, straight away, without the trigger and without the
-conditions. **On the hub**, beside the rule, lists what it did recently and why each run started.
+**7. Try it.** **Run rule** runs the steps once, straight away, without the trigger and without the
+conditions. **Run this step**, in a step's **⋯** menu, runs just that step. **On the hub**, beside the rule, lists what it did recently and why each run started.
 
 **8. Pause or stop.** **Pause** stops new runs until you press **Resume**. **Stopped** removes the rule's
 triggers but keeps it on the hub; **Running** starts it again. If the editor will not open, **Deactivate**
@@ -1152,8 +1176,9 @@ File Manager and keeps the last ten. In the editor, **More > Backups...** lists 
 
 **10. Move a rule from Rule Machine.** Install Automation Map 2.4.36 or later and let it scan your hub. On
 the HAI Engine page press **Turn on HAI Migration**, then open **Rule Machine Migration Facility**. For each rule
-it says whether HAI can copy it and what stands in the way. A copy starts stopped; **Switch over** pauses
-the Rule Machine rule and starts the copy, and **Switch back** reverses it. See
+it says whether HAI can clone it and what stands in the way. **Clone** makes a clone that stays switched off
+while HAI checks it against what Rule Machine does; **Promote to HAI** pauses the Rule Machine rule and starts
+the clone, and **Back to Rule Machine** reverses it with one click. See
 [Moving from Rule Machine](#moving-from-rule-machine) and the step-by-step
 [Moving your Rule Machine rules to HAI](migration-guide.md).
 

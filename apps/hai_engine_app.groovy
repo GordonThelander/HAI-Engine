@@ -174,10 +174,11 @@ for (String k : ['createTime', 'createdDate', 'dateCreated', 'created']) {
 Object v = d.get(k)
 if (v instanceof Number) { made = v as long; break }
 if (v instanceof String && v ==~ /\d{10,13}/) { made = v as long; break }
-if (v instanceof String) { try { made = Date.parse("yyyy-MM-dd'T'HH:mm:ss", (v as String).take(19)).time; break } catch (Exception e) { made = null } }
+if (v instanceof String) { try { made = Date.parse("yyyy-MM-dd'T'HH:mm:ssZ", (v as String).trim().replaceFirst(/Z$/, '+0000')).time; break } catch (Exception e) { made = null } }
 }
 if (made != null && made < 100000000000L) made = made * 1000L
-if (made != null && now() - made > HAI_JOIN_NEW_MS) return 'the hub says it was added earlier, not just now'
+if (made == null) return "the hub's record of it gives no time it was added"
+if (now() - made > HAI_JOIN_NEW_MS) return 'the hub says it was added earlier, not just now'
 return null
 }
 void haiNoteDeclined() {
@@ -221,7 +222,8 @@ Map pp = runtimePlat([hold: true])
 Map e = rtEntry(pp, id)
 Map child = e?.childId != null && runtimeChild(e.childId) != null ? runtimeChildCall(e.childId, 'haiRuntimeState', []) : null
 Map doc = child?.doc instanceof Map ? child.doc : null
-Map f = doc != null ? everydayFollow(doc, everydayValues(haiEverydayLevels())) : null
+Map f = null
+if (doc != null) { Map got = checkerCall([op: 'everyday', doc: doc, values: everydayValues(haiEverydayLevels())]); f = got.checkerError ? null : got.follow }
 if (f == null) { res.failed = (res.failed as int) + 1; log.warn "HAI Engine: Everyday words: ${id} could not be read; left as it was" }
 else if ((f.changed as int) == 0) {
 res.unchanged = (res.unchanged as int) + 1
@@ -257,7 +259,23 @@ haiAudiencesInit()
 engineInit()
 runtimeInit()
 try { checkerChild() } catch (Exception e) { log.warn "HAI Engine: HAI Checker could not be added yet (${e.message})" }
+try { runtimeRelabelAll() } catch (Exception e) { log.warn "HAI Engine: the rules' app names could not be refreshed (${e.message})" }
 }
+void runtimeRelabelAll() {
+Map pp = runtimePlat()
+List paused = (state.runtimePaused ?: [])
+((Map) rtRegistry(pp).rules).values().each { Object eo ->
+Map e = eo
+if (e.state == 'removed') return
+def child = runtimeChild(e.childId)
+if (child == null) return
+String label = rtChildLabel(runtimeNameWithValues(runtimeRuleName(e)), e.ruleId, e.state, paused.contains(e.ruleId))
+if (child.label != label) {
+try { child.updateLabel(label) } catch (Exception ex) { log.warn "HAI Runtime: could not relabel ${e.ruleId}: ${ex.message}" }
+}
+}
+}
+def haiCodeCheckSoon() { haiCodeCheck() }
 void haiCodeCheck() {
 if (state.haiCodeVersion == ENGINE_APP_VERSION) return
 String was = state.haiCodeVersion as String
@@ -658,7 +676,7 @@ Object last = state.runtimeAnnouncedAt
 String when = last == null ? 'not yet' : runtimeClock().call(last as long)
 return "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT}). ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
 }
-@Field static final String ENGINE_APP_VERSION = '0.5.122-dev'
+@Field static final String ENGINE_APP_VERSION = '0.5.150-dev'
 @Field static final int ENGINE_MAX_PROPOSALS = 20
 @Field static final java.util.concurrent.ConcurrentHashMap ENGINE_DRAFT_INV = new java.util.concurrent.ConcurrentHashMap()
 @Field static final int ENGINE_MAX_ATTRIBUTES = 64
@@ -1566,9 +1584,32 @@ return editor == null ? page : "${page}#editor=${URLEncoder.encode(editor, 'UTF-
 }
 Map haiMigrationAccess(String link) {
 if (link instanceof String && link != state.haiMigrationLink) state.haiMigrationLink = link
-return [epoch: (state.haiMigrationEpoch ?: 0) as int]
+return [epoch: (state.haiMigrationEpoch ?: 0) as int, key: haiRuleKey()]
 }
 @Field static final String MIGRATION_ROTATE_EVENT = 'haiMigrationRotate'
+Map haiShadowLights() {
+try {
+def m = haiMigrationChild()
+if (m == null) return null
+Map rules = (rtRegistry(runtimePlat()).rules ?: [:])
+Map live = [:]
+List gone = []
+((Map) (m.haiShadowLights() ?: [:])).each { k, v ->
+Map e = rules.get(k as String)
+if (e != null && e.state != 'removed') live.put(k, v) else gone << (k as String)
+}
+if (gone) m.haiShadowForget(gone)
+return live
+} catch (Exception e) { return null }
+}
+Map haiMigratedIds() {
+Map out = [:]
+((Map) (state.migPairs ?: [:])).values().each { Object v ->
+if (!(v instanceof Map) || ((Map) v).haiRuleId == null) return
+out.put(((Map) v).haiRuleId as String, ((Map) v).phase == 'switched' ? 'switched' : 'cloned')
+}
+return out
+}
 def haiMigrationChild() {
 return getChildApps()?.find { it.name == MIGRATION_CHILD_NAME }
 }
@@ -1622,11 +1663,13 @@ return state.haiRuleKey as String
 }
 void haiRuleKeyNew() {
 state.haiRuleKey = (UUID.randomUUID().toString() + UUID.randomUUID().toString()).replace('-', '')
+checkerCall([op: 'listen', key: state.haiRuleKey])
 }
 String haiSignedData(String name, Object value, Map payload) {
 return rtSignedData(haiRuleKey(), name, value, payload, now(), UUID.randomUUID().toString())
 }
 Map haiMigrationFacts(Boolean pairsOnly = false) {
+if (!pairsOnly && state.haiCodeVersion != ENGINE_APP_VERSION) runIn(1, 'haiCodeCheckSoon', [overwrite: true])
 if (pairsOnly) return [contract: MIGRATION_CONTRACT, pairs: haiMigrationPairs()]
 Map reg = (rtRegistry(runtimePlat()).rules ?: [:])
 Map lastRuns = [:]
@@ -1806,6 +1849,12 @@ Map m = v
 if (m.type == 'command') out << m
 m.values().each { Object x -> if (x instanceof List || x instanceof Map) haiCollectCommands(x, out) }
 }
+Map haiShadowChildCall(String ruleId, String method) {
+Map e = rtEntry(runtimePlat(), ruleId)
+if (e == null || e.state == 'removed' || runtimeChild(e.childId) == null) return [ok: false, message: 'The HAI clone is no longer on the hub.']
+try { return runtimeChildCall(e.childId, method, []) }
+catch (Exception ex) { return [ok: false, message: "The clone could not be asked (${ex.message}). Press Done on the HAI Engine page and try again.".toString()] }
+}
 Map haiMigrationCall(String name, Map arg) {
 HAI_APPS_SEEN.remove(app.id as String)
 Map hooks = [
@@ -1894,7 +1943,9 @@ return kept.ok == true
 ? [ok: true, candidateId: ((Map) kept.candidate)?.id, message: kept.message]
 : [ok: false, code: (kept.code as String) ?: 'MIGRATION_IMPORT', message: kept.message as String]
 },
-setBoolean : { Map c -> rtRuleOp(runtimePlat(), c.ruleId as String, 'setBoolean', c.value == true ? 'true' : 'false') }
+setBoolean : { Map c -> rtRuleOp(runtimePlat(), c.ruleId as String, 'setBoolean', c.value == true ? 'true' : 'false') },
+shadowRuns : { Map c -> haiShadowChildCall(c.ruleId as String, 'haiShadowRuns') },
+shadowTest : { Map c -> haiShadowChildCall(c.ruleId as String, 'haiShadowTest') }
 ]
 Closure f = (Closure) hooks.get(name)
 if (f == null) return [ok: false, message: "this build of HAI Engine has no ${name}".toString()]
@@ -2599,6 +2650,8 @@ out = editorApi(route, [body: checkBody, params: [id: params?.id]], store, inv, 
 [spending: spending, version: haiVersion(), environment: HAI_ENVIRONMENT,
 runtimeUrl: "/installedapp/configure/${app.id}".toString(),
 migrationUrl: route == 'state' ? haiMigrationPageUrl() : null,
+shadowLights: route == 'state' ? haiShadowLights() : null,
+migrated: route == 'state' ? haiMigratedIds() : null,
 reportUrl: HAI_REPORT_URL,
 endpointAud: haiAudienceSecret('endpoint'),
 everyday: route == 'state' ? haiEverydayLevels() + (settings.everydayWeatherDevice != null ? [weatherDevice: "dev:${settings.everydayWeatherDevice.id}".toString()] : [:]) : null,
@@ -3602,6 +3655,8 @@ case 'haiDiscardStaged': return c.haiDiscardStaged(args[0] as String)
 case 'haiReconcile': return c.haiReconcile()
 case 'haiDevWithhold': return c.haiDevWithhold(args[0])
 case 'haiEditorLink': return c.haiEditorLink(args[0] as String)
+case 'haiShadowRuns': return c.haiShadowRuns()
+case 'haiShadowTest': return c.haiShadowTest()
 case 'ruleRetainedDoc': return c.ruleRetainedDoc(args[0] as String)
 case 'ruleAdoptRetainedDoc': return c.ruleAdoptRetainedDoc(args[0] as String, args[1])
 }
@@ -3926,6 +3981,45 @@ outer.update(opad)
 outer.update(ih)
 return outer.digest().collect { String.format('%02x', it) }.join('')
 }
+@Field static final long RT_SIG_WINDOW_MS = 120000L
+@Field static final int RT_SIG_SEEN_CAP = 256
+@Field static final String RT_SIG_FIELD = ',"sig":"'
+String rtSignedData(String key, String name, Object value, Map payload, long at, String nonce) {
+if (!(key instanceof String) || key.isEmpty()) return null
+Map body = new LinkedHashMap(payload ?: [:])
+body.remove('sig')
+body.remove('key')
+body.ts = at
+body.n = nonce
+String text = groovy.json.JsonOutput.toJson(body)
+String sig = jsonHmac(key, "${name}|${value}|${text}".toString())
+return text.substring(0, text.length() - 1) + RT_SIG_FIELD + sig + '"}'
+}
+Map rtSignedPayload(List keys, String name, Object value, Object data, long at, Map seen) {
+if (!(data instanceof String)) return null
+String d = (String) data
+int cut = d.lastIndexOf(RT_SIG_FIELD)
+if (cut < 1 || !d.endsWith('"}')) return null
+String sig = d.substring(cut + RT_SIG_FIELD.length(), d.length() - 2)
+String text = d.substring(0, cut) + '}'
+String signed = "${name}|${value}|${text}".toString()
+boolean good = false
+for (Object k in (keys ?: [])) if (k instanceof String && !((String) k).isEmpty() && jsonSameSecret(jsonHmac((String) k, signed), sig)) good = true
+if (!good) return null
+Map body
+try { body = new groovy.json.JsonSlurper().parseText(text) } catch (Exception e) { return null }
+Object ts = body.ts
+Object n = body.n
+if (!(ts instanceof Number) || !(n instanceof String) || Math.abs(at - (ts as long)) > RT_SIG_WINDOW_MS) return null
+if (seen != null) {
+if (seen.containsKey(n)) return null
+List old = seen.findAll { k, v -> !(v instanceof Number) || at - (v as long) > RT_SIG_WINDOW_MS }.collect { it.key }
+old.each { seen.remove(it) }
+while (seen.size() >= RT_SIG_SEEN_CAP) seen.remove(seen.keySet().iterator().next())
+seen.put(n, ts as long)
+}
+return body
+}
 String jsonSign(String key, String text) {
 byte[] bytes = "${key}\n${text}".toString().getBytes('UTF-8')
 return MessageDigest.getInstance('SHA-256').digest(bytes).collect { String.format('%02x', it) }.join('')
@@ -4148,24 +4242,6 @@ if (((Map) v).everyday instanceof String) out << (((Map) v).everyday as String)
 }
 walk(doc)
 return new ArrayList(out).sort()
-}
-Map everydayFollow(Map doc, Map values) {
-Map copy = new groovy.json.JsonSlurper().parseText(groovy.json.JsonOutput.toJson(doc))
-int n = 0
-Closure walk
-walk = { Object v ->
-if (v instanceof Map) {
-Map m = v
-if (m.everyday instanceof String && values.containsKey(m.everyday) && values.get(m.everyday) != null && !everydaySame(m.value, values.get(m.everyday))) {
-Object want = values.get(m.everyday)
-m.value = want instanceof List ? new ArrayList((List) want) : want
-n++
-}
-m.values().each { walk(it) }
-} else if (v instanceof List) ((List) v).each { walk(it) }
-}
-walk(copy)
-return [doc: copy, changed: n]
 }
 @Field static final List HUB_POWER_TYPES = ['hubReboot', 'hubShutdown']
 @Field static final int NET_DEFAULT_TIMEOUT_SECONDS = 10
@@ -5166,45 +5242,9 @@ return s.length() > max ? s.substring(0, max) + '...' : s
 @Field static final int EDITOR_MAX_ID_CHARS = 64
 @Field static final String EDITOR_EFFECTS = "Save draft keeps this rule here, in the editor, and changes nothing on the hub. Activate on hub (Update on hub for a rule already there) is the one that puts it live, and HAI checks it before it runs. Run rule runs the hub's version once, now."
 @Field static final String EDITOR_PAGE_FILE = 'hai-editor.html'
-@Field static final String EDITOR_PAGE_SHA256 = 'e2848f8f58124df7e35f2edc55dd137c04b10b488712809340a285dd4af86817'
+@Field static final String EDITOR_PAGE_SHA256 = '4414753ab9e0058affebc5cb4db79b9f8e0b6429d7918ec2b8e1492f539e4713'
 @Field static final String EDITOR_SPECS_FILE = 'hai-editor-specs.json'
 @Field static final String EDITOR_SPECS_SHA256 = 'd24031d13143e19736db036db89e38ff3bf9c86a628f578a0666d89ad5f12f23'
-@Field static final List EDITOR_DEVICE_CLASSES = [
-[key: 'acceleration', label: 'Acceleration', capability: 'AccelerationSensor', attribute: 'acceleration', values: ['active', 'inactive']],
-[key: 'battery', label: 'Battery', capability: 'Battery', attribute: 'battery', numeric: true],
-[key: 'carbonDioxide', label: 'Carbon dioxide', capability: 'CarbonDioxideMeasurement', attribute: 'carbonDioxide', numeric: true],
-[key: 'carbonMonoxide', label: 'Carbon monoxide', capability: 'CarbonMonoxideDetector', attribute: 'carbonMonoxide', values: ['clear', 'detected', 'tested']],
-[key: 'contact', label: 'Contact', capability: 'ContactSensor', attribute: 'contact', values: ['open', 'closed']],
-[key: 'level', label: 'Dimmer level', capability: 'SwitchLevel', attribute: 'level', numeric: true],
-[key: 'door', label: 'Door', capability: 'DoorControl', attribute: 'door', values: ['open', 'closed', 'opening', 'closing', 'unknown']],
-[key: 'energy', label: 'Energy meter', capability: 'EnergyMeter', attribute: 'energy', numeric: true],
-[key: 'fanSpeed', label: 'Fan speed', capability: 'FanControl', attribute: 'speed', values: ['low', 'medium-low', 'medium', 'medium-high', 'high', 'on', 'off', 'auto']],
-[key: 'garageDoor', label: 'Garage door', capability: 'GarageDoorControl', attribute: 'door', values: ['open', 'closed', 'opening', 'closing', 'unknown']],
-[key: 'gas', label: 'Gas detector', capability: 'GasDetector', attribute: 'naturalGas', values: ['clear', 'detected', 'tested']],
-[key: 'humidity', label: 'Humidity', capability: 'RelativeHumidityMeasurement', attribute: 'humidity', numeric: true],
-[key: 'illuminance', label: 'Illuminance', capability: 'IlluminanceMeasurement', attribute: 'illuminance', numeric: true],
-[key: 'motion', label: 'Motion', capability: 'MotionSensor', attribute: 'motion', values: ['active', 'inactive']],
-[key: 'musicPlayer', label: 'Music player', capability: 'MusicPlayer', attribute: 'status', values: ['playing', 'paused', 'stopped']],
-[key: 'power', label: 'Power meter', capability: 'PowerMeter', attribute: 'power', numeric: true],
-[key: 'powerSource', label: 'Power source', capability: 'PowerSource', attribute: 'powerSource', values: ['battery', 'dc', 'mains', 'unknown']],
-[key: 'presence', label: 'Presence', capability: 'PresenceSensor', attribute: 'presence', values: ['present', 'not present']],
-[key: 'shock', label: 'Shock', capability: 'ShockSensor', attribute: 'shock', values: ['clear', 'detected']],
-[key: 'smoke', label: 'Smoke', capability: 'SmokeDetector', attribute: 'smoke', values: ['clear', 'detected', 'tested']],
-[key: 'sound', label: 'Sound', capability: 'SoundSensor', attribute: 'sound', values: ['detected', 'not detected']],
-[key: 'switch', label: 'Switch', capability: 'Switch', attribute: 'switch', values: ['on', 'off']],
-[key: 'tamper', label: 'Tamper', capability: 'TamperAlert', attribute: 'tamper', values: ['clear', 'detected']],
-[key: 'temperature', label: 'Temperature', capability: 'TemperatureMeasurement', attribute: 'temperature', numeric: true],
-[key: 'heatingSetpoint', label: 'Thermostat heating setpoint', capability: 'Thermostat', attribute: 'heatingSetpoint', numeric: true],
-[key: 'coolingSetpoint', label: 'Thermostat cooling setpoint', capability: 'Thermostat', attribute: 'coolingSetpoint', numeric: true],
-[key: 'thermostatFanMode', label: 'Thermostat fan mode', capability: 'Thermostat', attribute: 'thermostatFanMode', values: ['auto', 'circulate', 'on']],
-[key: 'thermostatMode', label: 'Thermostat mode', capability: 'Thermostat', attribute: 'thermostatMode', values: ['auto', 'off', 'heat', 'emergency heat', 'cool']],
-[key: 'thermostatState', label: 'Thermostat state', capability: 'Thermostat', attribute: 'thermostatOperatingState', values: ['heating', 'pending cool', 'pending heat', 'vent economizer', 'idle', 'cooling', 'fan only']],
-[key: 'valve', label: 'Valve', capability: 'Valve', attribute: 'valve', values: ['open', 'closed']],
-[key: 'water', label: 'Water', capability: 'WaterSensor', attribute: 'water', values: ['wet', 'dry']],
-[key: 'windowShade', label: 'Window shade', capability: 'WindowShade', attribute: 'windowShade', values: ['opening', 'partially open', 'closed', 'open', 'closing', 'unknown']],
-[key: 'lock', label: 'Lock', capability: 'Lock', attribute: 'lock', values: ['locked', 'unlocked', 'unlocked with timeout', 'unknown']],
-[key: 'securityKeypad', label: 'Security keypad', capability: 'SecurityKeypad', attribute: 'securityKeypad', values: ['disarmed', 'armed home', 'armed away', 'armed night', 'unknown']],
-]
 @Field static final int EDITOR_MAX_OTHER_COMMANDS = 200
 @Field static final int EDITOR_MAX_DECLARED_VALUES = 40
 @Field static final List EDITOR_ICON_RULES = [
@@ -5289,10 +5329,6 @@ engineCommands: engine, attributes: edSorted(dev.attributes)]
 boolean unread = dev.valuesRead == false
 if (!unread) row.values = values
 Set reported = values.keySet().collect { it.toString() } as Set
-Set declared = unread ? (((dev.attributes ?: []) as List).collect { it.toString() } as Set) : null
-row.classes = EDITOR_DEVICE_CLASSES.findAll { Object o ->
-caps.contains(((Map) o).capability) && (unread ? declared.contains(((Map) o).attribute) : values.containsKey(((Map) o).attribute))
-}.collect { Object o -> ((Map) o).key }
 if (!unread && dev.declaredValues instanceof Map) {
 Map dv = [:]
 ((Map) dev.declaredValues).each { k, vs ->
@@ -5356,6 +5392,8 @@ environment : extra.environment,
 spending : extra.spending,
 runtimeUrl : extra.runtimeUrl,
 migrationUrl: extra.migrationUrl,
+shadowLights: extra.shadowLights,
+migrated : extra.migrated,
 reportUrl : extra.reportUrl,
 endpointAud : extra.endpointAud,
 everyday : extra.everyday,
@@ -5812,7 +5850,7 @@ out.remove('timing')
 return out
 }
 @Field static final String HELP_PAGE_FILE = 'hai-help.html'
-@Field static final String HELP_PAGE_SHA256 = '4c2003c439aedb8120baef697c2d9e27a6d2f30faddae3837fe65abf28a7c8a0'
+@Field static final String HELP_PAGE_SHA256 = 'e0dbdaa496be50c89f522b49eee3b1f4c775e6831a2595f2994928ca933043d3'
 String editorHelpPage() {
 String key = 'help:' + HELP_PAGE_SHA256
 String kept = (String) EDITOR_FILE_CACHE.get(key)
@@ -5926,7 +5964,7 @@ return [status: 202, body: body, payload: out.payload]
 }
 @Field static final String RT_ENGINE = 'HAI-1'
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = '672d9dee27561e42'
+@Field static final String RT_CHILD_BUILD = 'f7b6c0d4db9eb27e'
 @Field static final long RT_WATCHDOG_EVERY_MS = 900000L
 @Field static final long RT_RECOVERY_MS = 120000L
 @Field static final long RT_CLAIM_MS = 600000L
@@ -6162,45 +6200,6 @@ if (a.type == 'byMode') {
 rtWalkActions((List) a.otherwise, visit)
 }
 }
-}
-@Field static final long RT_SIG_WINDOW_MS = 120000L
-@Field static final int RT_SIG_SEEN_CAP = 256
-@Field static final String RT_SIG_FIELD = ',"sig":"'
-String rtSignedData(String key, String name, Object value, Map payload, long at, String nonce) {
-if (!(key instanceof String) || key.isEmpty()) return null
-Map body = new LinkedHashMap(payload ?: [:])
-body.remove('sig')
-body.remove('key')
-body.ts = at
-body.n = nonce
-String text = groovy.json.JsonOutput.toJson(body)
-String sig = jsonHmac(key, "${name}|${value}|${text}".toString())
-return text.substring(0, text.length() - 1) + RT_SIG_FIELD + sig + '"}'
-}
-Map rtSignedPayload(List keys, String name, Object value, Object data, long at, Map seen) {
-if (!(data instanceof String)) return null
-String d = (String) data
-int cut = d.lastIndexOf(RT_SIG_FIELD)
-if (cut < 1 || !d.endsWith('"}')) return null
-String sig = d.substring(cut + RT_SIG_FIELD.length(), d.length() - 2)
-String text = d.substring(0, cut) + '}'
-String signed = "${name}|${value}|${text}".toString()
-boolean good = false
-for (Object k in (keys ?: [])) if (k instanceof String && !((String) k).isEmpty() && jsonSameSecret(jsonHmac((String) k, signed), sig)) good = true
-if (!good) return null
-Map body
-try { body = new groovy.json.JsonSlurper().parseText(text) } catch (Exception e) { return null }
-Object ts = body.ts
-Object n = body.n
-if (!(ts instanceof Number) || !(n instanceof String) || Math.abs(at - (ts as long)) > RT_SIG_WINDOW_MS) return null
-if (seen != null) {
-if (seen.containsKey(n)) return null
-List old = seen.findAll { k, v -> !(v instanceof Number) || at - (v as long) > RT_SIG_WINDOW_MS }.collect { it.key }
-old.each { seen.remove(it) }
-while (seen.size() >= RT_SIG_SEEN_CAP) seen.remove(seen.keySet().iterator().next())
-seen.put(n, ts as long)
-}
-return body
 }
 void rtWalkConditions(Map doc, Closure visit) {
 Closure walk
@@ -7091,7 +7090,9 @@ return [ok: false, code: 'ALREADY_ACTIVE', entry: live,
 message: "This exact rule is already ${live.state == 'active' ? 'active' : 'activated (now deactivated)'}, epoch ${live.epoch}. There is nothing to activate.".toString()]
 }
 Map review = rtReview(pp, cand, null, true, false, false)
-if (!((List) review.refusals).isEmpty()) {
+boolean firstStopped = startStopped && arrive == null && ((((Map) review.core).baseEpoch ?: 0) as int) == 0
+List refusals = firstStopped ? ((List) review.refusals).findAll { ((Map) it).code != 'VARIABLE_NOT_WRITABLE' } : review.refusals
+if (!refusals.isEmpty()) {
 return rtRefuse(pp, 'PREVALIDATION', 'The rule cannot be activated now.',
 [refusals: review.refusals, chainWarnings: review.chainWarnings])
 }
@@ -7342,11 +7343,46 @@ rtLog(pp, [what: 'removed', ruleId: ruleId])
 rtpCall(pp, 'ruleRemoved', ruleId)
 return [ok: true]
 }
+if (op == 'enable') {
+Collection writable = (Collection) rtpCall(pp, 'writableVariables', null)
+List names = writable == null ? [] : rtUnapprovedHubWrites(rtChildDoc(pp, ruleId, entry.epoch), writable)
+if (!names.isEmpty()) {
+rtLog(pp, [what: op, ruleId: ruleId, ok: false, code: 'VARIABLE_NOT_WRITABLE'])
+return [ok: false, code: 'VARIABLE_NOT_WRITABLE', names: names, message: rtUnapprovedHubWritesWords(names)]
+}
+}
 Map res = rtpCall(pp, 'child', [childId, 'haiLifecycle', [op, runId]])
 if (res?.ok && op == 'disable' && entry.state == 'active') rtRegistryTransition(pp, ruleId, ['active'], 'disabled', [:])
 if (res?.ok && op == 'enable' && entry.state == 'disabled') rtRegistryTransition(pp, ruleId, ['disabled'], 'active', [:])
 rtLog(pp, [what: op, ruleId: ruleId, ok: res?.ok ?: false])
 return res ?: [ok: false]
+}
+List rtUnapprovedHubWrites(Map doc, Collection writable) {
+if (!(doc instanceof Map) || writable == null) return []
+Map refs = (doc.refs instanceof Map ? doc.refs : [:])
+Set ok = writable.collect { it.toString() } as Set
+Set keys = [] as Set
+Closure walk
+walk = { Object o ->
+if (o instanceof List) { ((List) o).each { walk(it) }; return }
+if (!(o instanceof Map)) return
+Map m = o
+if (m.type == 'setVariable' && m.ref instanceof String) keys << m.ref
+if ((m.type == 'runRule' || m.type == 'http') && m.result instanceof String) keys << m.result
+if (m.type == 'ping' && m.into instanceof Map) ((Map) m.into).values().each { if (it instanceof String) keys << it }
+m.each { Object k, Object v -> if (v instanceof Map || v instanceof List) walk(v) }
+}
+walk(doc.actions)
+walk(doc.onFailure)
+return keys.collect { Object k -> refs.get(k) }
+.findAll { Map r -> r != null && r.kind == 'variable' && (r.scope ?: 'hub') == 'hub' && !ok.contains((r.name ?: '') as String) }
+.collect { Map r -> (r.name ?: '') as String }.unique().sort()
+}
+String rtUnapprovedHubWritesWords(List names) {
+boolean one = names.size() == 1
+return ("This rule changes the hub variable${one ? '' : 's'} ${names.take(4).join(', ')}${names.size() > 4 ? ' and others' : ''}, " +
+"which HAI rules may not change yet, so it cannot be started or promoted until ${one ? 'it is' : 'they are'} added to " +
+'Approved hub variables on the HAI Engine page.').toString()
 }
 void rtPruneTombstones(Map pp) {
 Map reg = rtRegistry(pp)
@@ -7696,8 +7732,8 @@ return ((Map) (doc?.refs ?: [:])).values().any { ((Map) it).kind == 'rmRule' }
 @Field static final int RT_SUBMIT_SEEN = 16
 String rtChildLabel(Object name, Object ruleId, Object ruleState, boolean paused) {
 String n = ((name ?: ruleId ?: 'rule') as String).replaceAll(/[<>\r\n\t]+/, ' ').replaceAll(/\s+/, ' ').trim()
-String suffix = ruleState == 'disabled' ? ' (Stopped)' : ruleState == 'active' && paused ? ' (Paused)' : ''
-return '[HAI] ' + n.take(80 - 6 - suffix.length()) + suffix
+String word = ruleState == 'disabled' ? '(Stopped)' : ruleState == 'active' && paused ? '(Paused)' : ''
+return '[HAI] ' + n.take(80 - 6 - (word ? word.length() + 1 : 0)) + (word ? " <span style='color:red'>${word}</span>".toString() : '')
 }
 Map rtCheckSubmission(Object data, Object pairing, List seen, long now, String canonical = null) {
 if (!(pairing instanceof String) || ((String) pairing).isEmpty()) return [ok: false, code: 'NOT_PAIRED']
@@ -8451,4 +8487,4 @@ Map m = [ok: false, code: code, message: message]
 m.putAll(extra ?: [:])
 return m
 }
-@Field static final String CHECKER_BUILD = '73f251768e9023e2'
+@Field static final String CHECKER_BUILD = '53aa07b314468ce5'

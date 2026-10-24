@@ -204,7 +204,7 @@ currentFresh: { Object dev, Object attr -> ruleCurrent(dev as String, attr as St
 driver : { Object dev -> ruleDevice(dev as String)?.typeName?.toString() },
 command : { List a -> ruleCommand(a[0] as String, a[1] as String, a[2]) },
 listen : { Object dev, Object attr, Object every = false -> ruleListen(dev as String, attr as String, every == true) },
-unlistenAll : { Object u -> unsubscribe() },
+unlistenAll : { Object u -> unsubscribe(); ruleShadowDropped() },
 timerAt : { List a -> runOnce(new Date(a[0] as long), a[1] as String, [data: a[2], overwrite: false]) },
 unscheduleHandler: { Object h -> unschedule(h as String) },
 timerIn : { List a -> runInMillis(a[0] as long, a[1] as String, [data: a[2], overwrite: false]) },
@@ -213,7 +213,7 @@ atomicPut : { List a -> atomicState[a[0] as String] = a[1] },
 sendNow : { Object u -> true },
 idle : { Object b -> if ((state.haiIdle == true) != (b == true)) { if (b == true) state.haiIdle = true else state.remove('haiIdle') } },
 loadState : { Object u -> state.rt },
-saveState : { Map m -> state.rt = m },
+saveState : { Map m -> state.rt = m; ruleShadowSync(m) },
 execId : { Object u -> "${now()}-${UUID.randomUUID()}".toString() },
 selfId : { Object u -> app.id?.toString() },
 variable : { Object name -> def g = getGlobalVar(name as String); g == null ? null : [g.value, g.type?.toString()] },
@@ -413,31 +413,27 @@ Object h = state.haiKey
 return h instanceof Map ? (((Map) h).k as String) : null
 }
 void ruleKeyTake(Object k) {
-if (!(k instanceof String) || ((String) k).isEmpty()) return
-Map h = state.haiKey instanceof Map ? state.haiKey : null
-if (h?.k == k) return
-state.haiKey = [k: k, p: h?.k, at: now()]
+Map h = jsonKeyTake(state.haiKey, k, now())
+if (h != null) state.haiKey = h
 }
-List ruleKeys() {
-Map h = state.haiKey instanceof Map ? state.haiKey : null
-if (h == null) return []
-List out = [h.k]
-if (h.p != null && now() - ((h.at ?: 0L) as long) <= RT_SIG_WINDOW_MS) out << h.p
-return out
-}
+List ruleKeys() { return jsonKeys(state.haiKey, now()) }
 @Field static final java.util.concurrent.ConcurrentHashMap RULE_SIG_SEEN = new java.util.concurrent.ConcurrentHashMap()
+@Field static final java.util.concurrent.ConcurrentHashMap SHADOW_OPEN = new java.util.concurrent.ConcurrentHashMap()
+@Field static final java.util.concurrent.ConcurrentHashMap SHADOW_RECENT = new java.util.concurrent.ConcurrentHashMap()
+@Field static final java.util.concurrent.ConcurrentHashMap SHADOW_LAST = new java.util.concurrent.ConcurrentHashMap()
 String ruleSigned(String name, Object value, Map payload) {
 String d = rtSignedData(ruleKey(), name, value, payload, now(), UUID.randomUUID().toString())
 if (d != null) return d
 log.warn "HAI rule ${state.rt?.ruleId}: has no rule key from HAI Engine yet, so other rules will ignore this; press Done on the HAI Engine page"
 return groovy.json.JsonOutput.toJson(payload ?: [:])
 }
-Map ruleVerified(evt, String what) {
+Map ruleVerified(evt, String what, boolean quiet = false) {
 String id = app.id as String
 Map seen = RULE_SIG_SEEN.get(id)
 if (seen == null) { seen = new LinkedHashMap(); RULE_SIG_SEEN.put(id, seen) }
 Map call = rtSignedPayload(ruleKeys(), evt.name as String, evt.value, evt.data, now(), seen)
-if (call == null) log.warn "HAI rule ${state.rt?.ruleId}: ignored a ${what} that did not come from an HAI rule"
+String say = "HAI rule ${state.rt?.ruleId}: ignored a ${what} that did not come from HAI".toString()
+if (call == null) { if (quiet) log.debug say else log.warn say }
 return call
 }
 def haiInvoked(evt) {
@@ -509,6 +505,590 @@ rtOnNetReply(rulePlat(), data?.run, data?.token, reply)
 def haiTimer(Map data) { if (ruleAsleep()) return; rtOnTimer(rulePlat(), data?.token as String, 'timer') }
 def haiContinue(Map data) { rtOnTimer(rulePlat(), data?.token as String, 'continuation') }
 def haiCommit(Map data) { rtCommit(rulePlat(), data?.claimId as String) }
+@Field static final long SHADOW_CAP_MS = 600000L
+@Field static final int SHADOW_CELLS = 24
+@Field static final int SHADOW_WATCH = 16
+@Field static final int SHADOW_SEEN = 40
+@Field static final long SHADOW_LATE_MS = 60000L
+@Field static final long SHADOW_EARLY_MS = 5000L
+@Field static final long SHADOW_LEAD_MS = 3000L
+@Field static final long SHADOW_RECENT_MS = 3000L
+@Field static final long SHADOW_FOLLOW_MS = 10000L
+Map ruleShadowDoc(Map rt) {
+String rid = rt?.ruleId as String
+if (rid == null || !rid.startsWith('rm:')) return null
+Map rec = ((Map) (((Map) (rt.world ?: [:])).rules ?: [:])).get(rid)
+if (rec == null || rec.disabled != true) return null
+Object d = ((Map) (rt.docs ?: [:])).get(rec.epoch?.toString())
+return d instanceof Map ? d : null
+}
+Map ruleShadowState() { return state.shadow instanceof Map ? new LinkedHashMap((Map) state.shadow) : null }
+void ruleShadowDropped() {
+Map sh = ruleShadowState()
+if (sh?.subs == null) return
+sh.remove('subs')
+state.shadow = sh
+}
+void ruleShadowSync(Map rt, boolean tell = false) {
+try {
+Map doc = ruleShadowDoc(rt)
+Map sh = ruleShadowState()
+if (doc == null) {
+if (sh?.on == true) { unschedule('haiShadowEnd'); unschedule('haiShadowTime'); sh.on = false; ['w', 'next', 'ta', 'mt'].each { sh.remove(it) }; state.shadow = sh }
+return
+}
+boolean changed = sh?.on != true
+if (sh == null) sh = [runs: []]
+sh.on = true
+if (sh.h != rt.activeHash) { sh.h = rt.activeHash; sh.runs = []; sh.since = now(); ['w', 'ta', 'mt'].each { sh.remove(it) }; changed = true }
+List want = ruleShadowSlots(doc)
+if (sh.subs != want) { ruleShadowListen(want, (sh.subs ?: []), sh, rt.ruleId as String); sh.subs = want; changed = true }
+if (sh.wsub != ruleShadowCells(doc).watch) { ruleShadowKeepWatch(doc, sh); changed = true }
+if (sh.ta != RT_CHILD_BUILD.take(8)) { ruleShadowArm(sh, doc, now(), true); sh.ta = RT_CHILD_BUILD.take(8); changed = true }
+else if (sh.next != null && (((List) sh.next)[0] as long) < now() - SHADOW_LATE_MS) {
+sh.mt = ((List) sh.next)[0]
+ruleShadowArm(sh, doc, now(), true)
+changed = true
+}
+if (changed) state.shadow = sh
+if (changed || tell) ruleShadowAnnounce(rt.ruleId as String, [s: ruleShadowLight(doc, sh)])
+} catch (Exception e) {
+log.warn "HAI rule ${rt?.ruleId}: shadowing could not be set up (${e.message})"
+}
+}
+Map ruleShadowLight(Map doc, Map sh) {
+Map s = coreShadowLight(doc, sh.runs, sh.since)
+if (sh.next != null) s.nt = ((List) sh.next)[0]
+if (sh.mt != null) s.mt = sh.mt
+ruleShadowLater(doc, sh, s)
+if (sh.err instanceof Map) s.e = [at: ((Map) sh.err).t, msg: ((Map) sh.err).msg]
+if (s.g == null && sh.next == null && !((List) (sh.subs ?: [])).any { ((List) it)[1] != SHADOW_DONE_EVENT }) s.nw = 1
+return s
+}
+void ruleShadowLater(Map doc, Map sh, Map s) {
+if (sh.next == null) return
+try {
+List after = ruleShadowNext(doc, (((List) sh.next)[0] as long) + 1000L)
+if (after != null) s.nn = after[0]
+s.ws = ruleShadowSpan(doc, 0L)[0]
+} catch (Exception e) { log.debug "HAI rule ${doc.id}: the time after its next was not worked out (${e.message})" }
+}
+List ruleShadowSlots(Map doc) {
+Set out = new LinkedHashSet()
+Map refs = (doc.refs ?: [:])
+Closure idOf = { Object k -> k == null ? null : (((Map) refs.get(k))?.id as String) }
+coreShadowTriggers(doc).each { Object to ->
+if (((List) to)[1] != null) return
+Map t = ((List) doc.triggers)[((List) to)[0] as int]
+String dev = idOf(t.ref)
+switch (t.kind) {
+case 'button': (t.action ? [t.action] : RT_BUTTON_EVENTS).each { out << [dev, it as String] }; break
+case 'mode': out << [RT_LOCATION, 'mode']; break
+case 'hubVariable': out << [dev, CORE_VARIABLE_ATTRIBUTE]; break
+case 'hsmStatus': case 'hsmAlert': out << [RT_LOCATION, t.kind as String]; break
+case 'locationEvent': ((List) (t.events ?: [])).each { out << [RT_LOCATION, it as String] }; break
+case 'duration': Set ls = [] as Set; rtLeafSlots((Map) t.predicate, idOf, ls); out.addAll(ls); break
+case 'schedule': ruleShadowTimeVars(t, idOf).each { out << [it, CORE_VARIABLE_ATTRIBUTE] }; break
+case 'periodic': break
+default: out << [dev, t.attribute as String]
+}
+}
+out << [RT_LOCATION, SHADOW_DONE_EVENT]
+return new ArrayList(out)
+}
+List ruleShadowTimeVars(Map t, Closure idOf) {
+return [t.at, t.offsetMinutes].findAll { it instanceof Map }.collect { idOf(((Map) it).ref) as String }.findAll { it?.startsWith(HUB_VARIABLE_PREFIX) }
+}
+void ruleShadowListen(List want, List had, Map sh, String rid) {
+Map last = new LinkedHashMap((Map) (sh.last ?: [:]))
+want.each { Object so ->
+List s = so
+if (had.contains(s)) return
+String dev = s[0] as String, attr = s[1] as String
+String key = "${dev}|${attr}".toString()
+if (dev == RT_LOCATION) {
+if (attr == SHADOW_DONE_EVENT) { subscribe(location, "${SHADOW_DONE_EVENT}.${rid}".toString(), 'haiShadowDone'); return }
+subscribe(location, attr, 'haiShadowTrig')
+last.put(key, attr == 'mode' ? location.mode?.toString() : attr == 'hsmStatus' ? location.hsmStatus?.toString() : null)
+return
+}
+if (dev.startsWith(HUB_VARIABLE_PREFIX)) {
+subscribe(location, "variable:${dev.substring(HUB_VARIABLE_PREFIX.length())}".toString(), 'haiShadowTrig')
+last.put(key, ruleShadowVar(dev)?.value?.toString())
+return
+}
+def d = ruleDevice(dev)
+if (d == null) return
+subscribe(d, attr, 'haiShadowTrig')
+last.put(key, ruleShadowRead(dev, attr))
+}
+sh.last = last
+}
+Object ruleShadowRead(String dev, String attr) {
+def d = ruleDevice(dev)
+if (d == null) return null
+Object v = null
+try { v = d.currentValue(attr) } catch (Exception e) { v = null }
+return v instanceof Number || v == null ? v : v.toString()
+}
+Map ruleShadowVar(String id) {
+if (id?.startsWith(HUB_VARIABLE_PREFIX)) {
+try { def g = getGlobalVar(id.substring(HUB_VARIABLE_PREFIX.length())); return g == null ? null : [value: g.value] } catch (Exception e) { return null }
+}
+Object c = ((Map) (((Map) state.rt)?.vars ?: [:])).get(id)
+return c instanceof Map ? c : null
+}
+String ruleShadowSigned(String name, Object value, Map body) {
+String d = rtSignedData(ruleKey(), name, value, body, now(), UUID.randomUUID().toString())
+if (d == null) log.debug "HAI rule ${value}: no rule key from HAI Engine yet, so its shadow ${name} was not sent"
+return d
+}
+void ruleShadowAnnounce(String rid, Map body) {
+String d = ruleShadowSigned(SHADOW_DONE_EVENT, rid, [rule: rid] + body)
+if (d != null) sendLocationEvent(name: SHADOW_DONE_EVENT, value: rid, isStateChange: true, displayed: false, data: d,
+descriptionText: "HAI clone ${rid}: shadow light".toString())
+}
+def haiShadowTrig(evt) {
+Map sh = ruleShadowState()
+if (sh?.on != true) return
+Map rt = state.rt
+Map doc = ruleShadowDoc(rt)
+if (doc == null) return
+String name = evt.name as String
+String attr = name, dev = RT_LOCATION
+if (evt.deviceId != null) dev = "dev:${evt.deviceId}".toString()
+else if (name.startsWith('variable:')) { dev = HUB_VARIABLE_PREFIX + name.substring(9); attr = CORE_VARIABLE_ATTRIBUTE }
+String value = evt.value as String
+long at = now()
+String key = "${dev}|${attr}".toString()
+String mk = "${app.id}|${key}".toString()
+Object prior = SHADOW_LAST.containsKey(mk) ? ((List) SHADOW_LAST.get(mk))[0] : ((Map) (sh.last ?: [:])).get(key)
+SHADOW_LAST.put(mk, [value])
+boolean dirty = false
+List events = ruleShadowEventsOf(evt, dev, attr, name, value, at)
+Map w = sh.w instanceof Map ? sh.w : null
+if (w != null && ruleShadowSaw(w, dev, attr, value, at)) dirty = true
+int ti = ruleShadowFits(doc, dev, attr, value, prior)
+if (ti >= 0 && !(w != null && ((Map) ((List) doc.triggers)[ti]).kind == 'duration')) {
+if (w != null) ruleShadowHand(sh, doc, rt, true)
+ruleShadowOpen(sh, doc, rt, ti, events, key, prior, at)
+dirty = true
+} else if (w != null && !((List) (w.watch ?: [])).contains([dev, attr]) && ruleShadowInput(w, events, at)) dirty = true
+if (dev.startsWith(HUB_VARIABLE_PREFIX)) {
+Map refs = (doc.refs ?: [:])
+if (((List) (doc.triggers ?: [])).any { it instanceof Map && ((Map) it).kind == 'schedule' && ruleShadowTimeVars((Map) it, { k -> ((Map) refs.get(k))?.id }).contains(dev) }) { ruleShadowArm(sh, doc, at); dirty = true }
+}
+if (!dirty) return
+Map last = new LinkedHashMap((Map) (sh.last ?: [:]))
+last.put(key, value)
+sh.last = last
+state.shadow = sh
+}
+int ruleShadowFits(Map doc, String dev, String attr, String value, Object prior) {
+Map refs = (doc.refs ?: [:])
+Closure idOf = { Object k -> ((Map) refs.get(k))?.id as String }
+List trigs = (doc.triggers ?: [])
+for (int i = 0; i < trigs.size(); i++) {
+Map t = trigs[i] instanceof Map ? trigs[i] : null
+if (t == null || t.disabled == true) continue
+String k = t.kind as String
+boolean changed = prior?.toString() != value
+if (k == 'mode') {
+if (dev == RT_LOCATION && attr == 'mode' && changed && (t.to == null || ((List) t.to).contains(value))) return i
+continue
+}
+if (k == 'locationEvent') { if (dev == RT_LOCATION && ((List) (t.events ?: [])).contains(attr)) return i; continue }
+if (k == 'hsmStatus' || k == 'hsmAlert') {
+List want = (k == 'hsmStatus' ? t.to : t.alerts)
+if (dev == RT_LOCATION && attr == k && (!want || want.contains(value)) && (k == 'hsmAlert' || changed)) return i
+continue
+}
+if (k == 'duration') {
+Set ls = [] as Set
+rtLeafSlots((Map) t.predicate, idOf, ls)
+Map p = t.predicate
+if (ls.contains([dev, attr]) && (p?.type != 'deviceAttribute' || p.op == null || ruleShadowMeets(p, value))) return i
+continue
+}
+if (idOf(t.ref) != dev) continue
+if (k == 'hubVariable') { if (attr == CORE_VARIABLE_ATTRIBUTE && changed) return i; continue }
+if (k == 'button') {
+if (attr in RT_BUTTON_EVENTS && (t.action == null || t.action == attr) && (t.number == null || t.number.toString() == value)) return i
+continue
+}
+if (t.attribute != attr || !(k in ['deviceAttribute', 'threshold'])) continue
+boolean meets = ruleShadowMeets(t, value)
+if (k == 'threshold') { if (meets && prior != null && !ruleShadowMeets(t, prior)) return i; continue }
+if (meets && (t.discipline == 'event' || changed)) return i
+}
+return -1
+}
+boolean ruleShadowMeets(Map t, Object v) {
+if (t.op != null) return t.value instanceof Map || coreCompare(v, t.op as String, t.value) == LOGIC_TRUE
+return !t.containsKey('value') || t.value?.toString() == v?.toString()
+}
+List ruleShadowNext(Map doc, long after) {
+List got = []
+String zone = (location.timeZone ?: TimeZone.getTimeZone('UTC')).ID
+Map w = [gaps: [], port: [now: { Object u -> after }, zone: { Object u -> zone }, sun: { Object d -> ruleSun(d as String) },
+readVariable: { Object id -> ruleShadowVar(id as String) }, schedule: { Map t -> got << t }]]
+Map rec = [id: doc.id, epoch: 0, doc: doc]
+((List) (doc.triggers ?: [])).eachWithIndex { Object t, int i ->
+if (t instanceof Map && ((Map) t).disabled != true && ((Map) t).kind in ['schedule', 'periodic']) {
+try { coreArmNextOccurrence(w, rec, i, coreLocal(w, after).toLocalDateTime()) } catch (Exception e) { log.debug "HAI rule ${doc.id}: trigger ${i + 1}'s next time was not worked out (${e.message})" }
+}
+}
+Map first = got.min { ((Map) it).at as long }
+return first == null ? null : [first.at as long, first.trigger as int]
+}
+void ruleShadowArm(Map sh, Map doc, long after, boolean force = false) {
+List nx = ruleShadowNext(doc, after)
+if (nx == sh.next && !force) return
+unschedule('haiShadowTime')
+if (nx == null) { sh.remove('next'); return }
+long wake = Math.max((nx[0] as long) - SHADOW_LEAD_MS, now() + 1000L)
+runOnce(new Date(Math.min(wake, nx[0] as long)), 'haiShadowTime', [data: [at: nx[0]], overwrite: false])
+sh.next = nx
+}
+def haiShadowTime(Map data) {
+String where = 'reading its state'
+Map sh = null
+try {
+sh = ruleShadowState()
+if (sh?.on != true) return
+Map rt = state.rt
+Map doc = ruleShadowDoc(rt)
+if (doc == null) return
+long t = now()
+List nx = sh.next instanceof List ? sh.next : null
+long due = nx == null ? t + SHADOW_EARLY_MS + 1L : (nx[0] as long)
+where = 'arming the next time'
+if (due > t + SHADOW_EARLY_MS) { ruleShadowArm(sh, doc, t, true); state.shadow = sh; return }
+ruleShadowArm(sh, doc, Math.max(due, t) + 1000L, true)
+state.shadow = sh
+if (t - due > SHADOW_LATE_MS) {
+where = 'saying the missed run'
+sh.mt = due
+state.shadow = sh
+ruleShadowAnnounce(rt.ruleId as String, [s: ruleShadowLight(doc, sh)])
+return
+}
+sh.remove('mt')
+where = 'handing over the window before'
+if (sh.w instanceof Map) ruleShadowHand(sh, doc, rt, true)
+where = 'opening the window'
+ruleShadowOpen(sh, doc, rt, nx[1] as int, [], null, null, due)
+state.shadow = sh
+} catch (Exception e) {
+ruleShadowFailed(sh, where, e)
+}
+}
+void ruleShadowFailed(Map sh, String where, Exception e) {
+String msg = ((e?.message ?: e?.toString() ?: 'unknown') as String).replaceAll('\\s+', ' ').take(120)
+log.warn "HAI rule ${state.rt?.ruleId}: shadowing failed while ${where} (${msg})"
+try {
+Map s2 = sh ?: ruleShadowState() ?: [:]
+if (where == 'opening the window') s2.remove('w')
+s2.err = [t: now(), w: 'shadowError', where: where, msg: msg]
+state.shadow = s2
+Map rt = state.rt
+Map doc = ruleShadowDoc(rt)
+Map light = doc == null ? [l: 'amber'] : ruleShadowLight(doc, s2)
+light.e = [at: s2.err.t, msg: msg]
+ruleShadowAnnounce(rt.ruleId as String, [s: light])
+} catch (Exception e2) {
+log.debug "HAI rule ${state.rt?.ruleId}: the shadow error could not be said (${e2.message})"
+}
+}
+void ruleShadowOpen(Map sh, Map doc, Map rt, int ti, List events, String key, Object prior, long at) {
+Map cw = ruleShadowCells(doc)
+List watch = cw.watch
+List subs = (sh.subs ?: [])
+boolean extra = false
+List kept = (sh.wsub ?: [])
+watch.each { Object co ->
+List c = co
+if (subs.contains(c) || kept.contains(c)) return
+if (ruleShadowWatchOne(c)) extra = true
+}
+List before = ((List) cw.cells).collect { Object co ->
+List c = co
+String k = "${c[0]}|${c[1]}".toString()
+[c[0], c[1], k == key ? prior : ruleShadowRead(c[0] as String, c[1] as String)]
+}
+List kp = key == null ? null : (key.split('\\|', 2) as List)
+if (kp != null && !((List) cw.cells).contains(kp)) before << [kp[0], kp[1], prior]
+Map vars = [:]
+((Map) (rt.vars ?: [:])).each { k, v -> if (vars.size() < 8) vars.put(k, v) }
+((Map) (doc.refs ?: [:])).values().each { Object r ->
+String id = r instanceof Map ? (((Map) r).id as String) : null
+if (id == null || !id.startsWith(HUB_VARIABLE_PREFIX) || vars.size() >= 16) return
+Map g = ruleShadowVar(id)
+if (g != null) vars.put(id, g)
+}
+Map trig = ti >= 0 ? ((List) doc.triggers)[ti] : null
+List span = ruleShadowSpan(doc, trig?.kind == 'duration' && trig.seconds instanceof Number ? (trig.seconds as long) * 1000L : 0L)
+Map w = [at: at, t: ti >= 0 ? ti : null, h: rt.activeHash, ev: events, before: before, vars: vars,
+mode: key == 'location|mode' ? prior : location.mode?.toString(), modes: location.modes.collect { it.name.toString() },
+watch: watch, seen: [],
+until: at + (span[0] as long), full: span[1], part: span[2]]
+String txt = doc.toString()
+if (txt.contains('sunrise') || txt.contains('sunset')) {
+Map sun = [:]
+for (long d in [0L, 86400000L]) { String day = new Date(at + d).format('yyyy-MM-dd', location.timeZone); Map x = ruleSun(day); if (x) sun.put(day, x) }
+w.sun = sun
+}
+if (extra) w.extra = true
+String aid = app.id as String
+watch.each { Object co ->
+List c = co
+List r = SHADOW_RECENT.get("${aid}|${c[0]}|${c[1]}".toString())
+if (r != null && (r[1] as long) >= at - SHADOW_RECENT_MS) ((List) w.seen) << [c[0], c[1], r[0], (r[1] as long) - at]
+}
+SHADOW_OPEN.put(aid, w.until as long)
+((List) cw.cells).each { Object co ->
+List c = co
+if (subs.contains(c) || watch.contains(c) || !(c[0] as String).startsWith('dev:')) return
+def d = ruleDevice(c[0] as String)
+if (d == null) return
+subscribe(d, c[1] as String, 'haiShadowRead')
+w.extra = true
+}
+List reads = []
+if (txt =~ /\b(?:type|kind):mode\b|\bmode[A-Z]\w*:|\bmodes:/) reads << [RT_LOCATION, 'mode']
+((Map) (doc.refs ?: [:])).values().each { Object r ->
+String id = r instanceof Map ? (((Map) r).id as String) : null
+if (id != null && id.startsWith(HUB_VARIABLE_PREFIX)) reads << [id, CORE_VARIABLE_ATTRIBUTE]
+}
+reads.each { Object ro ->
+List c = ro
+if (subs.contains(c)) return
+if (c[0] == RT_LOCATION) subscribe(location, 'mode', 'haiShadowRead')
+else subscribe(location, "variable:${(c[0] as String).substring(HUB_VARIABLE_PREFIX.length())}".toString(), 'haiShadowRead')
+w.extra = true
+}
+if (ti < 0) w.test = true
+sh.w = w
+runInMillis((span[0] as long) + Math.max(0L, at - now()), 'haiShadowEnd', [overwrite: true])
+sh.remove('err')
+}
+Map ruleShadowCells(Map doc) {
+Map refs = (doc.refs ?: [:])
+Set cells = new LinkedHashSet(), watch = new LinkedHashSet()
+Closure ids = { Map m ->
+List keys = (m.ref instanceof String ? [m.ref] : []) + (m.refs instanceof List ? m.refs : [])
+keys.collect { Object k -> refs.get(k) }.findAll { it?.kind == 'device' && it.id }.collect { it.id as String }
+}
+Closure walk
+walk = { Object n ->
+if (n instanceof List) { ((List) n).each { walk(it) }; return }
+if (!(n instanceof Map)) return
+Map m = n
+if (m.attribute instanceof String) ids(m).each { cells << [it, m.attribute] }
+if (m.type == 'setMode') watch << [RT_LOCATION, 'mode']
+if (m.type == 'setVariable' && m.ref instanceof String) {
+String vid = ((Map) refs.get(m.ref))?.id as String
+if (vid?.startsWith(HUB_VARIABLE_PREFIX)) watch << [vid, CORE_VARIABLE_ATTRIBUTE]
+}
+if (m.command instanceof String) {
+Map op = CATALOGUE.get(m.command as String)
+ids(m).each { String d ->
+((List) (op?.writes ?: [])).each { watch << [d, it as String] }
+((List) (op?.reads ?: [])).each { cells << [d, it as String] }
+}
+}
+m.values().each { walk(it) }
+}
+walk(doc.triggers); walk(doc.conditions); walk(doc.requiredExpression); walk(doc.actions); walk(doc.onFailure)
+List w = new ArrayList(watch).take(SHADOW_WATCH)
+Set all = new LinkedHashSet(w)
+all.addAll(cells)
+return [cells: new ArrayList(all).take(SHADOW_CELLS), watch: w]
+}
+List ruleShadowSpan(Map doc, long extra) {
+long s = 0L, ms = 0L
+boolean open = false
+Closure n = { Object x -> x instanceof Number ? (x as long) : 0L }
+coreWalkShadow((List) (doc.actions ?: [])) { Map a ->
+if (a.type == 'wait') {
+s += n(a.seconds) + n(a.randomSeconds) + n(a.staysSeconds)
+if (a.modeSeconds instanceof Map) s += ((((Map) a.modeSeconds).values().collect { n(it) }.max() ?: 0L) as long)
+if (a.waitKind in ['forEvent', 'forEvents', 'until']) { if (a.timeoutSeconds instanceof Number) s += n(a.timeoutSeconds) else open = true }
+} else if (a.type in ['later', 'fade']) s += n(a.seconds) + n(a.randomSeconds)
+else if (a.type == 'flashSwitches') s += n(a.seconds) * Math.max(1L, n(a.times))
+else if (a.type == 'repeat') { if (a.times instanceof Number) s += n(a.everySeconds) * n(a.times) else open = true }
+else if (a.type == 'runRule' && a.wait == true) s += n(a.timeoutSeconds)
+if (a.meterMs instanceof Number && a.refs instanceof List) ms += n(a.meterMs) * Math.max(0L, ((List) a.refs).size() - 1L)
+}
+long timed = s * 1000L + ms
+long full = timed + Math.max(5000L, (long) (timed / 4L)) + extra
+return [Math.min(Math.max(full, 10000L), SHADOW_CAP_MS), Math.min(full, 86400000L), open || full > SHADOW_CAP_MS]
+}
+boolean ruleShadowSaw(Map w, String dev, String attr, Object value, long at) {
+List seen = (w.seen ?: [])
+if (at > (w.until as long) + 2000L || seen.size() >= SHADOW_SEEN || !((List) (w.watch ?: [])).contains([dev, attr])) return false
+seen << [dev, attr, value, at - (w.at as long)]
+w.seen = seen
+return true
+}
+boolean ruleShadowInput(Map w, List events, long at) {
+List ins = (w.in ?: [])
+if (at > (w.until as long) || ins.size() >= SHADOW_SEEN) return false
+events.each { if (ins.size() < SHADOW_SEEN) ins << [at - (w.at as long), it] }
+w.in = ins
+return true
+}
+def haiShadowSeen(evt) {
+String aid = app.id as String
+long t = now()
+String name = evt.name as String
+String dev = evt.deviceId != null ? "dev:${evt.deviceId}".toString() : name.startsWith('variable:') ? HUB_VARIABLE_PREFIX + name.substring(9) : RT_LOCATION
+String attr = name.startsWith('variable:') ? CORE_VARIABLE_ATTRIBUTE : name
+Object until = SHADOW_OPEN.get(aid)
+if (until instanceof Number && t > (until as long) + 2000L) {
+SHADOW_RECENT.put("${aid}|${dev}|${attr}".toString(), [evt.value as String, t])
+return
+}
+Map sh = ruleShadowState()
+if (!(sh?.w instanceof Map)) {
+SHADOW_OPEN.put(aid, 0L)
+SHADOW_RECENT.put("${aid}|${dev}|${attr}".toString(), [evt.value as String, t])
+return
+}
+long end = (((Map) sh.w).until ?: 0L) as long
+if (t > end + 2000L) {
+SHADOW_OPEN.put(aid, end)
+SHADOW_RECENT.put("${aid}|${dev}|${attr}".toString(), [evt.value as String, t])
+runIn(1, 'haiShadowEnd', [overwrite: true])
+return
+}
+if (ruleShadowSaw((Map) sh.w, dev, attr, evt.value as String, t)) state.shadow = sh
+}
+List ruleShadowEventsOf(evt, String dev, String attr, String name, String value, long at) {
+if (dev == RT_LOCATION) return [attr == 'mode' ? rtModeEvent(value, at, null) : rtLocationEvent(attr, value, at, null)]
+if (dev.startsWith(HUB_VARIABLE_PREFIX)) {
+String type = null
+try { type = getGlobalVar(name.substring(9))?.type?.toString() } catch (Exception e) { type = null }
+return [rtVariableEvent(name.substring(9), evt.value, type, at, null)]
+}
+Object number = null
+try { number = evt.numericValue } catch (Exception e) { number = null }
+Object type = null
+try { type = evt.type } catch (Exception e) { type = null }
+return rtEventsFrom(evt.deviceId, attr, evt.value, number, at, null, type)
+}
+boolean ruleShadowWatchOne(List c) {
+String dev = c[0] as String
+if (dev == RT_LOCATION) { subscribe(location, c[1] as String, 'haiShadowSeen'); return true }
+if (dev.startsWith(HUB_VARIABLE_PREFIX)) { subscribe(location, "variable:${dev.substring(HUB_VARIABLE_PREFIX.length())}".toString(), 'haiShadowSeen'); return true }
+def d = ruleDevice(dev)
+if (d == null) return false
+subscribe(d, c[1] as String, 'haiShadowSeen')
+return true
+}
+def haiShadowRead(evt) {
+Map sh = ruleShadowState()
+if (!(sh?.w instanceof Map)) return
+String name = evt.name as String
+String attr = name, dev = RT_LOCATION
+if (evt.deviceId != null) dev = "dev:${evt.deviceId}".toString()
+else if (name.startsWith('variable:')) { dev = HUB_VARIABLE_PREFIX + name.substring(9); attr = CORE_VARIABLE_ATTRIBUTE }
+long at = now()
+Map w = sh.w
+long base = (w.base instanceof Number ? w.base : ((w.until as long) - (w.at as long))) as long
+w.base = base
+long until = Math.min(at + base + SHADOW_FOLLOW_MS, (w.at as long) + SHADOW_CAP_MS)
+boolean moved = until > (w.until as long) + 2000L
+if (moved) {
+w.until = until
+w.full = Math.max(((w.full ?: 0L) as long), until - (w.at as long))
+runInMillis(Math.max(1000L, until - at), 'haiShadowEnd', [overwrite: true])
+SHADOW_OPEN.put(app.id as String, until)
+}
+if (ruleShadowInput(w, ruleShadowEventsOf(evt, dev, attr, name, evt.value as String, at), at) || moved) state.shadow = sh
+}
+def haiShadowEnd() {
+Map sh = null
+try {
+sh = ruleShadowState()
+if (!(sh?.w instanceof Map)) return
+Map rt = state.rt
+Map doc = ruleShadowDoc(rt)
+if (doc == null) sh.remove('w')
+else ruleShadowHand(sh, doc, rt, false)
+state.shadow = sh
+} catch (Exception e) {
+if (sh != null) sh.remove('w')
+ruleShadowFailed(sh, 'handing over the window', e)
+}
+}
+void ruleShadowHand(Map sh, Map doc, Map rt, boolean cut) {
+Map w = sh.remove('w')
+w.span = Math.min(now(), w.until as long) - (w.at as long)
+if (cut) w.cut = true
+List past = ((List) (sh.runs ?: [])).collect { Object r -> ((Map) r).findAll { k, v -> k != 'st' } }
+Map body = [rule: rt.ruleId, doc: doc, rec: w, past: past, since: sh.since]
+if (sh.next != null) body.nt = ((List) sh.next)[0]
+if (sh.mt != null) body.mt = sh.mt
+Map later = [:]
+ruleShadowLater(doc, sh, later)
+body.putAll(later)
+String d = ruleShadowSigned(SHADOW_RUN_EVENT, rt.ruleId, body)
+if (d != null) sendLocationEvent(name: SHADOW_RUN_EVENT, value: rt.ruleId as String, isStateChange: true, displayed: false, data: d,
+descriptionText: "HAI clone ${rt.ruleId}: a shadowed run to check".toString())
+else { log.warn "HAI rule ${rt.ruleId}: a shadowed run was not checked: no rule key from HAI Engine yet"; sh.err = [t: now(), w: 'shadowError', where: 'handing over the window', msg: 'no rule key from HAI Engine yet'] }
+if (w.extra == true && ((List) (rt.subs ?: [])).isEmpty()) {
+unsubscribe()
+List want = ruleShadowSlots(doc)
+ruleShadowListen(want, [], sh, rt.ruleId as String)
+sh.subs = want
+ruleShadowKeepWatch(doc, sh)
+}
+SHADOW_OPEN.put(app.id as String, 0L)
+}
+void ruleShadowKeepWatch(Map doc, Map sh) {
+List watch = ruleShadowCells(doc).watch
+List subs = (sh.subs ?: [])
+watch.each { Object co ->
+List c = co
+if (!subs.contains(c)) ruleShadowWatchOne(c)
+}
+sh.wsub = watch
+if (!(sh.w instanceof Map)) SHADOW_OPEN.put(app.id as String, 0L)
+}
+Map haiShadowRuns() {
+Map sh = ruleShadowState()
+if (sh == null) return [ok: false, message: 'This clone is not being shadowed.']
+Map s = sh.s instanceof Map ? sh.s : null
+if (s == null) { Map doc = ruleShadowDoc((Map) state.rt); if (doc != null) s = ruleShadowLight(doc, sh) }
+return [ok: true, runs: sh.runs ?: [], s: s, watching: sh.w instanceof Map, since: sh.since]
+}
+Map haiShadowTest() {
+Map sh = ruleShadowState()
+Map rt = state.rt
+Map doc = ruleShadowDoc(rt)
+if (sh == null || doc == null) return [ok: false, message: 'This clone is not being shadowed.']
+if (sh.w instanceof Map) return [ok: false, message: 'A run is being watched right now. Try again in a minute.']
+String rmId = (rt.ruleId as String).replaceFirst('^rm:', '')
+ruleShadowOpen(sh, doc, rt, -1, [], null, null, now())
+state.shadow = sh
+RMUtils.sendAction([rmId], 'runRuleAct', app.label, '5.0')
+long ends = (((Map) sh.w).until as long) - now()
+return [ok: true, ms: Math.max(0L, ends)]
+}
+def haiShadowDone(evt) {
+if (evt.value != state.rt?.ruleId) return
+Map d = ruleVerified(evt, 'shadow verdict', true)
+Map sh = ruleShadowState()
+if (!(d?.run instanceof Map) || sh == null || (d.hash != null && d.hash != sh.h)) return
+List runs = new ArrayList((List) (sh.runs ?: []))
+runs << d.run
+if (runs.size() > SHADOW_RUNS) runs = new ArrayList(runs.subList(runs.size() - SHADOW_RUNS, runs.size()))
+runs = runs.withIndex().collect { Object r, int i -> Map m = r; (i >= runs.size() - 5 || m.v == 'd') ? m : m.findAll { k, v -> k != 'st' } }
+sh.runs = runs
+sh.s = d.s
+state.shadow = sh
+}
 Map haiBuild() { return [build: RT_CHILD_BUILD, version: RT_VERSION] }
 Map haiSetup(List devices, List allow, Map purposes, Map options = [:]) {
 List ok = ((devices ?: []) as List).collect { rtBareId(it) }.findAll { ((allow ?: []) as List).contains(it) }
@@ -516,8 +1096,10 @@ List have = ((settings.ruleDevices ?: []) as List).collect { rtBareId(it.id?.toS
 if (have != ok.sort()) app.updateSetting('ruleDevices', [type: 'capability.*', value: ok])
 Map mine = ((purposes ?: [:]) as Map).findAll { k, v -> ok.contains(rtBareId(k)) }
 ruleKeyTake(options?.ruleKey)
-return rtSetAllow(rulePlat(), ok, mine, options?.writableVariables, options?.rules, options?.paused, options?.modeAllowed == true,
+Map out = rtSetAllow(rulePlat(), ok, mine, options?.writableVariables, options?.rules, options?.paused, options?.modeAllowed == true,
 options?.switched instanceof Map ? options.switched : null, options?.hubPowerAllowed == true)
+ruleShadowSync((Map) state.rt, true)
+return out
 }
 Map haiStage(Map doc, String ruleHash, String challengeId, String claimId, Object baseEpoch, Object expiresAt,
 Object startStopped = false) {
@@ -579,6 +1161,55 @@ MessageDigest outer = MessageDigest.getInstance('SHA-256')
 outer.update(opad)
 outer.update(ih)
 return outer.digest().collect { String.format('%02x', it) }.join('')
+}
+@Field static final long RT_SIG_WINDOW_MS = 120000L
+@Field static final int RT_SIG_SEEN_CAP = 256
+@Field static final String RT_SIG_FIELD = ',"sig":"'
+String rtSignedData(String key, String name, Object value, Map payload, long at, String nonce) {
+if (!(key instanceof String) || key.isEmpty()) return null
+Map body = new LinkedHashMap(payload ?: [:])
+body.remove('sig')
+body.remove('key')
+body.ts = at
+body.n = nonce
+String text = groovy.json.JsonOutput.toJson(body)
+String sig = jsonHmac(key, "${name}|${value}|${text}".toString())
+return text.substring(0, text.length() - 1) + RT_SIG_FIELD + sig + '"}'
+}
+Map rtSignedPayload(List keys, String name, Object value, Object data, long at, Map seen) {
+if (!(data instanceof String)) return null
+String d = (String) data
+int cut = d.lastIndexOf(RT_SIG_FIELD)
+if (cut < 1 || !d.endsWith('"}')) return null
+String sig = d.substring(cut + RT_SIG_FIELD.length(), d.length() - 2)
+String text = d.substring(0, cut) + '}'
+String signed = "${name}|${value}|${text}".toString()
+boolean good = false
+for (Object k in (keys ?: [])) if (k instanceof String && !((String) k).isEmpty() && jsonSameSecret(jsonHmac((String) k, signed), sig)) good = true
+if (!good) return null
+Map body
+try { body = new groovy.json.JsonSlurper().parseText(text) } catch (Exception e) { return null }
+Object ts = body.ts
+Object n = body.n
+if (!(ts instanceof Number) || !(n instanceof String) || Math.abs(at - (ts as long)) > RT_SIG_WINDOW_MS) return null
+if (seen != null) {
+if (seen.containsKey(n)) return null
+List old = seen.findAll { k, v -> !(v instanceof Number) || at - (v as long) > RT_SIG_WINDOW_MS }.collect { it.key }
+old.each { seen.remove(it) }
+while (seen.size() >= RT_SIG_SEEN_CAP) seen.remove(seen.keySet().iterator().next())
+seen.put(n, ts as long)
+}
+return body
+}
+List jsonKeys(Object h, long at) {
+if (!(h instanceof Map)) return []
+List out = [((Map) h).k]
+if (((Map) h).p != null && at - ((((Map) h).at ?: 0L) as long) <= RT_SIG_WINDOW_MS) out << ((Map) h).p
+return out
+}
+Map jsonKeyTake(Object h, Object k, long at) {
+if (!(k instanceof String) || ((String) k).isEmpty() || (h instanceof Map && ((Map) h).k == k)) return null
+return [k: k, p: h instanceof Map ? ((Map) h).k : null, at: at]
 }
 void jsonWrite(Object value, StringBuilder out, Map defaults, String path) {
 if (value instanceof Map) {
@@ -1128,11 +1759,13 @@ String a = ((o ?: '') as String).trim().toLowerCase()
 a && (a == h || (schemaIpv4Dotted(a) ?: a) == mine)
 }
 }
+@Field static final List HOME_NET_SUFFIXES = ['.lan', '.home', '.home.arpa', '.internal', '.intranet', '.localdomain', '.private', '.corp', '.domain', '.router', '.fritz.box', '.box']
 boolean schemaHubNamedHost(Object host, Collection own) {
 String h = ((host ?: '') as String).trim().toLowerCase()
 if (h.endsWith('.')) h = h.substring(0, h.length() - 1)
 if (h.isEmpty() || h.contains(':') || schemaIpv4Dotted(h) != null) return false
 if (h == 'local' || h.endsWith('.local')) return true
+if (!h.contains('.') || HOME_NET_SUFFIXES.any { String x -> h.endsWith(x) }) return true
 List mine = (own ?: []).collect { Object o -> schemaIpv4Dotted(((o ?: '') as String).trim().toLowerCase()) }.findAll { it != null }
 Closure hub = { String ip -> ip != null && (schemaHubSelfHost(ip) || mine.contains(ip)) }
 def m = h =~ /(?<![0-9])([0-9]{1,3})[.-]([0-9]{1,3})[.-]([0-9]{1,3})[.-]([0-9]{1,3})(?![0-9])/
@@ -4086,8 +4719,77 @@ durations.clear()
 }
 corePersist(w)
 }
+List coreShadowTriggers(Map doc) {
+List out = []
+Map refs = doc?.refs instanceof Map ? doc.refs : [:]
+List ts = doc?.triggers instanceof List ? doc.triggers : []
+ts.eachWithIndex { Object to, int i ->
+if (!(to instanceof Map) || ((Map) to).disabled == true) return
+Map t = to
+Object r = t.ref != null ? refs.get(t.ref) : null
+String dev = r instanceof Map ? (((Map) r).id as String) : null
+String why = t.kind != null ? (SHADOW_BLIND.get(t.kind as String) as String) : null
+if (t.kind in ['deviceAttribute', 'threshold', 'button'] && !(dev && (t.attribute || t.kind == 'button'))) why = 'it names no device HAI holds'
+if (t.kind == 'hubVariable' && !dev?.startsWith(HUB_VARIABLE_PREFIX)) why = 'it names no hub variable'
+out << [i, why]
+}
+return out
+}
+@Field static final Map SHADOW_BLIND = [ruleInvocation: 'Rule Machine gives no event when another rule or app runs it',
+rulePaused: 'Rule Machine gives no event when a rule is paused',
+endpoint: 'a call to its own address goes to Rule Machine, which gives no event']
+Map coreShadowLight(Map doc, List runs, Object since, Closure stageAt = null) {
+stageAt?.call('light/triggers')
+List all = coreShadowTriggers(doc)
+List trigs = all.findAll { ((List) it)[1] == null }
+List blind = all.findAll { ((List) it)[1] != null }
+stageAt?.call('light/walk')
+boolean checkable = false
+coreWalkShadow(doc?.actions instanceof List ? doc.actions : []) { Map a ->
+Object c = a.command
+Object op = c != null ? CATALOGUE.get(c as String) : null
+if (c && op instanceof Map && (((Map) op).writes instanceof List) && !((List) ((Map) op).writes).isEmpty()) checkable = true
+if (a.type == 'setMode') checkable = true
+if (a.type == 'setVariable' && a.ref instanceof String && ((((Map) ((Map) (doc?.refs ?: [:])).get(a.ref))?.id ?: '') as String).startsWith(HUB_VARIABLE_PREFIX)) checkable = true
+}
+stageAt?.call('light/count')
+List rs = runs instanceof List ? ((List) runs).findAll { it instanceof Map } : []
+int old = rs.count { Map r -> r.v == 'd' && ((r.j ?: 0) as int) != SHADOW_JUDGE }
+rs = rs.findAll { Map r -> !(r.v == 'd' && ((r.j ?: 0) as int) != SHADOW_JUDGE) }
+Map s = [n: rs.size(), m: rs.count { ((Map) it).v == 'm' }, d: rs.count { ((Map) it).v == 'd' }, p: rs.count { ((Map) it).p == true },
+since: since, last: rs ? ((Map) rs[-1]).at : null]
+Set seen = rs.findAll { ((Map) it).v == 'm' }.collect { Object x -> Object t = ((Map) x).t; t instanceof Number ? (t as int) : t } as Set
+s.miss = trigs.count { !seen.contains(((List) it)[0]) }
+if (blind) { s.u = blind.size(); s.ub = ((List) blind[0])[1] }
+Map lastBad = rs.reverse().find { ((Map) it).v == 'd' }
+if (lastBad) s.w = lastBad.w
+if (old) s.o = old
+stageAt?.call('light/colour')
+if (trigs.isEmpty()) s.g = blind ? s.ub : 'it has no trigger'
+else if (!checkable) s.g = 'nothing it does changes a device HAI can watch'
+s.l = s.g ? 'grey' : s.d ? 'red' : (((s.m ?: 0) as int) >= SHADOW_GREEN_RUNS && s.miss == 0) ? 'green' : 'amber'
+return s
+}
+@Field static final int SHADOW_GREEN_RUNS = 3
+@Field static final int SHADOW_JUDGE = 6
+void coreWalkShadow(List actions, Closure visit) {
+if (visit == null) return
+(actions ?: []).each { Object o ->
+if (!(o instanceof Map)) return
+Map a = o
+visit(a)
+['then', 'otherwise', 'steps', 'actions'].each { String k -> if (a.get(k) instanceof List) coreWalkShadow((List) a.get(k), visit) }
+['elseIf', 'cases'].each { String k ->
+Object v = a.get(k)
+if (v instanceof List) ((List) v).each { Object e -> if (e instanceof Map && ((Map) e).then instanceof List) coreWalkShadow((List) ((Map) e).then, visit) }
+}
+}
+}
+@Field static final String SHADOW_RUN_EVENT = 'haiShadowRun'
+@Field static final String SHADOW_DONE_EVENT = 'haiShadowDone'
+@Field static final int SHADOW_RUNS = 20
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = '672d9dee27561e42'
+@Field static final String RT_CHILD_BUILD = 'f7b6c0d4db9eb27e'
 @Field static final long RT_GRACE_MS = 30000L
 @Field static final long RT_WATCHDOG_EVERY_MS = 900000L
 @Field static final long RT_RECOVERY_MS = 120000L
@@ -4387,45 +5089,6 @@ out << b
 }
 }
 return out
-}
-@Field static final long RT_SIG_WINDOW_MS = 120000L
-@Field static final int RT_SIG_SEEN_CAP = 256
-@Field static final String RT_SIG_FIELD = ',"sig":"'
-String rtSignedData(String key, String name, Object value, Map payload, long at, String nonce) {
-if (!(key instanceof String) || key.isEmpty()) return null
-Map body = new LinkedHashMap(payload ?: [:])
-body.remove('sig')
-body.remove('key')
-body.ts = at
-body.n = nonce
-String text = groovy.json.JsonOutput.toJson(body)
-String sig = jsonHmac(key, "${name}|${value}|${text}".toString())
-return text.substring(0, text.length() - 1) + RT_SIG_FIELD + sig + '"}'
-}
-Map rtSignedPayload(List keys, String name, Object value, Object data, long at, Map seen) {
-if (!(data instanceof String)) return null
-String d = (String) data
-int cut = d.lastIndexOf(RT_SIG_FIELD)
-if (cut < 1 || !d.endsWith('"}')) return null
-String sig = d.substring(cut + RT_SIG_FIELD.length(), d.length() - 2)
-String text = d.substring(0, cut) + '}'
-String signed = "${name}|${value}|${text}".toString()
-boolean good = false
-for (Object k in (keys ?: [])) if (k instanceof String && !((String) k).isEmpty() && jsonSameSecret(jsonHmac((String) k, signed), sig)) good = true
-if (!good) return null
-Map body
-try { body = new groovy.json.JsonSlurper().parseText(text) } catch (Exception e) { return null }
-Object ts = body.ts
-Object n = body.n
-if (!(ts instanceof Number) || !(n instanceof String) || Math.abs(at - (ts as long)) > RT_SIG_WINDOW_MS) return null
-if (seen != null) {
-if (seen.containsKey(n)) return null
-List old = seen.findAll { k, v -> !(v instanceof Number) || at - (v as long) > RT_SIG_WINDOW_MS }.collect { it.key }
-old.each { seen.remove(it) }
-while (seen.size() >= RT_SIG_SEEN_CAP) seen.remove(seen.keySet().iterator().next())
-seen.put(n, ts as long)
-}
-return body
 }
 int rtCallDepth(Object d) {
 if (d == null) return 1
@@ -5788,7 +6451,7 @@ if (req.kind == 'http' && schemaHubOwnHost(host, hubAddresses) && !rtHubOwnCall(
 return "that address is this hub itself, which a rule's web request may not reach"
 }
 if (req.kind == 'http' && schemaHubNamedHost(host, hubAddresses)) {
-return "that name may be this hub itself (a .local name, or one spelling out the hub's address), which a rule's web request may not reach; use the device's IP address"
+return "that name may be this hub itself (a home-network name such as .local, .lan or one with no dot, or one spelling out the hub's address), which a rule's web request may not reach; use the device's IP address"
 }
 return null
 }

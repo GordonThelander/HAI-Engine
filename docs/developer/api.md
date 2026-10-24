@@ -199,7 +199,7 @@ printed here in full because it is not installed by Hubitat Package Manager (its
 library(
     name: 'HAIRuleApi',
     namespace: 'gordonthelander',
-    author: 'HAI',
+    author: 'Your Name',
     description: 'List HAI rules; run, stop, pause, resume or trigger them; set their Private Boolean',
     category: 'Utility',
     documentationLink: ''

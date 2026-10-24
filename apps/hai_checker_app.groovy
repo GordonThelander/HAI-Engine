@@ -29,8 +29,33 @@ paragraph 'This is part of HAI Engine, which installs and updates it. There is n
 }
 }
 }
-def installed() { }
-def updated() { }
+def installed() { checkerListen() }
+def updated() { checkerListen() }
+def checkerShadowRun(evt) {
+Map d = rtSignedPayload(jsonKeys(state.haiKey, now()), evt.name as String, evt.value, evt.data, now(), checkerSeen())
+if (d == null) { log.debug "HAI Checker: dropped a shadowed run for ${evt.value} that HAI did not sign"; return }
+if (!(d.doc instanceof Map) || !(d.rec instanceof Map) || d.rule == null) return
+Map out
+try { out = shadowJudge(d, (location.timeZone ?: TimeZone.getTimeZone('UTC')).ID) }
+catch (Exception e) {
+String msg = (e.toString() as String).take(160)
+log.warn "HAI Checker: a shadowed run of ${d.rule} could not be checked (${msg})"
+Map s = [l: 'amber']
+try { s = coreShadowLight((Map) d.doc, (d.past ?: []), d.since) } catch (Exception e2) { }
+['nt', 'mt', 'nn', 'ws'].each { k -> if (d[k] instanceof Number) s[k] = d[k] }
+s.e = [at: now(), msg: "HAI Checker could not check the run: ${msg}".toString().take(120)]
+out = [rule: d.rule, s: s]
+}
+String data = rtSignedData((String) jsonKeys(state.haiKey, now())[0], SHADOW_DONE_EVENT, d.rule, out, now(), UUID.randomUUID().toString())
+sendLocationEvent(name: SHADOW_DONE_EVENT, value: d.rule as String, isStateChange: true, displayed: false,
+data: data, descriptionText: "HAI clone ${d.rule}: shadowed run checked".toString())
+}
+@Field static final java.util.concurrent.ConcurrentHashMap CHECKER_SIG_SEEN = new java.util.concurrent.ConcurrentHashMap()
+Map checkerSeen() {
+Map seen = CHECKER_SIG_SEEN.get(app.id as String)
+if (seen == null) { seen = new java.util.concurrent.ConcurrentHashMap(); CHECKER_SIG_SEEN.put(app.id as String, seen) }
+return seen
+}
 Map checkerRun(Map req) {
 if (req?.build != CHECKER_BUILD) {
 return [checkerError: 'CHECKER_MISMATCH', build: CHECKER_BUILD,
@@ -296,6 +321,82 @@ return out.toString()
 String jsonHash(Object value, Map defaults = [:]) {
 byte[] bytes = jsonCanonicalise(value, defaults).getBytes('UTF-8')
 return MessageDigest.getInstance('SHA-256').digest(bytes).collect { String.format('%02x', it) }.join('')
+}
+boolean jsonSameSecret(Object a, Object b) {
+if (!(a instanceof String) || !(b instanceof String)) return false
+String x = (String) a, y = (String) b
+if (x.isEmpty() || x.length() != y.length()) return false
+int diff = 0
+for (int i = 0; i < x.length(); i++) diff |= ((int) x.charAt(i)) ^ ((int) y.charAt(i))
+return diff == 0
+}
+String jsonHmac(String key, String text) {
+byte[] k = (key ?: '').getBytes('UTF-8')
+if (k.length > 64) k = MessageDigest.getInstance('SHA-256').digest(k)
+byte[] ipad = new byte[64]
+byte[] opad = new byte[64]
+for (int i = 0; i < 64; i++) {
+int b = i < k.length ? (int) k[i] : 0
+ipad[i] = (byte) (b ^ 0x36)
+opad[i] = (byte) (b ^ 0x5c)
+}
+MessageDigest inner = MessageDigest.getInstance('SHA-256')
+inner.update(ipad)
+inner.update((text ?: '').getBytes('UTF-8'))
+byte[] ih = inner.digest()
+MessageDigest outer = MessageDigest.getInstance('SHA-256')
+outer.update(opad)
+outer.update(ih)
+return outer.digest().collect { String.format('%02x', it) }.join('')
+}
+@Field static final long RT_SIG_WINDOW_MS = 120000L
+@Field static final int RT_SIG_SEEN_CAP = 256
+@Field static final String RT_SIG_FIELD = ',"sig":"'
+String rtSignedData(String key, String name, Object value, Map payload, long at, String nonce) {
+if (!(key instanceof String) || key.isEmpty()) return null
+Map body = new LinkedHashMap(payload ?: [:])
+body.remove('sig')
+body.remove('key')
+body.ts = at
+body.n = nonce
+String text = groovy.json.JsonOutput.toJson(body)
+String sig = jsonHmac(key, "${name}|${value}|${text}".toString())
+return text.substring(0, text.length() - 1) + RT_SIG_FIELD + sig + '"}'
+}
+Map rtSignedPayload(List keys, String name, Object value, Object data, long at, Map seen) {
+if (!(data instanceof String)) return null
+String d = (String) data
+int cut = d.lastIndexOf(RT_SIG_FIELD)
+if (cut < 1 || !d.endsWith('"}')) return null
+String sig = d.substring(cut + RT_SIG_FIELD.length(), d.length() - 2)
+String text = d.substring(0, cut) + '}'
+String signed = "${name}|${value}|${text}".toString()
+boolean good = false
+for (Object k in (keys ?: [])) if (k instanceof String && !((String) k).isEmpty() && jsonSameSecret(jsonHmac((String) k, signed), sig)) good = true
+if (!good) return null
+Map body
+try { body = new groovy.json.JsonSlurper().parseText(text) } catch (Exception e) { return null }
+Object ts = body.ts
+Object n = body.n
+if (!(ts instanceof Number) || !(n instanceof String) || Math.abs(at - (ts as long)) > RT_SIG_WINDOW_MS) return null
+if (seen != null) {
+if (seen.containsKey(n)) return null
+List old = seen.findAll { k, v -> !(v instanceof Number) || at - (v as long) > RT_SIG_WINDOW_MS }.collect { it.key }
+old.each { seen.remove(it) }
+while (seen.size() >= RT_SIG_SEEN_CAP) seen.remove(seen.keySet().iterator().next())
+seen.put(n, ts as long)
+}
+return body
+}
+List jsonKeys(Object h, long at) {
+if (!(h instanceof Map)) return []
+List out = [((Map) h).k]
+if (((Map) h).p != null && at - ((((Map) h).at ?: 0L) as long) <= RT_SIG_WINDOW_MS) out << ((Map) h).p
+return out
+}
+Map jsonKeyTake(Object h, Object k, long at) {
+if (!(k instanceof String) || ((String) k).isEmpty() || (h instanceof Map && ((Map) h).k == k)) return null
+return [k: k, p: h instanceof Map ? ((Map) h).k : null, at: at]
 }
 void jsonWrite(Object value, StringBuilder out, Map defaults, String path) {
 if (value instanceof Map) {
@@ -711,6 +812,32 @@ pattern: '(?i)rain|drizzle|shower|thunder|tstorm'],
 snowing : [say: 'snowing', group: 'weather', attributes: ['condition_code', 'weather', 'condition_text'], op: 'matches',
 pattern: '(?i)snow|sleet|flurr'],
 ]
+boolean everydaySame(Object a, Object b) {
+if (a instanceof List || b instanceof List) {
+if (!(a instanceof List && b instanceof List) || ((List) a).size() != ((List) b).size()) return false
+return (0..<((List) a).size()).every { int i -> everydaySame(((List) a)[i], ((List) b)[i]) }
+}
+if (a == null || b == null) return a == b
+try { return new BigDecimal(a.toString()).compareTo(new BigDecimal(b.toString())) == 0 } catch (Exception e) { return a.toString() == b.toString() }
+}
+Map everydayFollow(Map doc, Map values) {
+Map copy = new groovy.json.JsonSlurper().parseText(groovy.json.JsonOutput.toJson(doc))
+int n = 0
+Closure walk
+walk = { Object v ->
+if (v instanceof Map) {
+Map m = v
+if (m.everyday instanceof String && values.containsKey(m.everyday) && values.get(m.everyday) != null && !everydaySame(m.value, values.get(m.everyday))) {
+Object want = values.get(m.everyday)
+m.value = want instanceof List ? new ArrayList((List) want) : want
+n++
+}
+m.values().each { walk(it) }
+} else if (v instanceof List) ((List) v).each { walk(it) }
+}
+walk(copy)
+return [doc: copy, changed: n]
+}
 @Field static final List COMPARATORS = ['is', 'isNot', 'above', 'below', 'atLeast', 'atMost', 'contains', 'matches', 'isEmpty', 'between', 'notBetween']
 @Field static final int REGEX_MAX_CHARS = 200
 @Field static final int REGEX_MAX_SUBJECT = 4000
@@ -5685,6 +5812,75 @@ if (code != null) intent.code = code
 }
 coreLog(w, 'dispatchRefused', [intent: intent.id, run: intent.run, state: intent.state, code: code, reason: reason])
 }
+List coreShadowTriggers(Map doc) {
+List out = []
+Map refs = doc?.refs instanceof Map ? doc.refs : [:]
+List ts = doc?.triggers instanceof List ? doc.triggers : []
+ts.eachWithIndex { Object to, int i ->
+if (!(to instanceof Map) || ((Map) to).disabled == true) return
+Map t = to
+Object r = t.ref != null ? refs.get(t.ref) : null
+String dev = r instanceof Map ? (((Map) r).id as String) : null
+String why = t.kind != null ? (SHADOW_BLIND.get(t.kind as String) as String) : null
+if (t.kind in ['deviceAttribute', 'threshold', 'button'] && !(dev && (t.attribute || t.kind == 'button'))) why = 'it names no device HAI holds'
+if (t.kind == 'hubVariable' && !dev?.startsWith(HUB_VARIABLE_PREFIX)) why = 'it names no hub variable'
+out << [i, why]
+}
+return out
+}
+@Field static final Map SHADOW_BLIND = [ruleInvocation: 'Rule Machine gives no event when another rule or app runs it',
+rulePaused: 'Rule Machine gives no event when a rule is paused',
+endpoint: 'a call to its own address goes to Rule Machine, which gives no event']
+Map coreShadowLight(Map doc, List runs, Object since, Closure stageAt = null) {
+stageAt?.call('light/triggers')
+List all = coreShadowTriggers(doc)
+List trigs = all.findAll { ((List) it)[1] == null }
+List blind = all.findAll { ((List) it)[1] != null }
+stageAt?.call('light/walk')
+boolean checkable = false
+coreWalkShadow(doc?.actions instanceof List ? doc.actions : []) { Map a ->
+Object c = a.command
+Object op = c != null ? CATALOGUE.get(c as String) : null
+if (c && op instanceof Map && (((Map) op).writes instanceof List) && !((List) ((Map) op).writes).isEmpty()) checkable = true
+if (a.type == 'setMode') checkable = true
+if (a.type == 'setVariable' && a.ref instanceof String && ((((Map) ((Map) (doc?.refs ?: [:])).get(a.ref))?.id ?: '') as String).startsWith(HUB_VARIABLE_PREFIX)) checkable = true
+}
+stageAt?.call('light/count')
+List rs = runs instanceof List ? ((List) runs).findAll { it instanceof Map } : []
+int old = rs.count { Map r -> r.v == 'd' && ((r.j ?: 0) as int) != SHADOW_JUDGE }
+rs = rs.findAll { Map r -> !(r.v == 'd' && ((r.j ?: 0) as int) != SHADOW_JUDGE) }
+Map s = [n: rs.size(), m: rs.count { ((Map) it).v == 'm' }, d: rs.count { ((Map) it).v == 'd' }, p: rs.count { ((Map) it).p == true },
+since: since, last: rs ? ((Map) rs[-1]).at : null]
+Set seen = rs.findAll { ((Map) it).v == 'm' }.collect { Object x -> Object t = ((Map) x).t; t instanceof Number ? (t as int) : t } as Set
+s.miss = trigs.count { !seen.contains(((List) it)[0]) }
+if (blind) { s.u = blind.size(); s.ub = ((List) blind[0])[1] }
+Map lastBad = rs.reverse().find { ((Map) it).v == 'd' }
+if (lastBad) s.w = lastBad.w
+if (old) s.o = old
+stageAt?.call('light/colour')
+if (trigs.isEmpty()) s.g = blind ? s.ub : 'it has no trigger'
+else if (!checkable) s.g = 'nothing it does changes a device HAI can watch'
+s.l = s.g ? 'grey' : s.d ? 'red' : (((s.m ?: 0) as int) >= SHADOW_GREEN_RUNS && s.miss == 0) ? 'green' : 'amber'
+return s
+}
+@Field static final int SHADOW_GREEN_RUNS = 3
+@Field static final int SHADOW_JUDGE = 6
+void coreWalkShadow(List actions, Closure visit) {
+if (visit == null) return
+(actions ?: []).each { Object o ->
+if (!(o instanceof Map)) return
+Map a = o
+visit(a)
+['then', 'otherwise', 'steps', 'actions'].each { String k -> if (a.get(k) instanceof List) coreWalkShadow((List) a.get(k), visit) }
+['elseIf', 'cases'].each { String k ->
+Object v = a.get(k)
+if (v instanceof List) ((List) v).each { Object e -> if (e instanceof Map && ((Map) e).then instanceof List) coreWalkShadow((List) ((Map) e).then, visit) }
+}
+}
+}
+@Field static final String SHADOW_RUN_EVENT = 'haiShadowRun'
+@Field static final String SHADOW_DONE_EVENT = 'haiShadowDone'
+@Field static final int SHADOW_RUNS = 20
 @Field static final long SIM_DEFAULT_LATENCY_MS = 500L
 Map simNew(Map inv, long startAt, String zone) {
 Map sim = coreNewWorld()
@@ -7990,42 +8186,6 @@ note: 'the hub may not end a request exactly at its timeout']
 @Field static final int EDITOR_MAX_REQUIREMENT_PATHS = 16
 @Field static final String EDITOR_EFFECTS = "Save draft keeps this rule here, in the editor, and changes nothing on the hub. Activate on hub (Update on hub for a rule already there) is the one that puts it live, and HAI checks it before it runs. Run rule runs the hub's version once, now."
 @Field static final String EDITOR_CHECK_LABEL = 'Checked by the hub in the editor. This is not an AI proposal, and nothing was stored.'
-@Field static final List EDITOR_DEVICE_CLASSES = [
-[key: 'acceleration', label: 'Acceleration', capability: 'AccelerationSensor', attribute: 'acceleration', values: ['active', 'inactive']],
-[key: 'battery', label: 'Battery', capability: 'Battery', attribute: 'battery', numeric: true],
-[key: 'carbonDioxide', label: 'Carbon dioxide', capability: 'CarbonDioxideMeasurement', attribute: 'carbonDioxide', numeric: true],
-[key: 'carbonMonoxide', label: 'Carbon monoxide', capability: 'CarbonMonoxideDetector', attribute: 'carbonMonoxide', values: ['clear', 'detected', 'tested']],
-[key: 'contact', label: 'Contact', capability: 'ContactSensor', attribute: 'contact', values: ['open', 'closed']],
-[key: 'level', label: 'Dimmer level', capability: 'SwitchLevel', attribute: 'level', numeric: true],
-[key: 'door', label: 'Door', capability: 'DoorControl', attribute: 'door', values: ['open', 'closed', 'opening', 'closing', 'unknown']],
-[key: 'energy', label: 'Energy meter', capability: 'EnergyMeter', attribute: 'energy', numeric: true],
-[key: 'fanSpeed', label: 'Fan speed', capability: 'FanControl', attribute: 'speed', values: ['low', 'medium-low', 'medium', 'medium-high', 'high', 'on', 'off', 'auto']],
-[key: 'garageDoor', label: 'Garage door', capability: 'GarageDoorControl', attribute: 'door', values: ['open', 'closed', 'opening', 'closing', 'unknown']],
-[key: 'gas', label: 'Gas detector', capability: 'GasDetector', attribute: 'naturalGas', values: ['clear', 'detected', 'tested']],
-[key: 'humidity', label: 'Humidity', capability: 'RelativeHumidityMeasurement', attribute: 'humidity', numeric: true],
-[key: 'illuminance', label: 'Illuminance', capability: 'IlluminanceMeasurement', attribute: 'illuminance', numeric: true],
-[key: 'motion', label: 'Motion', capability: 'MotionSensor', attribute: 'motion', values: ['active', 'inactive']],
-[key: 'musicPlayer', label: 'Music player', capability: 'MusicPlayer', attribute: 'status', values: ['playing', 'paused', 'stopped']],
-[key: 'power', label: 'Power meter', capability: 'PowerMeter', attribute: 'power', numeric: true],
-[key: 'powerSource', label: 'Power source', capability: 'PowerSource', attribute: 'powerSource', values: ['battery', 'dc', 'mains', 'unknown']],
-[key: 'presence', label: 'Presence', capability: 'PresenceSensor', attribute: 'presence', values: ['present', 'not present']],
-[key: 'shock', label: 'Shock', capability: 'ShockSensor', attribute: 'shock', values: ['clear', 'detected']],
-[key: 'smoke', label: 'Smoke', capability: 'SmokeDetector', attribute: 'smoke', values: ['clear', 'detected', 'tested']],
-[key: 'sound', label: 'Sound', capability: 'SoundSensor', attribute: 'sound', values: ['detected', 'not detected']],
-[key: 'switch', label: 'Switch', capability: 'Switch', attribute: 'switch', values: ['on', 'off']],
-[key: 'tamper', label: 'Tamper', capability: 'TamperAlert', attribute: 'tamper', values: ['clear', 'detected']],
-[key: 'temperature', label: 'Temperature', capability: 'TemperatureMeasurement', attribute: 'temperature', numeric: true],
-[key: 'heatingSetpoint', label: 'Thermostat heating setpoint', capability: 'Thermostat', attribute: 'heatingSetpoint', numeric: true],
-[key: 'coolingSetpoint', label: 'Thermostat cooling setpoint', capability: 'Thermostat', attribute: 'coolingSetpoint', numeric: true],
-[key: 'thermostatFanMode', label: 'Thermostat fan mode', capability: 'Thermostat', attribute: 'thermostatFanMode', values: ['auto', 'circulate', 'on']],
-[key: 'thermostatMode', label: 'Thermostat mode', capability: 'Thermostat', attribute: 'thermostatMode', values: ['auto', 'off', 'heat', 'emergency heat', 'cool']],
-[key: 'thermostatState', label: 'Thermostat state', capability: 'Thermostat', attribute: 'thermostatOperatingState', values: ['heating', 'pending cool', 'pending heat', 'vent economizer', 'idle', 'cooling', 'fan only']],
-[key: 'valve', label: 'Valve', capability: 'Valve', attribute: 'valve', values: ['open', 'closed']],
-[key: 'water', label: 'Water', capability: 'WaterSensor', attribute: 'water', values: ['wet', 'dry']],
-[key: 'windowShade', label: 'Window shade', capability: 'WindowShade', attribute: 'windowShade', values: ['opening', 'partially open', 'closed', 'open', 'closing', 'unknown']],
-[key: 'lock', label: 'Lock', capability: 'Lock', attribute: 'lock', values: ['locked', 'unlocked', 'unlocked with timeout', 'unknown']],
-[key: 'securityKeypad', label: 'Security keypad', capability: 'SecurityKeypad', attribute: 'securityKeypad', values: ['disarmed', 'armed home', 'armed away', 'armed night', 'unknown']],
-]
 @Field static final int EDITOR_MAX_OTHER_COMMANDS = 200
 @Field static final int EDITOR_MAX_DECLARED_VALUES = 40
 @Field static final List EDITOR_ICON_RULES = [
@@ -8096,10 +8256,6 @@ engineCommands: engine, attributes: edSorted(dev.attributes)]
 boolean unread = dev.valuesRead == false
 if (!unread) row.values = values
 Set reported = values.keySet().collect { it.toString() } as Set
-Set declared = unread ? (((dev.attributes ?: []) as List).collect { it.toString() } as Set) : null
-row.classes = EDITOR_DEVICE_CLASSES.findAll { Object o ->
-caps.contains(((Map) o).capability) && (unread ? declared.contains(((Map) o).attribute) : values.containsKey(((Map) o).attribute))
-}.collect { Object o -> ((Map) o).key }
 if (!unread && dev.declaredValues instanceof Map) {
 Map dv = [:]
 ((Map) dev.declaredValues).each { k, vs ->
@@ -8438,7 +8594,7 @@ int toChoose = ((List) imported.resolution).count { Map row -> row.status != BIN
 return [status: 200, body: [ok: true, rules: imported.rules, resolution: imported.resolution, summary: summary,
 toConfirm: toConfirm, toChoose: toChoose]]
 }
-@Field static final String CHECKER_BUILD = '73f251768e9023e2'
+@Field static final String CHECKER_BUILD = '53aa07b314468ce5'
 Map checkerDispatch(Map req) {
 String op = req?.op as String
 switch (op) {
@@ -8447,6 +8603,8 @@ case 'export': return editorExport(req.body, req.inv, (req.now ?: 0L) as long)
 case 'import': return editorImport(req.body, req.inv)
 case 'review': return checkerReviewRule(req)
 case 'mcp': return checkerMcpTool(req)
+case 'listen': return checkerListen(req.key)
+case 'everyday': return [follow: everydayFollow((Map) req.doc, req.values)]
 case 'dryRun': return simDryRun((Map) req.doc, (req.now ?: 0L) as long, (req.zone ?: 'UTC') as String, req.inv)
 case 'draftStart': return authorStart((req.request ?: '') as String, req.inv, (req.opts ?: [:]))
 case 'draftSend': return authorPrepareSend((Map) req.session, (req.now ?: 0L) as long)
@@ -8456,6 +8614,13 @@ return authorOnResponse((Map) req.session, req.inv, (req.status ?: 0) as int, re
 (req.headers ?: [:]), (req.now ?: 0L) as long)
 }
 return [checkerError: 'CHECKER_NO_SUCH_OP', message: "HAI Checker has no operation called ${op}.".toString()]
+}
+Map checkerListen(Object key = null) {
+Map h = jsonKeyTake(state.haiKey, key, now())
+if (h != null) state.haiKey = h
+unsubscribe()
+subscribe(location, SHADOW_RUN_EVENT, 'checkerShadowRun')
+return [ok: true]
 }
 Map checkerEdCheck(Map req) {
 Map opts = new LinkedHashMap((Map) (req.opts ?: [:]))
@@ -8492,4 +8657,227 @@ case 'hai_propose_rule':
 return proposeEvaluate((Map) args.rule, args.requirements, inv, null, (req.opts ?: [:]))
 }
 return [checkerError: 'CHECKER_NO_SUCH_OP', message: "HAI Checker has no MCP tool called ${req.name}.".toString()]
+}
+@Field static final List SHADOW_TURNS_ON = ['setColorTemperature', 'setLevel', 'setColor', 'setHue', 'setSaturation']
+Map shadowJudge(Map d, String zone) {
+String stage = 'read'
+try { return shadowJudgeAt((Map) shadowPlain(d), zone, { String st -> stage = st }) }
+catch (Exception e) { throw new Exception("${stage}: ${e.toString()}${shadowWhere(e)}".toString()) }
+}
+Object shadowPlain(Object o) {
+if (o instanceof Map) { Map m = new LinkedHashMap(); ((Map) o).each { k, v -> m.put(k, shadowPlain(v)) }; return m }
+if (o instanceof List) return ((List) o).collect { shadowPlain(it) }
+return o
+}
+String shadowWhere(Throwable e) {
+try {
+List fs = ((e?.stackTrace ?: []) as List).findAll { Object o ->
+String c = ((StackTraceElement) o).className
+!(c ==~ /^(java|javax|jdk|sun|org\.codehaus|groovy|com\.hubitat|org\.springframework)\..*/) && ((StackTraceElement) o).lineNumber > 0
+}.take(3)
+return fs ? " at ${fs.collect { Object o -> "${((StackTraceElement) o).methodName}:${((StackTraceElement) o).lineNumber}" }.join(' < ')}".toString() : ''
+} catch (Throwable t) { return '' }
+}
+Map shadowJudgeAt(Map d, String zone, Closure stageAt) {
+Map doc = d.doc
+Map rec = d.rec
+Map run = [at: rec.at, t: rec.t, j: SHADOW_JUDGE]
+if (rec.test == true) run.x = true
+stageAt('refs')
+boolean pb = ((Map) (doc.refs ?: [:])).values().any { it instanceof Map && ((Map) it).id == PRIVATE_BOOLEAN_ID }
+try {
+Map got = shadowCompare(doc, rec, zone, pb ? true : null)
+Object pbAs = true
+if (pb && got.v == 'd') { Map alt = shadowCompare(doc, rec, zone, false); if (alt.v != 'd') { got = alt; pbAs = false } }
+if (pb) got.st = ((List) got.st).take(7) + [[s: 'cant', say: "its private boolean, which only Rule Machine holds, taken as ${pbAs}".toString()]]
+run.putAll(got)
+}
+catch (Exception e) { run.v = 'c'; run.st = [[s: 'cant', say: "HAI could not work out what it would have done (${e.toString()}${shadowWhere(e)})".toString().take(240)]] }
+stageAt('mark')
+if (pb || rec.part == true || rec.cut == true || ((List) (run.st ?: [])).any { ((Map) it).s == 'later' }) run.p = true
+List runs = new ArrayList((List) (d.past ?: []))
+runs << run
+if (runs.size() > SHADOW_RUNS) runs = runs.drop(runs.size() - SHADOW_RUNS)
+stageAt('light')
+Map s = coreShadowLight(doc, runs, d.since, stageAt)
+stageAt('times')
+if (d.nt instanceof Number) s.nt = d.nt
+if (d.mt instanceof Number) s.mt = d.mt
+if (d.nn instanceof Number) s.nn = d.nn
+if (d.ws instanceof Number) s.ws = d.ws
+return [rule: d.rule, hash: rec.h, run: run, s: s]
+}
+Map shadowCompare(Map doc, Map rec, String zone, Object pb = null) {
+long at = rec.at as long
+long span = (rec.span ?: 0L) as long
+Map refs = (doc.refs ?: [:])
+Map sim = simNew(shadowInventory(doc, rec), at - 2000L, zone)
+((List) (rec.before ?: [])).each { Object c -> List x = c; if (x[2] != null) simSeed(sim, x[0] as String, x[1] as String, x[2], at - 60000L) }
+((Map) (rec.vars ?: [:])).each { k, v -> ((Map) sim.variables).put(k, v instanceof Map ? v : [value: v]) }
+if (pb != null) ((Map) sim.variables).put(coreVarId(doc.id, PRIVATE_BOOLEAN_ID), [value: pb])
+((Map) (rec.sun ?: [:])).each { k, v -> simSetSun(sim, k as String, ((Map) v).sunrise as String, ((Map) v).sunset as String) }
+if (rec.mode != null) sim.mode = rec.mode
+Map loaded = simLoad(sim, doc)
+if (!vActivatable(loaded)) {
+String why = vBlocking(loaded).collect { Map f -> f.message }.take(2).join('; ')
+return [v: 'c', st: [[s: 'cant', say: "HAI could not load the clone to work it out: ${why ?: 'it did not pass its check'}".toString().take(160)]]]
+}
+simAdvance(sim, 2000L)
+Closure feed = { Object eo ->
+Map ev = new LinkedHashMap((Map) eo)
+ev.ts = sim.clock
+ev.remove('sourceId')
+simInject(sim, ev)
+}
+if (rec.test == true) coreRunNow(sim, doc.id as String, 'test')
+((List) (rec.ev ?: [])).each(feed)
+long gone = 0L
+((List) (rec.in ?: [])).each { Object io ->
+long dt = (((List) io)[0] as long)
+if (dt > gone) { simAdvance(sim, dt - gone); gone = dt }
+feed(((List) io)[1])
+}
+simAdvance(sim, Math.max(0L, Math.max(span, (rec.full ?: span) as long) - gone))
+List seen = (rec.seen ?: [])
+Set watched = ((List) (rec.watch ?: [])).collect { "${((List) it)[0]}|${((List) it)[1]}".toString() } as Set
+Map before = [:]
+((List) (rec.before ?: [])).each { Object c -> List x = c; before.put("${x[0]}|${x[1]}".toString(), x[2]) }
+Closure name = { String id -> id == 'location' ? 'The mode' : id.startsWith(HUB_VARIABLE_PREFIX) ? id.substring(HUB_VARIABLE_PREFIX.length()) : (((Map) refs.values().find { it instanceof Map && ((Map) it).id == id })?.name ?: id) as String }
+Closure attrWord = { Object a -> a == 'switch' ? '' : "${a} ".toString() }
+Closure was = { String k, long dt ->
+List prior = seen.findAll { Object so -> List s = so; "${s[0]}|${s[1]}" == k && (s[3] as long) < dt - 5000L }
+prior ? ((List) prior[-1])[2] : before.get(k)
+}
+List steps = []
+Set predicted = [] as Set
+Map quiet = [:]
+((List) sim.effects).eachWithIndex { Object eo, int ei ->
+Map e = eo
+Map intent = ((Map) sim.ledger).get(e.intent)
+long dt = (e.at as long) - at
+String dev = e.device as String
+String what = "${name(dev)}: ${e.command}${e.args ? ' ' + ((List) e.args).join(', ') : ''}".toString()
+List targets = ((List) (intent?.targets ?: [])).findAll { ((Map) it).value != null }
+if (dt > span + 2000L) { steps << [s: 'later', say: "${what}, after the watched time".toString()]; return }
+if (targets.isEmpty()) { ((List) quiet.get(e.command as String, [])) << name(dev); return }
+List bad = []
+boolean blind = false, replaced = false
+targets.each { Object to ->
+Map tg = to
+String k = "${dev}|${tg.attribute}".toString()
+predicted << k
+if (!watched.contains(k)) { blind = true; return }
+List got = seen.findAll { Object so -> List s = so; "${s[0]}|${s[1]}" == k && (s[3] as long) >= dt - 5000L }
+if (got.any { Object so -> shadowSame(((List) so)[2], tg.value) }) return
+if (((List) sim.effects).drop(ei + 1).any { Object fo -> Map f = fo
+f.device == dev && ((f.at as long) - (e.at as long)) in 0L..5000L &&
+((List) (((Map) ((Map) sim.ledger).get(f.intent))?.targets ?: [])).any { ((Map) it).attribute == tg.attribute } }) { replaced = true; return }
+if (got.isEmpty()) {
+Object then = was(k, dt)
+if (shadowSame(then, tg.value)) return
+bad << "${name(dev)} ${attrWord(tg.attribute)}stayed ${then ?: 'unknown'}, HAI would have made it ${tg.value}".toString()
+} else {
+bad << "${name(dev)} ${attrWord(tg.attribute)}went to ${((List) got[-1])[2]}, HAI would have made it ${tg.value}".toString()
+}
+}
+steps << (bad ? [s: 'differs', say: bad.join('; ')] : blind ? [s: 'cant', say: "${what}, not watched".toString()]
+: replaced ? [s: 'matched', say: "${what}, then changed again by the next step".toString()] : [s: 'matched', say: what])
+}
+quiet.each { Object c, Object ds ->
+List u = ((List) ds).unique()
+steps << [s: 'cant', say: "${u[0]}${u.size() > 1 ? " and ${u.size() - 1} more" : ''}: ${c}, which changes nothing HAI can watch, so it is never compared".toString()]
+}
+Closure judgeCell = { String k, Object want, String label, String who, Object start, long dt ->
+predicted << k
+if (dt > span + 2000L) { steps << [s: 'later', say: "${label}, after the watched time".toString()]; return }
+if (!watched.contains(k)) { steps << [s: 'cant', say: "${label}, not watched".toString()]; return }
+List got = seen.findAll { Object so -> List s = so; "${s[0]}|${s[1]}" == k && (s[3] as long) >= dt - 5000L }
+List prior = got ? [] : seen.findAll { Object so -> "${((List) so)[0]}|${((List) so)[1]}" == k }
+Object then = got ? null : prior ? ((List) prior[-1])[2] : start
+if (got.any { Object so -> shadowSame(((List) so)[2], want) } || (got.isEmpty() && shadowSame(then, want))) steps << [s: 'matched', say: label]
+else steps << [s: 'differs', say: (got ? "${who} went to ${((List) got[-1])[2]}, HAI would have set ${want}" : "${who} stayed ${then ?: 'unknown'}, HAI would have set ${want}").toString()]
+}
+Closure startVar = { String vid -> Object v = ((Map) (rec.vars ?: [:])).get(vid); v instanceof Map ? ((Map) v).value : v }
+Object lastMode = rec.mode
+((List) sim.trace).each { Object x ->
+Map m = x
+long dt = ((m.at ?: at) as long) - at
+if (m.what == 'modeSet' && rec.mode != null && m.mode != null) {
+if (m.mode != lastMode || dt > span + 2000L) judgeCell('location|mode', m.mode, "Mode: ${m.mode}".toString(), 'The mode', lastMode, dt)
+lastMode = m.mode
+}
+String vid = (m.variable ?: '') as String
+if (m.what != 'variableWritten' || !vid.startsWith(HUB_VARIABLE_PREFIX)) return
+String vn = vid.substring(HUB_VARIABLE_PREFIX.length())
+judgeCell("${vid}|${CORE_VARIABLE_ATTRIBUTE}".toString(), m.value, "${vn}: ${m.value}".toString(), vn, startVar(vid), dt)
+}
+Set litBy = ((List) sim.effects).findAll { Object eo ->
+Map e = eo
+e.command in SHADOW_TURNS_ON && !(e.command == 'setLevel' && (((List) (e.args ?: [])) ?: [1])[0] in [0, '0'])
+}.collect { Object eo -> "${((Map) eo).device}|switch".toString() } as Set
+seen.groupBy { Object so -> "${((List) so)[0]}|${((List) so)[1]}".toString() }.each { Object k, Object list ->
+if (predicted.contains(k)) return
+List s = ((List) list)[-1]
+if (shadowSame(s[2], before.get(k))) return
+if (litBy.contains(k) && shadowSame(s[2], 'on')) return
+steps << [s: 'differs', say: "${name(s[0] as String)} ${attrWord(s[1])}went to ${s[2]}, HAI would have left it".toString()]
+}
+if (!((List) sim.requests).isEmpty()) steps << [s: 'cant', say: 'a web request']
+if (((List) sim.trace).any { Object x -> Map m = x; m.what in DRY_RUN_OUTPUTS && !(m.what == 'variableWritten' && ((m.variable ?: '') as String).startsWith(HUB_VARIABLE_PREFIX)) }) steps << [s: 'cant', say: 'a rule variable, file or rule change']
+if (steps.isEmpty()) steps << [s: 'matched', say: 'Neither did anything']
+Map out = [v: steps.any { ((Map) it).s == 'differs' } ? 'd' : steps.any { ((Map) it).s == 'matched' } ? 'm' : 'c']
+List order = ['differs', 'matched', 'later', 'cant']
+steps = steps.withIndex().sort { List x, List y -> order.indexOf(((Map) x[0]).s) <=> order.indexOf(((Map) y[0]).s) ?: (x[1] as int) <=> (y[1] as int) }.collect { ((List) it)[0] }
+if (steps.size() > 8) {
+List rest = steps.drop(7)
+Map by = rest.countBy { ((Map) it).s }
+String says = ['matched', 'later', 'cant'].findAll { by[it] }.collect { "${by[it]} ${[matched: 'matched', later: 'after the watched time', cant: 'with nothing HAI can compare'][it]}" }.join(', ')
+steps = steps.take(7) + [[s: ((Map) rest[0]).s, say: "and ${rest.size()} more: ${says}".toString()]]
+}
+steps = steps.collect { Map x -> [s: x.s, say: (x.say as String).take(160)] }
+out.st = steps
+Map first = steps.find { ((Map) it).s == 'differs' }
+if (first) out.w = first.say
+return out
+}
+boolean shadowSame(Object a, Object b) {
+if (a == null || b == null) return a == b
+try { return new BigDecimal(a.toString()).compareTo(new BigDecimal(b.toString())) == 0 } catch (Exception e) { }
+return a.toString() == b.toString()
+}
+Map shadowInventory(Map doc, Map rec) {
+Map refs = (doc.refs ?: [:])
+Map cmds = [:], attrs = [:]
+Closure walk
+walk = { Object n ->
+if (n instanceof List) { ((List) n).each { walk(it) }; return }
+if (!(n instanceof Map)) return
+Map m = n
+List keys = (m.ref instanceof String ? [m.ref] : []) + (m.refs instanceof List ? ((List) m.refs).findAll { it instanceof String } : [])
+keys.each { Object k ->
+if (m.command) ((Set) (cmds[k] ?: (cmds[k] = [] as Set))) << m.command
+if (m.attribute) ((Set) (attrs[k] ?: (attrs[k] = [] as Set))) << m.attribute
+if (m.kind == 'button') ((Set) (attrs[k] ?: (attrs[k] = [] as Set))) << ((m.action ?: 'pushed') as String)
+}
+m.values().each { walk(it) }
+}
+walk(doc.triggers); walk(doc.conditions); walk(doc.requiredExpression); walk(doc.actions); walk(doc.onFailure)
+Map inv = invNew()
+refs.each { Object k, Object v ->
+Map r = v
+if (r.kind == 'device') {
+Set caps = ((r.capabilities ?: []) as Set)
+((Set) (cmds[k] ?: [])).each { Object c -> caps.addAll((List) (schemaOperation(c as String)?.requires ?: [])) }
+Set at = new LinkedHashSet((Set) (attrs[k] ?: []))
+((List) (rec.before ?: [])).each { Object c -> if (((List) c)[0] == r.id) at << (((List) c)[1] as String) }
+inv.devices[r.id as String] = [id: r.id, name: r.name, room: 'Shadow', capabilities: caps, commands: (cmds[k] ?: []) as Set, attributes: at]
+}
+else if (r.kind == 'variable') inv.variables[r.id as String] = [id: r.id, name: r.name, type: r.type ?: 'string', scope: r.scope ?: 'hub']
+else if (r.kind == 'mode') inv.modes << (r.name ?: r.id)
+else if (r.kind == 'rule') ((Set) inv.rules) << r.id
+else if (r.kind == 'rmRule') ((Set) inv.rmRules) << r.id
+}
+((List) (rec.modes ?: [])).each { ((Set) inv.modes) << it }
+if (rec.mode != null) { ((Set) inv.modes) << rec.mode; inv.currentMode = rec.mode }
+return inv
 }

@@ -34,6 +34,8 @@ path('/migration/api/job/stop') { action: [POST: 'migrationJobStopPost'] }
 path('/migration/api/assess') { action: [GET: 'migrationAssessGet', POST: 'migrationAssessPost'] }
 path('/migration/api/plan') { action: [POST: 'migrationPlanPost'] }
 path('/migration/api/dryrun') { action: [POST: 'migrationDryRunPost'] }
+path('/migration/api/shadow') { action: [POST: 'migrationShadowPost'] }
+path('/migration/api/rule') { action: [GET: 'migrationRuleGet'] }
 }
 def installed() { migrationInit(); runIn(3, 'migrationAccessSync') }
 def updated() { migrationInit(); runIn(3, 'migrationAccessSync') }
@@ -51,6 +53,8 @@ def migrationAccessSync() {
 for (int i = 0; i < 2; i++) {
 Map r = null
 try { r = parent?.haiMigrationAccess(haiMigrationPageLink()) } catch (Exception e) { return }
+Map h = jsonKeyTake(state.haiKey, r?.key, now())
+if (h != null) state.haiKey = h
 int want = (r?.epoch ?: 0) as int
 if (want <= ((state.accessEpoch ?: 0) as int)) return
 try { migrationRotateToken() } catch (Exception e) { log.warn "HAI Migration: kept its old address (${e.message})"; return }
@@ -94,7 +98,7 @@ return false
 @Field static final String ASSESS_MIN_AM = '2.4.36'
 @Field static final String ASSESS_REQUEST_EVENT = 'haiAssessRequest'
 @Field static final String ASSESS_DONE_EVENT = 'haiAssessDone'
-@Field static final int ASSESS_SUBSCRIPTION = 2
+@Field static final int ASSESS_SUBSCRIPTION = 3
 @Field static final long ASSESS_WAIT_IDS_MS = 120000L
 @Field static final long ASSESS_WAIT_ALL_MS = 300000L
 void migrationAssessSubscribe(boolean force) {
@@ -103,11 +107,41 @@ try {
 unsubscribe()
 subscribe(location, ASSESS_DONE_EVENT, 'migrationAssessDone')
 subscribe(location, 'haiMigrationRotate', 'migrationRotateEvent')
+subscribe(location, SHADOW_DONE_EVENT, 'migrationShadowDone')
 atomicState.assessSubscribed = ASSESS_SUBSCRIPTION
 } catch (Exception e) {
 log.warn "HAI Migration: could not listen for Automation Map's answers (${e.message})"
 }
 }
+def migrationShadowDone(evt) {
+Map d = migrationShadowVerified(evt)
+if (d == null) {
+long last = (MIGRATION_KEY_ASKED.get(app.id as String) ?: 0L) as long
+if (now() - last < 60000L) { log.debug "HAI Migration: dropped a shadow light for ${evt.value} that HAI did not sign"; return }
+MIGRATION_KEY_ASKED.put(app.id as String, now())
+migrationAccessSync()
+d = migrationShadowVerified(evt)
+if (d == null) { log.debug "HAI Migration: dropped a shadow light for ${evt.value} that HAI did not sign"; return }
+}
+if (!(d.s instanceof Map) || d.rule == null) return
+Map s = ((Map) d.s).findAll { k, v -> k in ['l', 'n', 'm', 'd', 'p', 'miss', 'last', 'since', 'w', 'g', 'u', 'ub', 'nt', 'mt', 'nw', 'nn', 'ws', 'e'] }
+if (s.w != null) s.w = (s.w as String).take(160)
+Map had = state.shadow instanceof Map ? state.shadow : [:]
+if (had.get(d.rule as String) == s) return
+Map keep = new LinkedHashMap(had)
+keep.remove(d.rule as String)
+keep.put(d.rule as String, s)
+while (keep.size() > MIGRATION_SHADOW_KEEP) keep.remove(keep.keySet().iterator().next())
+state.shadow = keep
+}
+Map migrationShadowVerified(evt) {
+Map seen = MIGRATION_SIG_SEEN.get(app.id as String)
+if (seen == null) { seen = new LinkedHashMap(); MIGRATION_SIG_SEEN.put(app.id as String, seen) }
+return rtSignedPayload(jsonKeys(state.haiKey, now()), evt.name as String, evt.value, evt.data, now(), seen)
+}
+@Field static final java.util.concurrent.ConcurrentHashMap MIGRATION_SIG_SEEN = new java.util.concurrent.ConcurrentHashMap()
+@Field static final java.util.concurrent.ConcurrentHashMap MIGRATION_KEY_ASKED = new java.util.concurrent.ConcurrentHashMap()
+@Field static final int MIGRATION_SHADOW_KEEP = 300
 String migrationAssessUnavailable(Map am) {
 if (am?.uninstalled == true) return MIG_AM_UNINSTALLED
 if (am?.appId == null) return 'Needs Automation Map 2.4.36 or later, with a decode HAI can read.'
@@ -205,6 +239,58 @@ parent.haiMigrationRecord(migRecord(pairs, rmId, pair.rmName as String, [op: 'dr
 }
 return render(status: 200, contentType: 'application/json', data: groovy.json.JsonOutput.toJson((out ?: [:]) + [rmId: rmId]))
 }
+def migrationShadowPost() {
+Map req = [:]
+try { req = new groovy.json.JsonSlurper().parseText(migBody()) } catch (Exception e) { req = [:] }
+String rmId = req.rmId as String
+String op = req.op == 'test' ? 'shadowTest' : 'shadowRuns'
+Map facts = parent.haiMigrationFacts(true)
+Map refused = migrationContractRefusal(facts)
+if (refused != null) return migrationRespond(refused)
+Map pair = rmId == null ? null : migPairs([migPairs: facts.pairs]).get(rmId)
+if (pair?.haiRuleId == null) return migrationRespond([ok: false, code: 'MIGRATION_NO_COPY', message: 'There is no HAI clone of this rule.'])
+Map out
+try { out = parent.haiMigrationCall(op, [ruleId: pair.haiRuleId]) }
+catch (Exception e) { out = [ok: false, message: "HAI could not ask the clone (${e.message}).".toString()] }
+return render(status: 200, contentType: 'application/json', data: groovy.json.JsonOutput.toJson((out ?: [:]) + [rmId: rmId]))
+}
+String migRmIdOf(String haiId) {
+Map pairs = migPairs([migPairs: ((Map) parent.haiMigrationFacts(true)).pairs])
+return pairs.find { k, v -> v instanceof Map && ((Map) v).haiRuleId == haiId }?.key as String
+}
+def migrationRuleGet() {
+String haiId = params?.haiId as String
+String rmId = haiId ? migRmIdOf(haiId) : null
+if (rmId == null) return migrationRespond([ok: false, code: 'MIGRATION_NO_COPY', message: 'HAI Migration has no Rule Machine rule paired with this one.'])
+Map gathered = migrationGatherState([rmId], [:])
+if (gathered.ok == false) return migrationRespond(gathered)
+Map row = ((List) gathered.rows).find { ((Map) it).rmId == rmId }
+if (row == null) return migrationRespond([ok: false, code: 'MIGRATION_NO_SUCH_RULE', message: 'This hub has no Rule Machine rule with that id any more.'])
+Map pairs = migPairs([migPairs: ((Map) parent.haiMigrationFacts(true)).pairs])
+Closure clean = { Object n -> ((n ?: '') as String).replaceAll(/\s*\(Rule[- ][^)]*\)\s*$/, '').trim() }
+Set moved = pairs.values().findAll { it instanceof Map && ((Map) it).phase == 'switched' }.collect { clean(((Map) it).rmName) } as Set
+List pbLeft = []
+((List) (row.warnings ?: [])).each { Object wo ->
+Map w = wo
+if (w.kind != 'rules') return
+((List) (w.pbNames ?: [])).each { Object n -> String c = clean(n); if (c && !moved.contains(c) && !pbLeft.contains(c)) pbLeft << c }
+}
+Map sh = ((Map) (state.shadow ?: [:])).get(haiId)
+return migrationRespond([ok: true, rmId: rmId, rmName: clean(row.rmName), ops: row.ops, phase: row.phase,
+warnings: ((List) (row.warnings ?: [])).findAll { ((Map) it).kind != 'rules' }.collect { ((Map) it).message }.findAll { it },
+pbLeft: pbLeft, light: sh?.l, w: sh?.w])
+}
+Map haiShadowLights() {
+Map out = [:]
+((Map) (state.shadow ?: [:])).each { k, v -> if (v instanceof Map && ((Map) v).l) out.put(k as String, ((Map) v).l) }
+return out
+}
+void haiShadowForget(List ids) {
+Map s = new LinkedHashMap((Map) (state.shadow ?: [:]))
+int before = s.size()
+ids.each { s.remove(it as String) }
+if (s.size() != before) state.shadow = s
+}
 def migrationMainPage() {
 migrationInit()
 migrationAccessSync()
@@ -234,6 +320,7 @@ def migrationPageGet() {
 render(status: 200, contentType: 'text/html', data: migrationPage({ Object n -> downloadHubFile(n as String) }))
 }
 def migrationStateGet() {
+migrationAssessSubscribe(false)
 try {
 return migrationRespond(migrationGatherState())
 } catch (Throwable t) {
@@ -249,6 +336,10 @@ def migrationApplyPost() {
 Map req = [:]
 try { req = new groovy.json.JsonSlurper().parseText(migBody()) } catch (Exception e) { req = [:] }
 String op = req.op as String
+if (req.rmId == null && req.rmIds == null && req.haiId != null) {
+req.rmId = migRmIdOf(req.haiId as String)
+if (req.rmId == null) return migrationRespond([ok: false, code: 'MIGRATION_NO_COPY', message: 'HAI Migration has no Rule Machine rule paired with this one.'])
+}
 List wanted = (req.rmIds instanceof List) ? ((List) req.rmIds).collect { it as String }
 : (req.rmId == null ? [] : [req.rmId as String])
 if (wanted.isEmpty() || op == null) {
@@ -302,6 +393,7 @@ if (op == 'clone' && out != null) migNoteRefusals([out + [rmId: rmId]], [row])
 return migrationRespond((out ?: [:]) + [state: migrationRowsAfter(wanted, reads)])
 }
 @Field static final int MIG_JOB_STEP = 4
+@Field static final java.util.concurrent.ConcurrentHashMap MIG_JOB_READS = new java.util.concurrent.ConcurrentHashMap()
 @Field static final int MIG_JOB_MAX = 500
 def migrationRunPost() {
 Map req = [:]
@@ -332,7 +424,7 @@ return migrationRespond([ok: true])
 Map migJobView(Map job) {
 List res = (job.results ?: [])
 return [id: job.id, op: job.op, state: job.state, ids: job.ids, total: ((List) job.ids).size(), handled: res.size(),
-results: res, startedAt: job.startedAt, endedAt: job.endedAt, now: now()]
+results: job.state == 'running' ? null : res, startedAt: job.startedAt, endedAt: job.endedAt, now: now()]
 }
 Map migDeleteRows(List wanted) {
 Map facts
@@ -368,13 +460,15 @@ if (state.migJobStop == true || from >= ids.size()) {
 state.remove('migJobStop')
 job.state = from >= ids.size() ? 'done' : 'stopped'
 job.endedAt = now()
+MIG_JOB_READS.remove("${app.id}|${job.id}".toString())
 state.migJob = job
 return
 }
 List wanted = ids.subList(from, Math.min(ids.size(), from + MIG_JOB_STEP)).collect { it as String }
 job.lastStepAt = now()
 state.migJob = job
-Map reads = [:]
+String rk = "${app.id}|${job.id}".toString()
+Map reads = (MIG_JOB_READS.get(rk) ?: [:])
 Map gathered
 if (job.op == 'deleteClone') gathered = migDeleteRows(wanted)
 else {
@@ -417,6 +511,7 @@ results << line
 job.results = results
 job.lastStepAt = now()
 if (results.size() >= ids.size()) { job.state = 'done'; job.endedAt = now() }
+if (job.state == 'running' && reads.containsKey('decode')) MIG_JOB_READS.put(rk, reads) else MIG_JOB_READS.remove(rk)
 state.migJob = job
 if (job.state == 'running') runIn(1, 'migJobStep', [overwrite: true])
 }
@@ -674,6 +769,8 @@ detail?.ok == true ? detail : null, facts.allowed, limits, checked,
 facts.stopped instanceof List ? facts.stopped : [],
 facts.disabled instanceof List ? facts.disabled : [], only)
 migMarkRefused((List) (st.rows ?: []), only == null)
+Map shadows = state.shadow instanceof Map ? state.shadow : [:]
+((List) (st.rows ?: [])).each { Object ro -> Map r = ro; Object s = r.haiId == null ? null : shadows.get(r.haiId as String); if (s instanceof Map) r.shadow = s }
 st.drafted = facts.drafted instanceof List ? facts.drafted : []
 st.draftWhy = facts.draftWhy instanceof Map ? facts.draftWhy : [:]
 st.environment = facts.environment
@@ -783,6 +880,71 @@ return out.toString()
 String jsonHash(Object value, Map defaults = [:]) {
 byte[] bytes = jsonCanonicalise(value, defaults).getBytes('UTF-8')
 return MessageDigest.getInstance('SHA-256').digest(bytes).collect { String.format('%02x', it) }.join('')
+}
+boolean jsonSameSecret(Object a, Object b) {
+if (!(a instanceof String) || !(b instanceof String)) return false
+String x = (String) a, y = (String) b
+if (x.isEmpty() || x.length() != y.length()) return false
+int diff = 0
+for (int i = 0; i < x.length(); i++) diff |= ((int) x.charAt(i)) ^ ((int) y.charAt(i))
+return diff == 0
+}
+String jsonHmac(String key, String text) {
+byte[] k = (key ?: '').getBytes('UTF-8')
+if (k.length > 64) k = MessageDigest.getInstance('SHA-256').digest(k)
+byte[] ipad = new byte[64]
+byte[] opad = new byte[64]
+for (int i = 0; i < 64; i++) {
+int b = i < k.length ? (int) k[i] : 0
+ipad[i] = (byte) (b ^ 0x36)
+opad[i] = (byte) (b ^ 0x5c)
+}
+MessageDigest inner = MessageDigest.getInstance('SHA-256')
+inner.update(ipad)
+inner.update((text ?: '').getBytes('UTF-8'))
+byte[] ih = inner.digest()
+MessageDigest outer = MessageDigest.getInstance('SHA-256')
+outer.update(opad)
+outer.update(ih)
+return outer.digest().collect { String.format('%02x', it) }.join('')
+}
+@Field static final long RT_SIG_WINDOW_MS = 120000L
+@Field static final int RT_SIG_SEEN_CAP = 256
+@Field static final String RT_SIG_FIELD = ',"sig":"'
+Map rtSignedPayload(List keys, String name, Object value, Object data, long at, Map seen) {
+if (!(data instanceof String)) return null
+String d = (String) data
+int cut = d.lastIndexOf(RT_SIG_FIELD)
+if (cut < 1 || !d.endsWith('"}')) return null
+String sig = d.substring(cut + RT_SIG_FIELD.length(), d.length() - 2)
+String text = d.substring(0, cut) + '}'
+String signed = "${name}|${value}|${text}".toString()
+boolean good = false
+for (Object k in (keys ?: [])) if (k instanceof String && !((String) k).isEmpty() && jsonSameSecret(jsonHmac((String) k, signed), sig)) good = true
+if (!good) return null
+Map body
+try { body = new groovy.json.JsonSlurper().parseText(text) } catch (Exception e) { return null }
+Object ts = body.ts
+Object n = body.n
+if (!(ts instanceof Number) || !(n instanceof String) || Math.abs(at - (ts as long)) > RT_SIG_WINDOW_MS) return null
+if (seen != null) {
+if (seen.containsKey(n)) return null
+List old = seen.findAll { k, v -> !(v instanceof Number) || at - (v as long) > RT_SIG_WINDOW_MS }.collect { it.key }
+old.each { seen.remove(it) }
+while (seen.size() >= RT_SIG_SEEN_CAP) seen.remove(seen.keySet().iterator().next())
+seen.put(n, ts as long)
+}
+return body
+}
+List jsonKeys(Object h, long at) {
+if (!(h instanceof Map)) return []
+List out = [((Map) h).k]
+if (((Map) h).p != null && at - ((((Map) h).at ?: 0L) as long) <= RT_SIG_WINDOW_MS) out << ((Map) h).p
+return out
+}
+Map jsonKeyTake(Object h, Object k, long at) {
+if (!(k instanceof String) || ((String) k).isEmpty() || (h instanceof Map && ((Map) h).k == k)) return null
+return [k: k, p: h instanceof Map ? ((Map) h).k : null, at: at]
 }
 void jsonWrite(Object value, StringBuilder out, Map defaults, String path) {
 if (value instanceof Map) {
@@ -1089,6 +1251,7 @@ if (ref?.name != null) out << (ref.name as String)
 if (node?.value instanceof String) out << (node.value as String)
 return out.unique()
 }
+@Field static final String SHADOW_DONE_EVENT = 'haiShadowDone'
 String rtBareId(Object id) {
 String s = id == null ? '' : id.toString()
 return s.startsWith('dev:') ? s.substring(4) : s
@@ -1300,7 +1463,7 @@ return "the trigger \"${said}\"".toString()
 @Field static final int MIG_CONFIRM_TRIES = 3
 @Field static final long MIG_CONFIRM_GAP_MS = 250L
 @Field static final String MIGRATION_PAGE_FILE = 'hai-migration.html'
-@Field static final String MIGRATION_PAGE_SHA256 = 'b3c7accc08718c98d7bb4f6f4ffd3b06c5c3eef09c1308c537c90f6d4b6477aa'
+@Field static final String MIGRATION_PAGE_SHA256 = 'daa5772f72171eac26fb6ccf89b487d3d4a1858103ba94078de02a136cc91959'
 @Field static final String MIG_PROV_OK = 'ok'
 @Field static final String MIG_PROV_PARTIAL = 'partial'
 @Field static final String MIG_PROV_ABSENT = 'absent'
@@ -1685,10 +1848,12 @@ if (limits.writable instanceof Collection) {
 Set ok = ((Collection) limits.writable).collect { it.toString() } as Set
 List names = ((List) (facts?.hubWritten ?: [])).findAll { !ok.contains(it as String) }.collect { it as String }.unique().sort()
 if (!names.isEmpty()) {
-out << [kind: 'variables', names: names, blocking: true,
-message: ("This rule changes ${names.size() == 1 ? 'a hub variable' : names.size() + ' hub variables'} HAI rules may not change: " +
-"${names.take(4).join(', ')}${names.size() > 4 ? ' and others' : ''}. Add ${names.size() == 1 ? 'it' : 'them'} to " +
-"\"Approved hub variables\" on the HAI Engine page first. HAI will not copy this rule until then.").toString()]
+String list = "${names.take(4).join(', ')}${names.size() > 4 ? ' and others' : ''}".toString()
+boolean one = names.size() == 1
+out << [kind: 'variables', names: names, blocking: false,
+message: ("Changes the hub variable${one ? '' : 's'} ${list}, which HAI rules may not change yet, so it cannot be promoted until " +
+"${one ? 'it is' : 'they are'} added to Approved hub variables on the HAI Engine page. It can be cloned and " +
+'shadowed: the clone is off and changes nothing.').toString()]
 }
 }
 if (setsMode && limits.modeAllowed == false) {
@@ -1733,11 +1898,14 @@ out.clone = (!cloned || held) && !blocks.isEmpty()
 ? migOp(true, null)
 : migOp(false, (rb.message as String) ?: 'This rule cannot be rebuilt as an HAI rule.')))
 Map off = ((List) (row.warnings ?: [])).find { ((Map) it).kind == 'disabled' }
+Map vars = ((List) (row.warnings ?: [])).find { ((Map) it).kind == 'variables' }
 out.switchOver = cloned && row.rmDisabled == true && row.live != MIG_LIVE_HAI
 ? migOp(false, 'The Rule Machine rule is disabled, so it is not running and Switch over cannot pause it. Enable it in Apps first, or start the HAI copy in the editor.')
 : cloned && off != null && row.live != MIG_LIVE_HAI
 ? migOp(false, ("Enable ${((List) off.names).join(', ')} in Devices first. Switching over would pause the Rule Machine " +
 'rule for a copy that cannot start.').toString())
+: cloned && vars != null && row.live != MIG_LIVE_HAI
+? migOp(false, vars.message as String)
 : cloned && row.live == MIG_LIVE_HAI
 ? migOp(false, 'The HAI copy is already the one running.')
 : cloned
@@ -4257,6 +4425,16 @@ Map step = [type: 'wait', waitKind: 'delay', seconds: secs]
 if (ops.cancelable == true) step.cancelable = true
 return [ok: true, steps: [step]]
 }
+List rmMeterOrder(List refs) {
+int cap = 16
+while (refs.size() > cap * 3 / 4) cap *= 2
+Closure bucket = { Object r ->
+long v = rmDevNum(r) as long
+int h = (int) (v ^ (v >>> 32))
+(h ^ (h >>> 16)) & (cap - 1)
+}
+return new ArrayList(refs).sort { Object a, Object b -> (bucket(a) <=> bucket(b)) ?: (rmDevNum(a) <=> rmDevNum(b)) }
+}
 Map rmActPrivateBoolean(Map ops, Map ruleCtx = null) {
 if (!(ops.value instanceof Boolean)) {
 return rmNo('RM_ACT_PB_VALUE', 'This action does not say what to set the private boolean to.')
@@ -4340,7 +4518,7 @@ Map step = [type: 'command', refs: got.refs, command: cmd]
 if (!args.isEmpty()) step.args = args
 if (meterMs != null) {
 step.meterMs = meterMs
-step.refs = new ArrayList((List) got.refs).sort { Object a, Object b -> rmDevNum(a) <=> rmDevNum(b) }
+step.refs = rmMeterOrder((List) got.refs)
 }
 if (!modelled) step.passthrough = true
 if (!modelled && ((List) step.refs).size() == 1 && step.meterMs == null) {
@@ -4349,7 +4527,7 @@ if (step.args != null) one.args = step.args
 step = one
 }
 if (longGapSecs != null) {
-List order = new ArrayList((List) got.refs).sort { Object a, Object b -> rmDevNum(a) <=> rmDevNum(b) }
+List order = rmMeterOrder((List) got.refs)
 List steps = []
 order.eachWithIndex { Object ref, int i ->
 if (i > 0) steps << [type: 'wait', waitKind: 'delay', seconds: longGapSecs]
