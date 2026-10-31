@@ -1014,12 +1014,15 @@ function shadowOf(r) {
   var say;
   if (l === 'grey') say = 'Can\'t be checked: ' + (s.g || 'nothing it does can be watched') + '.';
   else if (l === 'red') say = plural(s.d || 1, 'run', 'runs') + ' differed: ' + (s.w || 'it did not do what Rule Machine did') + '.';
-  else if (l === 'green') say = plural(n, 'run', 'runs') + ', all matched' + (last ? ', last ' + last + ' ago' : '') + part + '.';
+  // Since 0.5.156: gm counts the matched runs in which something was done, by the current check; qm the runs where neither
+  // side did anything, which are shown but never make a rule green; o the differences an earlier, corrected check found.
+  var gm = s.gm || 0, quietRuns = s.qm ? ', ' + s.qm + ' where neither did anything' : '';
+  if (l === 'green') say = plural(gm, 'run', 'runs') + ' where it acted, all matched' + quietRuns + (last ? ', last ' + last + ' ago' : '') + part + '.';
   else if (s.nw) say = 'Not watching: HAI could not set up any of its triggers. Press Done on the HAI Engine page to try again. Rule Machine still runs it.';
   // With an error (e) it is not said to be watching with no runs: the error line below says what happened (0.5.127).
-  else if (!n && !s.mt) say = (s.e && s.e.at ? '' : 'Watching: no runs yet' + (since ? ' in ' + since : '') + '. ') + 'Rule Machine still runs it.';
+  else if (!n && !s.mt) say = (s.e && s.e.at ? '' : (s.o ? 'Watching: no runs since the check was corrected' : 'Watching: no runs yet') + (since ? ' in ' + since : '') + '. ') + 'Rule Machine still runs it.';
   else if (!n) say = 'No runs yet. Rule Machine still runs it.';
-  else say = plural(n, 'run', 'runs') + (since ? ' in ' + since : '') + (s.miss ? ', ' + plural(s.miss, 'trigger', 'triggers') + ' not seen yet' : (s.m || 0) < 3 ? ', ' + plural(3 - (s.m || 0), 'more match', 'more matches') + ' to go green' : '') + part + '.';
+  else say = plural(n, 'run', 'runs') + (since ? ' in ' + since : '') + quietRuns + (gm < 3 ? ', ' + plural(3 - gm, 'more run', 'more runs') + ' where it acts and matches to go green' : s.miss ? ', ' + plural(s.miss, 'trigger', 'triggers') + ' not seen yet' + (gm < 10 ? ' (green on 10 matched runs where it acted)' : '') : '') + part + '.';
   // A trigger HAI cannot hear (run by another rule, a Rule Machine pause, its own address) is named, not hidden (0.5.124).
   if (s.u && l !== 'grey') say += ' ' + (s.u === 1 ? 'One trigger' : s.u + ' triggers') + ' can\'t be checked: ' + (s.ub || 'Rule Machine gives no event for it') + '.';
   // A time it did not watch is said first, in plain words (0.5.125): the clone noted it and armed the next, or its time

@@ -5841,7 +5841,7 @@ boolean checkable = false
 coreWalkShadow(doc?.actions instanceof List ? doc.actions : []) { Map a ->
 Object c = a.command
 Object op = c != null ? CATALOGUE.get(c as String) : null
-if (c && op instanceof Map && (((Map) op).writes instanceof List) && !((List) ((Map) op).writes).isEmpty()) checkable = true
+if (c && (a.ref instanceof String || a.refs instanceof List)) checkable = true
 if (a.type == 'setMode') checkable = true
 if (a.type == 'setVariable' && a.ref instanceof String && ((((Map) ((Map) (doc?.refs ?: [:])).get(a.ref))?.id ?: '') as String).startsWith(HUB_VARIABLE_PREFIX)) checkable = true
 }
@@ -5857,14 +5857,19 @@ if (blind) { s.u = blind.size(); s.ub = ((List) blind[0])[1] }
 Map lastBad = rs.reverse().find { ((Map) it).v == 'd' }
 if (lastBad) s.w = lastBad.w
 if (old) s.o = old
+int quietM = rs.count { Map r -> r.v == 'm' && r.q == true }
+if (quietM) s.qm = quietM
 stageAt?.call('light/colour')
 if (trigs.isEmpty()) s.g = blind ? s.ub : 'it has no trigger'
-else if (!checkable) s.g = 'nothing it does changes a device HAI can watch'
-s.l = s.g ? 'grey' : s.d ? 'red' : (((s.m ?: 0) as int) >= SHADOW_GREEN_RUNS && s.miss == 0) ? 'green' : 'amber'
+else if (!checkable && !rs.any { Map r -> r.v in ['m', 'd'] }) s.g = 'nothing it does changes a device HAI can watch'
+int mm = rs.count { Map r -> r.v == 'm' && r.q != true && ((r.j ?: 0) as int) == SHADOW_JUDGE }
+s.gm = mm
+s.l = s.g ? 'grey' : s.d ? 'red' : ((mm >= SHADOW_GREEN_RUNS && s.miss == 0) || mm >= SHADOW_GREEN_ANYWAY) ? 'green' : 'amber'
 return s
 }
 @Field static final int SHADOW_GREEN_RUNS = 3
-@Field static final int SHADOW_JUDGE = 6
+@Field static final int SHADOW_GREEN_ANYWAY = 10
+@Field static final int SHADOW_JUDGE = 10
 void coreWalkShadow(List actions, Closure visit) {
 if (visit == null) return
 (actions ?: []).each { Object o ->
@@ -8594,7 +8599,7 @@ int toChoose = ((List) imported.resolution).count { Map row -> row.status != BIN
 return [status: 200, body: [ok: true, rules: imported.rules, resolution: imported.resolution, summary: summary,
 toConfirm: toConfirm, toChoose: toChoose]]
 }
-@Field static final String CHECKER_BUILD = '53aa07b314468ce5'
+@Field static final String CHECKER_BUILD = 'ea55c7c153fc976a'
 Map checkerDispatch(Map req) {
 String op = req?.op as String
 switch (op) {
@@ -8685,10 +8690,13 @@ Map run = [at: rec.at, t: rec.t, j: SHADOW_JUDGE]
 if (rec.test == true) run.x = true
 stageAt('refs')
 boolean pb = ((Map) (doc.refs ?: [:])).values().any { it instanceof Map && ((Map) it).id == PRIVATE_BOOLEAN_ID }
+String rmApp = ((d.rule ?: '') as String).replaceFirst('^rm:', '')
+Map heard = [:]
+Closure who = { String dev -> heard.containsKey(dev) ? heard.get(dev) : { List l = shadowSentBy(dev); heard.put(dev, l); l }() }
 try {
-Map got = shadowCompare(doc, rec, zone, pb ? true : null)
+Map got = shadowCompare(doc, rec, zone, pb ? true : null, who, rmApp, d.past)
 Object pbAs = true
-if (pb && got.v == 'd') { Map alt = shadowCompare(doc, rec, zone, false); if (alt.v != 'd') { got = alt; pbAs = false } }
+if (pb && got.v == 'd') { Map alt = shadowCompare(doc, rec, zone, false, who, rmApp, d.past); if (alt.v != 'd') { got = alt; pbAs = false } }
 if (pb) got.st = ((List) got.st).take(7) + [[s: 'cant', say: "its private boolean, which only Rule Machine holds, taken as ${pbAs}".toString()]]
 run.putAll(got)
 }
@@ -8707,9 +8715,27 @@ if (d.nn instanceof Number) s.nn = d.nn
 if (d.ws instanceof Number) s.ws = d.ws
 return [rule: d.rule, hash: rec.h, run: run, s: s]
 }
-Map shadowCompare(Map doc, Map rec, String zone, Object pb = null) {
+Map shadowCompare(Map doc, Map rec, String zone, Object pb = null, Closure sentBy = null, String rmApp = null, List earlier = null) {
 long at = rec.at as long
 long span = (rec.span ?: 0L) as long
+long reach = at + Math.max(span, ((rec.full ?: span) as long)) + 15000L
+Closure rmSent = { String dev, String cmd ->
+List l = sentBy != null && rmApp ? sentBy(dev) : null
+l == null ? null : l.any { Map c -> c.app == "a:${rmApp}".toString() && c.cmd == cmd && (c.t as long) >= at - 5000L && (c.t as long) <= reach }
+}
+Closure rmSentAll = { String dev ->
+List l = sentBy != null && rmApp ? sentBy(dev) : null
+l == null ? null : l.findAll { Map c -> c.app == "a:${rmApp}".toString() && c.cmd != null && (c.t as long) >= at - 5000L && (c.t as long) <= reach }
+}
+Closure changedBy = { String dev, long t ->
+List l = sentBy != null && rmApp ? sentBy(dev) : null
+if (l == null) return null
+Map c = l.findAll { Map x -> (x.t as long) >= t - 4000L && (x.t as long) <= t + 1500L }.min { Map x -> Math.abs((x.t as long) - t) }
+c == null ? 'the device itself or a person' : c.app == "a:${rmApp}".toString() ? 'rm' : (c.by ?: 'another app')
+}
+long longest = Math.max(span, ((rec.full ?: span) as long))
+Closure stillRunning = { long t -> (earlier ?: []).any { Object r -> r instanceof Map && ((Map) r).at instanceof Number && ((((Map) r).at as long) < at) && ((((Map) r).at as long) >= t - longest - 5000L) } }
+if (rec.rmPaused == true) return [v: 'c', st: [[s: 'cant', say: "Rule Machine's rule was paused, so it did nothing to compare with"]]]
 Map refs = (doc.refs ?: [:])
 Map sim = simNew(shadowInventory(doc, rec), at - 2000L, zone)
 ((List) (rec.before ?: [])).each { Object c -> List x = c; if (x[2] != null) simSeed(sim, x[0] as String, x[1] as String, x[2], at - 60000L) }
@@ -8758,34 +8784,76 @@ long dt = (e.at as long) - at
 String dev = e.device as String
 String what = "${name(dev)}: ${e.command}${e.args ? ' ' + ((List) e.args).join(', ') : ''}".toString()
 List targets = ((List) (intent?.targets ?: [])).findAll { ((Map) it).value != null }
-if (dt > span + 2000L) { steps << [s: 'later', say: "${what}, after the watched time".toString()]; return }
+if (dt > span + 2000L) {
+targets.each { Object to -> predicted << "${dev}|${((Map) to).attribute}".toString() }
+steps << [s: 'later', say: "${what}, after the watched time".toString()]; return
+}
 if (targets.isEmpty()) { ((List) quiet.get(e.command as String, [])) << name(dev); return }
 List bad = []
-boolean blind = false, replaced = false
+boolean blind = false, replaced = false, attested = false
 targets.each { Object to ->
 Map tg = to
 String k = "${dev}|${tg.attribute}".toString()
 predicted << k
 if (!watched.contains(k)) { blind = true; return }
-List got = seen.findAll { Object so -> List s = so; "${s[0]}|${s[1]}" == k && (s[3] as long) >= dt - 5000L }
-if (got.any { Object so -> shadowSame(((List) so)[2], tg.value) }) return
+Map nextW = ((List) sim.effects).drop(ei + 1).find { Object fo -> Map f = fo
+f.device == dev && ((List) (((Map) ((Map) sim.ledger).get(f.intent))?.targets ?: [])).any { ((Map) it).attribute == tg.attribute } }
+long until = nextW != null ? (nextW.at as long) - at : Long.MAX_VALUE
+List got = seen.findAll { Object so -> List s = so; "${s[0]}|${s[1]}" == k && (s[3] as long) >= dt - 5000L && (s[3] as long) < until }
+if (got.any { Object so -> shadowNear(tg.attribute, ((List) so)[2], tg.value) }) return
 if (((List) sim.effects).drop(ei + 1).any { Object fo -> Map f = fo
 f.device == dev && ((f.at as long) - (e.at as long)) in 0L..5000L &&
 ((List) (((Map) ((Map) sim.ledger).get(f.intent))?.targets ?: [])).any { ((Map) it).attribute == tg.attribute } }) { replaced = true; return }
+if (rmSent(dev, e.command as String) == true) { attested = true; return }
 if (got.isEmpty()) {
 Object then = was(k, dt)
-if (shadowSame(then, tg.value)) return
+if (shadowNear(tg.attribute, then, tg.value)) return
 bad << "${name(dev)} ${attrWord(tg.attribute)}stayed ${then ?: 'unknown'}, HAI would have made it ${tg.value}".toString()
 } else {
 bad << "${name(dev)} ${attrWord(tg.attribute)}went to ${((List) got[-1])[2]}, HAI would have made it ${tg.value}".toString()
 }
 }
 steps << (bad ? [s: 'differs', say: bad.join('; ')] : blind ? [s: 'cant', say: "${what}, not watched".toString()]
-: replaced ? [s: 'matched', say: "${what}, then changed again by the next step".toString()] : [s: 'matched', say: what])
+: replaced ? [s: 'matched', say: "${what}, then changed again by the next step".toString()]
+: attested ? [s: 'matched', say: "${what} (Rule Machine sent it too)".toString()] : [s: 'matched', say: what])
+}
+Map quietDev = [:]
+((List) sim.effects).each { Object eo -> Map e = eo
+if ((e.at as long) - at <= span + 2000L && !((List) (((Map) ((Map) sim.ledger).get(e.intent))?.targets ?: [])).any { ((Map) it).value != null })
+quietDev.put("${e.command}|${e.device}".toString(), e.device as String)
 }
 quiet.each { Object c, Object ds ->
-List u = ((List) ds).unique()
-steps << [s: 'cant', say: "${u[0]}${u.size() > 1 ? " and ${u.size() - 1} more" : ''}: ${c}, which changes nothing HAI can watch, so it is never compared".toString()]
+Map by = [matched: [], differs: [], other: [], cant: []]
+new ArrayList(quietDev.findAll { k, v -> (k as String).startsWith("${c}|") }.values()).unique().each { Object dv ->
+List sent = rmSentAll(dv as String)
+if (sent == null) ((List) by.cant) << name(dv as String)
+else if (sent.any { ((Map) it).cmd == c }) ((List) by.matched) << name(dv as String)
+else if (sent) ((List) by.other) << "${name(dv as String)} (Rule Machine sent ${((List) sent.collect { ((Map) it).cmd }.unique()).join(', ')})".toString()
+else ((List) by.differs) << name(dv as String)
+}
+Closure who = { List l -> "${l[0]}${l.size() > 1 ? " and ${l.size() - 1} more" : ''}".toString() }
+if (by.matched) steps << [s: 'matched', say: "${who((List) by.matched)}: ${c} (Rule Machine sent it too)".toString()]
+if (by.differs) steps << [s: 'differs', say: "${who((List) by.differs)}: HAI would have sent ${c}, Rule Machine sent nothing".toString()]
+if (by.other) steps << [s: 'cant', say: "${who((List) by.other)}: HAI would have sent ${c}".toString()]
+if (by.cant) steps << [s: 'cant', say: "${who((List) by.cant)}: ${c}, the device's history could not be read".toString()]
+}
+Set mayQuiet = [] as Set
+coreWalkShadow(doc?.actions instanceof List ? doc.actions : []) { Map a ->
+Object op = a.command != null ? CATALOGUE.get(a.command as String) : null
+if (a.command == null || (op instanceof Map && ((List) (((Map) op).writes ?: [])))) return
+((a.ref instanceof String ? [a.ref] : []) + (a.refs instanceof List ? a.refs : [])).each { Object rk ->
+String id = ((Map) refs.get(rk))?.id as String
+if (id != null) mayQuiet << "${a.command}|${id}".toString()
+}
+}
+mayQuiet.findAll { !quietDev.containsKey(it) }.collect { (it as String).split('\\|', 2) as List }.groupBy { it[1] }.each { Object dv, Object cs ->
+List sent = rmSentAll(dv as String)
+if (!sent) return
+((List) cs).collect { it[0] }.findAll { Object c -> sent.any { ((Map) it).cmd == c } }.each { Object c ->
+Map hit = sent.find { ((Map) it).cmd == c }
+if (stillRunning(hit.t as long)) steps << [s: 'later', say: "${name(dv as String)}: ${c}, Rule Machine's own step from an earlier run still in progress".toString()]
+else steps << [s: 'differs', say: "${name(dv as String)}: Rule Machine sent ${c}, HAI would not have".toString()]
+}
 }
 Closure judgeCell = { String k, Object want, String label, String who, Object start, long dt ->
 predicted << k
@@ -8815,17 +8883,49 @@ Set litBy = ((List) sim.effects).findAll { Object eo ->
 Map e = eo
 e.command in SHADOW_TURNS_ON && !(e.command == 'setLevel' && (((List) (e.args ?: [])) ?: [1])[0] in [0, '0'])
 }.collect { Object eo -> "${((Map) eo).device}|switch".toString() } as Set
+Map named = [:]
+Set restored = [] as Set
+Closure flat
+flat = { Object v, Set into -> if (v instanceof Map) ((Map) v).values().each { flat(it, into) } else if (v instanceof List) ((List) v).each { flat(it, into) } else if (v != null) into << v }
+coreWalkShadow(doc?.actions instanceof List ? doc.actions : []) { Map a ->
+List keys = (a.ref instanceof String ? [a.ref] : []) + (a.refs instanceof List ? ((List) a.refs).findAll { it instanceof String } : [])
+keys.each { Object rk ->
+String id = ((Map) refs.get(rk))?.id as String
+if (id == null) return
+if (a.type == 'restore') restored << id
+Set vals = (Set) (named[id] ?: (named[id] = [] as Set))
+a.each { Object ak, Object av -> if (!(ak in ['type', 'ref', 'refs', 'then', 'otherwise', 'elseIf', 'steps', 'actions', 'cases'])) flat(av, vals) }
+}
+}
+boolean acted = !((List) sim.effects).isEmpty()
 seen.groupBy { Object so -> "${((List) so)[0]}|${((List) so)[1]}".toString() }.each { Object k, Object list ->
 if (predicted.contains(k)) return
 List s = ((List) list)[-1]
 if (shadowSame(s[2], before.get(k))) return
 if (litBy.contains(k) && shadowSame(s[2], 'on')) return
-steps << [s: 'differs', say: "${name(s[0] as String)} ${attrWord(s[1])}went to ${s[2]}, HAI would have left it".toString()]
+String dv = s[0] as String
+Set vals = (Set) named[dv]
+if (vals != null && !(acted && restored.contains(dv)) && !vals.any { shadowSame(it, s[2]) }) {
+steps << [s: 'cant', say: "${name(dv)} ${attrWord(s[1])}went to ${s[2]}, a value this rule never sets: another app or the device changed it".toString()]
+return
+}
+String by = changedBy(dv, at + (s[3] as long))
+if (by != null && by != 'rm') {
+steps << [s: 'cant', say: "${name(dv)} ${attrWord(s[1])}went to ${s[2]}, changed by ${by}, not by this rule".toString()]
+return
+}
+if (by == 'rm' && stillRunning(at + (s[3] as long))) {
+steps << [s: 'later', say: "${name(dv)} ${attrWord(s[1])}went to ${s[2]}: Rule Machine's own step from an earlier run still in progress".toString()]
+return
+}
+steps << [s: 'differs', say: "${name(dv)} ${attrWord(s[1])}went to ${s[2]}, HAI would have left it".toString()]
 }
 if (!((List) sim.requests).isEmpty()) steps << [s: 'cant', say: 'a web request']
 if (((List) sim.trace).any { Object x -> Map m = x; m.what in DRY_RUN_OUTPUTS && !(m.what == 'variableWritten' && ((m.variable ?: '') as String).startsWith(HUB_VARIABLE_PREFIX)) }) steps << [s: 'cant', say: 'a rule variable, file or rule change']
-if (steps.isEmpty()) steps << [s: 'matched', say: 'Neither did anything']
+boolean quietRun = steps.isEmpty()
+if (quietRun) steps << [s: 'matched', say: 'Neither did anything']
 Map out = [v: steps.any { ((Map) it).s == 'differs' } ? 'd' : steps.any { ((Map) it).s == 'matched' } ? 'm' : 'c']
+if (quietRun) out.q = true
 List order = ['differs', 'matched', 'later', 'cant']
 steps = steps.withIndex().sort { List x, List y -> order.indexOf(((Map) x[0]).s) <=> order.indexOf(((Map) y[0]).s) ?: (x[1] as int) <=> (y[1] as int) }.collect { ((List) it)[0] }
 if (steps.size() > 8) {
@@ -8839,6 +8939,39 @@ out.st = steps
 Map first = steps.find { ((Map) it).s == 'differs' }
 if (first) out.w = first.say
 return out
+}
+List shadowSentBy(String dev) {
+String id = (dev ?: '').replaceFirst('^dev:', '')
+if (!(id ==~ /[0-9]{1,9}/)) return null
+List out = null
+try {
+httpGet([uri: "http://127.0.0.1:8080/device/eventsJson/${id}".toString(), contentType: 'application/json', timeout: 15]) { resp ->
+if (resp?.status != 200 || !(resp.data instanceof List)) return
+java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ")
+out = []
+((List) resp.data).each { Object eo ->
+Map e = eo instanceof Map ? eo : null
+String n = (e?.name ?: '') as String
+String pb = (e?.producedBy ?: '') as String
+boolean cmdRow = n.startsWith('command-')
+if (!cmdRow && !(pb ==~ /(?s).*installedapp\/configure\/[0-9]+.*/)) return
+def ma = pb =~ /installedapp\/configure\/([0-9]+)/
+def md = pb =~ /device\/edit\/([0-9]+)/
+def mn = pb =~ />([^<]+)</
+Long t = null
+try { t = f.parse(e.date as String).time } catch (Exception x) { t = null }
+if (t == null) return
+out << [t: t, cmd: cmdRow ? n.substring(8) : null, app: ma.find() ? "a:${ma.group(1)}".toString() : md.find() ? "d:${md.group(1)}".toString() : null,
+by: mn.find() ? mn.group(1).trim() : null]
+}
+}
+} catch (Throwable t) { out = null }
+return out
+}
+boolean shadowNear(Object attr, Object a, Object b) {
+if (shadowSame(a, b)) return true
+if (attr != 'colorTemperature' || a == null || b == null) return false
+try { BigDecimal x = new BigDecimal(a.toString()), y = new BigDecimal(b.toString()); return (x - y).abs() <= y.abs() * 0.01 } catch (Exception e) { return false }
 }
 boolean shadowSame(Object a, Object b) {
 if (a == null || b == null) return a == b

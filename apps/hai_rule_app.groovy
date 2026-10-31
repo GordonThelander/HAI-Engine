@@ -550,8 +550,13 @@ sh.mt = ((List) sh.next)[0]
 ruleShadowArm(sh, doc, now(), true)
 changed = true
 }
+if (changed || tell) {
+Map light = ruleShadowLight(doc, sh)
+Map kept = light.findAll { k, v -> !(k in ['nt', 'nn', 'ws']) }
+if (sh.s != kept) { sh.s = kept; changed = true }
+ruleShadowAnnounce(rt.ruleId as String, [s: light])
+}
 if (changed) state.shadow = sh
-if (changed || tell) ruleShadowAnnounce(rt.ruleId as String, [s: ruleShadowLight(doc, sh)])
 } catch (Exception e) {
 log.warn "HAI rule ${rt?.ruleId}: shadowing could not be set up (${e.message})"
 }
@@ -1007,6 +1012,25 @@ SHADOW_OPEN.put(app.id as String, until)
 }
 if (ruleShadowInput(w, ruleShadowEventsOf(evt, dev, attr, name, evt.value as String, at), at) || moved) state.shadow = sh
 }
+Boolean ruleShadowRmPaused(Map rt) {
+String rmId = ((rt?.ruleId ?: '') as String).replaceFirst('^rm:', '')
+if (!(rmId ==~ /[0-9]{1,9}/)) return null
+String key = "${app.id}|paused".toString()
+List memo = SHADOW_RECENT.get(key)
+if (memo != null && now() - (memo[1] as long) < 600000L) return (Boolean) memo[0]
+Boolean paused = null
+try {
+httpGet([uri: "http://127.0.0.1:8080/installedapp/statusJson/${rmId}".toString(), contentType: 'application/json', timeout: 10]) { resp ->
+Object rows = resp?.status == 200 && resp.data instanceof Map ? ((Map) resp.data).appState : null
+if (rows instanceof List) {
+Map row = ((List) rows).find { it instanceof Map && ((Map) it).name == 'paused' }
+paused = row != null && (row.value == true || row.value == 'true')
+}
+}
+} catch (Exception e) { paused = null }
+SHADOW_RECENT.put(key, [paused, now()])
+return paused
+}
 def haiShadowEnd() {
 Map sh = null
 try {
@@ -1026,6 +1050,7 @@ void ruleShadowHand(Map sh, Map doc, Map rt, boolean cut) {
 Map w = sh.remove('w')
 w.span = Math.min(now(), w.until as long) - (w.at as long)
 if (cut) w.cut = true
+if (ruleShadowRmPaused(rt) == true) w.rmPaused = true
 List past = ((List) (sh.runs ?: [])).collect { Object r -> ((Map) r).findAll { k, v -> k != 'st' } }
 Map body = [rule: rt.ruleId, doc: doc, rec: w, past: past, since: sh.since]
 if (sh.next != null) body.nt = ((List) sh.next)[0]
@@ -1061,7 +1086,27 @@ Map sh = ruleShadowState()
 if (sh == null) return [ok: false, message: 'This clone is not being shadowed.']
 Map s = sh.s instanceof Map ? sh.s : null
 if (s == null) { Map doc = ruleShadowDoc((Map) state.rt); if (doc != null) s = ruleShadowLight(doc, sh) }
-return [ok: true, runs: sh.runs ?: [], s: s, watching: sh.w instanceof Map, since: sh.since]
+return [ok: true, runs: sh.runs ?: [], s: s, watching: sh.w instanceof Map, since: sh.since, sent: ruleShadowSentProbe()]
+}
+List ruleShadowSentProbe() {
+List out = []
+Map doc = ruleShadowDoc((Map) state.rt)
+List ids = ((Map) (doc?.refs ?: [:])).values().findAll { it instanceof Map && ((Map) it).kind == 'device' }.collect { ((Map) it).id as String }.unique().take(8)
+ids.each { String id ->
+def d = ruleDevice(id)
+if (d == null) return
+List all = [], evs = []
+try { all = (d.eventsSince(new Date(now() - 21600000L), [max: 40]) ?: []) as List; evs = all.findAll { (it.name as String)?.startsWith('command-') }.take(5) }
+catch (Throwable t) { out << [d: id, err: "eventsSince: ${t.message}".toString().take(200)]; return }
+if (evs.isEmpty()) out << [d: id, cmds: 0, events: all.size(), names: all.take(5).collect { it.name as String }]
+evs.each { e ->
+Map row = [d: id, n: e.name as String, v: e.value as String, t: e.date?.time]
+try { row.app = e.toUIMap()?.installedAppId } catch (Throwable t) { row.appErr = (t.message ?: t.toString()).take(200) }
+if (row.app == null) { try { row.json = (e.toJson() as String)?.take(300) } catch (Throwable t) { row.jsonErr = (t.message ?: t.toString()).take(200) } }
+out << row
+}
+}
+return out
 }
 Map haiShadowTest() {
 Map sh = ruleShadowState()
@@ -1090,6 +1135,10 @@ sh.s = d.s
 state.shadow = sh
 }
 Map haiBuild() { return [build: RT_CHILD_BUILD, version: RT_VERSION] }
+Map haiShadowTell() {
+ruleShadowSync((Map) state.rt, true)
+return [ok: true]
+}
 Map haiSetup(List devices, List allow, Map purposes, Map options = [:]) {
 List ok = ((devices ?: []) as List).collect { rtBareId(it) }.findAll { ((allow ?: []) as List).contains(it) }
 List have = ((settings.ruleDevices ?: []) as List).collect { rtBareId(it.id?.toString()) }.sort()
@@ -4748,7 +4797,7 @@ boolean checkable = false
 coreWalkShadow(doc?.actions instanceof List ? doc.actions : []) { Map a ->
 Object c = a.command
 Object op = c != null ? CATALOGUE.get(c as String) : null
-if (c && op instanceof Map && (((Map) op).writes instanceof List) && !((List) ((Map) op).writes).isEmpty()) checkable = true
+if (c && (a.ref instanceof String || a.refs instanceof List)) checkable = true
 if (a.type == 'setMode') checkable = true
 if (a.type == 'setVariable' && a.ref instanceof String && ((((Map) ((Map) (doc?.refs ?: [:])).get(a.ref))?.id ?: '') as String).startsWith(HUB_VARIABLE_PREFIX)) checkable = true
 }
@@ -4764,14 +4813,19 @@ if (blind) { s.u = blind.size(); s.ub = ((List) blind[0])[1] }
 Map lastBad = rs.reverse().find { ((Map) it).v == 'd' }
 if (lastBad) s.w = lastBad.w
 if (old) s.o = old
+int quietM = rs.count { Map r -> r.v == 'm' && r.q == true }
+if (quietM) s.qm = quietM
 stageAt?.call('light/colour')
 if (trigs.isEmpty()) s.g = blind ? s.ub : 'it has no trigger'
-else if (!checkable) s.g = 'nothing it does changes a device HAI can watch'
-s.l = s.g ? 'grey' : s.d ? 'red' : (((s.m ?: 0) as int) >= SHADOW_GREEN_RUNS && s.miss == 0) ? 'green' : 'amber'
+else if (!checkable && !rs.any { Map r -> r.v in ['m', 'd'] }) s.g = 'nothing it does changes a device HAI can watch'
+int mm = rs.count { Map r -> r.v == 'm' && r.q != true && ((r.j ?: 0) as int) == SHADOW_JUDGE }
+s.gm = mm
+s.l = s.g ? 'grey' : s.d ? 'red' : ((mm >= SHADOW_GREEN_RUNS && s.miss == 0) || mm >= SHADOW_GREEN_ANYWAY) ? 'green' : 'amber'
 return s
 }
 @Field static final int SHADOW_GREEN_RUNS = 3
-@Field static final int SHADOW_JUDGE = 6
+@Field static final int SHADOW_GREEN_ANYWAY = 10
+@Field static final int SHADOW_JUDGE = 10
 void coreWalkShadow(List actions, Closure visit) {
 if (visit == null) return
 (actions ?: []).each { Object o ->
@@ -4789,7 +4843,7 @@ if (v instanceof List) ((List) v).each { Object e -> if (e instanceof Map && ((M
 @Field static final String SHADOW_DONE_EVENT = 'haiShadowDone'
 @Field static final int SHADOW_RUNS = 20
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = 'f7b6c0d4db9eb27e'
+@Field static final String RT_CHILD_BUILD = '46e4fea959358494'
 @Field static final long RT_GRACE_MS = 30000L
 @Field static final long RT_WATCHDOG_EVERY_MS = 900000L
 @Field static final long RT_RECOVERY_MS = 120000L

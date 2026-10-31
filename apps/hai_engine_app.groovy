@@ -676,7 +676,7 @@ Object last = state.runtimeAnnouncedAt
 String when = last == null ? 'not yet' : runtimeClock().call(last as long)
 return "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT}). ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
 }
-@Field static final String ENGINE_APP_VERSION = '0.5.150-dev'
+@Field static final String ENGINE_APP_VERSION = '0.5.156-dev'
 @Field static final int ENGINE_MAX_PROPOSALS = 20
 @Field static final java.util.concurrent.ConcurrentHashMap ENGINE_DRAFT_INV = new java.util.concurrent.ConcurrentHashMap()
 @Field static final int ENGINE_MAX_ATTRIBUTES = 64
@@ -1594,13 +1594,24 @@ if (m == null) return null
 Map rules = (rtRegistry(runtimePlat()).rules ?: [:])
 Map live = [:]
 List gone = []
+Map migrated = haiMigratedIds()
 ((Map) (m.haiShadowLights() ?: [:])).each { k, v ->
 Map e = rules.get(k as String)
-if (e != null && e.state != 'removed') live.put(k, v) else gone << (k as String)
+if (e != null && e.state != 'removed' && migrated.get(k as String) != 'switched') live.put(k, v) else gone << (k as String)
 }
 if (gone) m.haiShadowForget(gone)
 return live
 } catch (Exception e) { return null }
+}
+def haiShadowRelight() { runIn(15, 'haiShadowRelightNow', [overwrite: true]) }
+def haiShadowRelightNow() {
+Map rules = (rtRegistry(runtimePlat()).rules ?: [:])
+haiMigratedIds().keySet().each { Object rid ->
+Map e = rules.get(rid as String)
+if (e == null || e.state == 'removed') return
+try { runtimeChildCall(e.childId, 'haiShadowTell', []) }
+catch (Exception ex) { log.debug "HAI Engine: ${rid} did not say its light again (${ex.message})" }
+}
 }
 Map haiMigratedIds() {
 Map out = [:]
@@ -3649,6 +3660,7 @@ catch (Exception e) { if (!(e.message ?: '').contains('haiOverdue')) throw e }
 return c.haiOverdue(args[0], args[1], args[2])
 case 'haiRuntimeState': return c.haiRuntimeState()
 case 'haiRecent': return c.haiRecent()
+case 'haiShadowTell': return c.haiShadowTell()
 case 'haiResumeStaged': return c.haiResumeStaged()
 case 'haiCommitNow': return c.haiCommitNow(args[0] as String)
 case 'haiDiscardStaged': return c.haiDiscardStaged(args[0] as String)
@@ -5964,7 +5976,7 @@ return [status: 202, body: body, payload: out.payload]
 }
 @Field static final String RT_ENGINE = 'HAI-1'
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = 'f7b6c0d4db9eb27e'
+@Field static final String RT_CHILD_BUILD = '46e4fea959358494'
 @Field static final long RT_WATCHDOG_EVERY_MS = 900000L
 @Field static final long RT_RECOVERY_MS = 120000L
 @Field static final long RT_CLAIM_MS = 600000L
@@ -8487,4 +8499,4 @@ Map m = [ok: false, code: code, message: message]
 m.putAll(extra ?: [:])
 return m
 }
-@Field static final String CHECKER_BUILD = '53aa07b314468ce5'
+@Field static final String CHECKER_BUILD = 'ea55c7c153fc976a'

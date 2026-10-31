@@ -54,7 +54,10 @@ for (int i = 0; i < 2; i++) {
 Map r = null
 try { r = parent?.haiMigrationAccess(haiMigrationPageLink()) } catch (Exception e) { return }
 Map h = jsonKeyTake(state.haiKey, r?.key, now())
-if (h != null) state.haiKey = h
+if (h != null) {
+state.haiKey = h
+try { parent?.haiShadowRelight() } catch (Exception e) { log.warn "HAI Migration: the clones' lights were not asked for again (${e.message})" }
+}
 int want = (r?.epoch ?: 0) as int
 if (want <= ((state.accessEpoch ?: 0) as int)) return
 try { migrationRotateToken() } catch (Exception e) { log.warn "HAI Migration: kept its old address (${e.message})"; return }
@@ -124,7 +127,7 @@ d = migrationShadowVerified(evt)
 if (d == null) { log.debug "HAI Migration: dropped a shadow light for ${evt.value} that HAI did not sign"; return }
 }
 if (!(d.s instanceof Map) || d.rule == null) return
-Map s = ((Map) d.s).findAll { k, v -> k in ['l', 'n', 'm', 'd', 'p', 'miss', 'last', 'since', 'w', 'g', 'u', 'ub', 'nt', 'mt', 'nw', 'nn', 'ws', 'e'] }
+Map s = ((Map) d.s).findAll { k, v -> k in ['l', 'n', 'm', 'd', 'p', 'miss', 'last', 'since', 'w', 'g', 'u', 'ub', 'nt', 'mt', 'nw', 'nn', 'ws', 'e', 'o', 'qm', 'gm'] }
 if (s.w != null) s.w = (s.w as String).take(160)
 Map had = state.shadow instanceof Map ? state.shadow : [:]
 if (had.get(d.rule as String) == s) return
@@ -770,7 +773,13 @@ facts.stopped instanceof List ? facts.stopped : [],
 facts.disabled instanceof List ? facts.disabled : [], only)
 migMarkRefused((List) (st.rows ?: []), only == null)
 Map shadows = state.shadow instanceof Map ? state.shadow : [:]
-((List) (st.rows ?: [])).each { Object ro -> Map r = ro; Object s = r.haiId == null ? null : shadows.get(r.haiId as String); if (s instanceof Map) r.shadow = s }
+List stale = []
+((List) (st.rows ?: [])).each { Object ro -> Map r = ro
+Object s = r.haiId == null ? null : shadows.get(r.haiId as String)
+if (s instanceof Map && r.phase == 'switched') { stale << (r.haiId as String); return }
+if (s instanceof Map) r.shadow = s
+}
+if (stale) haiShadowForget(stale)
 st.drafted = facts.drafted instanceof List ? facts.drafted : []
 st.draftWhy = facts.draftWhy instanceof Map ? facts.draftWhy : [:]
 st.environment = facts.environment
@@ -1463,7 +1472,7 @@ return "the trigger \"${said}\"".toString()
 @Field static final int MIG_CONFIRM_TRIES = 3
 @Field static final long MIG_CONFIRM_GAP_MS = 250L
 @Field static final String MIGRATION_PAGE_FILE = 'hai-migration.html'
-@Field static final String MIGRATION_PAGE_SHA256 = 'daa5772f72171eac26fb6ccf89b487d3d4a1858103ba94078de02a136cc91959'
+@Field static final String MIGRATION_PAGE_SHA256 = '2ba0636e4d9274722ff2b3163f3a6ac888ba54b9c0ffa56e83262147c224cb82'
 @Field static final String MIG_PROV_OK = 'ok'
 @Field static final String MIG_PROV_PARTIAL = 'partial'
 @Field static final String MIG_PROV_ABSENT = 'absent'
@@ -3074,6 +3083,12 @@ return (base + ' (from Rule Machine)').take(80)
 Map rmRefsFor(Map doc, Map detailRule, Map hubVariableTypes = null, Map locals = null) {
 Set keys = [] as Set
 rmCollectRefs(doc, keys)
+Set named = [] as Set
+rmTextVariables(doc.actions, named)
+named.each { Object n ->
+String local = (RULE_VARIABLE_PREFIX + n).toString()
+keys << (keys.contains(local) || locals?.containsKey(local) ? local : (RM_HUB_VARIABLE_PREFIX + n).toString())
+}
 Map needs = rmCapabilitiesNeeded(doc)
 Map types = rmVariableTypes(doc)
 Map names = rmDevicesNamed(detailRule)
@@ -3289,6 +3304,16 @@ if (node instanceof List) ((List) node).each { look(it) }
 }
 look(doc)
 return out
+}
+void rmTextVariables(Object node, Set out) {
+if (node instanceof Map) { ((Map) node).each { k, v -> if (k != 'refs') rmTextVariables(v, out) }; return }
+if (node instanceof List) { ((List) node).each { rmTextVariables(it, out) }; return }
+if (!(node instanceof String) || !((String) node).contains('%')) return
+java.util.regex.Matcher m = ((String) node) =~ /%([^%\s][^%]{0,63})%/
+while (m.find()) {
+String n = m.group(1).trim()
+if (n && !(n in ['device', 'value', 'date', 'time', 'now', 'text', 'elapsed']) && !(n ==~ /^(date|time|now):.*/)) out << n
+}
 }
 void rmCollectRefs(Object node, Set out) {
 if (node instanceof Map) {
