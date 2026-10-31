@@ -4,4 +4,4 @@ Walkthroughs of HAI, the rule engine for Hubitat.
 
 | Video | Version | What it shows |
 |---|---|---|
-| Coming soon: HAI walkthrough | Preview | Writing a rule, simulating it, AI drafting, run history, backups, Automation Map, and migrating Rule Machine rules with shadow mode |
+| [HAI walkthrough](hai-walkthrough.mp4) (2 min, [captions](hai-walkthrough.srt)) | Preview 0.5.156 | Writing a rule, a rule with variables, calculations and everyday words, simulating, AI drafting, run history, backups, and migrating a Rule Machine rule with shadow mode |
