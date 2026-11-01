@@ -779,6 +779,10 @@ Object s = r.haiId == null ? null : shadows.get(r.haiId as String)
 if (s instanceof Map && r.phase == 'switched') { stale << (r.haiId as String); return }
 if (s instanceof Map) r.shadow = s
 }
+if (only == null) {
+Set live = ((List) (st.rows ?: [])).findAll { Object ro -> ((Map) ro).haiId != null && ((Map) ro).phase != 'switched' }.collect { ((Map) it).haiId as String } as Set
+stale.addAll(shadows.keySet().findAll { Object k -> !live.contains(k as String) && !stale.contains(k as String) })
+}
 if (stale) haiShadowForget(stale)
 st.drafted = facts.drafted instanceof List ? facts.drafted : []
 st.draftWhy = facts.draftWhy instanceof Map ? facts.draftWhy : [:]
@@ -1472,7 +1476,7 @@ return "the trigger \"${said}\"".toString()
 @Field static final int MIG_CONFIRM_TRIES = 3
 @Field static final long MIG_CONFIRM_GAP_MS = 250L
 @Field static final String MIGRATION_PAGE_FILE = 'hai-migration.html'
-@Field static final String MIGRATION_PAGE_SHA256 = '2ba0636e4d9274722ff2b3163f3a6ac888ba54b9c0ffa56e83262147c224cb82'
+@Field static final String MIGRATION_PAGE_SHA256 = 'cd87f2c0c8968de7ef3ddd0cdc19716fa10a5ca520faf1b87c7caae7f4cdb405'
 @Field static final String MIG_PROV_OK = 'ok'
 @Field static final String MIG_PROV_PARTIAL = 'partial'
 @Field static final String MIG_PROV_ABSENT = 'absent'

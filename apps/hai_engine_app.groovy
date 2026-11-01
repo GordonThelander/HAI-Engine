@@ -676,7 +676,7 @@ Object last = state.runtimeAnnouncedAt
 String when = last == null ? 'not yet' : runtimeClock().call(last as long)
 return "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT}). ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
 }
-@Field static final String ENGINE_APP_VERSION = '0.5.156-dev'
+@Field static final String ENGINE_APP_VERSION = '0.5.158-dev'
 @Field static final int ENGINE_MAX_PROPOSALS = 20
 @Field static final java.util.concurrent.ConcurrentHashMap ENGINE_DRAFT_INV = new java.util.concurrent.ConcurrentHashMap()
 @Field static final int ENGINE_MAX_ATTRIBUTES = 64
@@ -5254,7 +5254,7 @@ return s.length() > max ? s.substring(0, max) + '...' : s
 @Field static final int EDITOR_MAX_ID_CHARS = 64
 @Field static final String EDITOR_EFFECTS = "Save draft keeps this rule here, in the editor, and changes nothing on the hub. Activate on hub (Update on hub for a rule already there) is the one that puts it live, and HAI checks it before it runs. Run rule runs the hub's version once, now."
 @Field static final String EDITOR_PAGE_FILE = 'hai-editor.html'
-@Field static final String EDITOR_PAGE_SHA256 = '4414753ab9e0058affebc5cb4db79b9f8e0b6429d7918ec2b8e1492f539e4713'
+@Field static final String EDITOR_PAGE_SHA256 = 'bb425899e9dc1a615d759ea90ec52a87cd3f5929d7fb929ef2b10b33a0f7ca8b'
 @Field static final String EDITOR_SPECS_FILE = 'hai-editor-specs.json'
 @Field static final String EDITOR_SPECS_SHA256 = 'd24031d13143e19736db036db89e38ff3bf9c86a628f578a0666d89ad5f12f23'
 @Field static final int EDITOR_MAX_OTHER_COMMANDS = 200
@@ -5862,7 +5862,7 @@ out.remove('timing')
 return out
 }
 @Field static final String HELP_PAGE_FILE = 'hai-help.html'
-@Field static final String HELP_PAGE_SHA256 = 'e0dbdaa496be50c89f522b49eee3b1f4c775e6831a2595f2994928ca933043d3'
+@Field static final String HELP_PAGE_SHA256 = 'e6b3770829ab815d57336bf635e25d5f30d1647d6c766adb507956a5eab4f3e2'
 String editorHelpPage() {
 String key = 'help:' + HELP_PAGE_SHA256
 String kept = (String) EDITOR_FILE_CACHE.get(key)
@@ -5976,7 +5976,7 @@ return [status: 202, body: body, payload: out.payload]
 }
 @Field static final String RT_ENGINE = 'HAI-1'
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = '46e4fea959358494'
+@Field static final String RT_CHILD_BUILD = '8dd877237d65ee3c'
 @Field static final long RT_WATCHDOG_EVERY_MS = 900000L
 @Field static final long RT_RECOVERY_MS = 120000L
 @Field static final long RT_CLAIM_MS = 600000L
@@ -8499,4 +8499,4 @@ Map m = [ok: false, code: code, message: message]
 m.putAll(extra ?: [:])
 return m
 }
-@Field static final String CHECKER_BUILD = 'ea55c7c153fc976a'
+@Field static final String CHECKER_BUILD = '2d66394aabfc6f43'

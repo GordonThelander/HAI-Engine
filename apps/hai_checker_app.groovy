@@ -5862,14 +5862,16 @@ if (quietM) s.qm = quietM
 stageAt?.call('light/colour')
 if (trigs.isEmpty()) s.g = blind ? s.ub : 'it has no trigger'
 else if (!checkable && !rs.any { Map r -> r.v in ['m', 'd'] }) s.g = 'nothing it does changes a device HAI can watch'
-int mm = rs.count { Map r -> r.v == 'm' && r.q != true && ((r.j ?: 0) as int) == SHADOW_JUDGE }
+boolean quietSeen = rs.any { Map r -> r.q == true }
+int mm = rs.count { Map r -> r.v == 'm' && r.q != true && (((r.j ?: 0) as int) == SHADOW_JUDGE || (!old && !quietSeen)) }
 s.gm = mm
-s.l = s.g ? 'grey' : s.d ? 'red' : ((mm >= SHADOW_GREEN_RUNS && s.miss == 0) || mm >= SHADOW_GREEN_ANYWAY) ? 'green' : 'amber'
+Map newest = rs ? rs[-1] : null
+if (!s.g && newest?.rp == true) s.g = 'Rule Machine\'s rule is paused, so there is nothing to compare it with. Resume it in Rule Machine, or promote it'
+s.l = s.g ? 'grey' : s.d ? 'red' : mm >= SHADOW_GREEN_RUNS ? 'green' : 'amber'
 return s
 }
 @Field static final int SHADOW_GREEN_RUNS = 3
-@Field static final int SHADOW_GREEN_ANYWAY = 10
-@Field static final int SHADOW_JUDGE = 10
+@Field static final int SHADOW_JUDGE = 11
 void coreWalkShadow(List actions, Closure visit) {
 if (visit == null) return
 (actions ?: []).each { Object o ->
@@ -8599,7 +8601,7 @@ int toChoose = ((List) imported.resolution).count { Map row -> row.status != BIN
 return [status: 200, body: [ok: true, rules: imported.rules, resolution: imported.resolution, summary: summary,
 toConfirm: toConfirm, toChoose: toChoose]]
 }
-@Field static final String CHECKER_BUILD = 'ea55c7c153fc976a'
+@Field static final String CHECKER_BUILD = '2d66394aabfc6f43'
 Map checkerDispatch(Map req) {
 String op = req?.op as String
 switch (op) {
@@ -8718,7 +8720,7 @@ return [rule: d.rule, hash: rec.h, run: run, s: s]
 Map shadowCompare(Map doc, Map rec, String zone, Object pb = null, Closure sentBy = null, String rmApp = null, List earlier = null) {
 long at = rec.at as long
 long span = (rec.span ?: 0L) as long
-long reach = at + Math.max(span, ((rec.full ?: span) as long)) + 15000L
+long reach = rec.cut == true ? at + span : at + Math.max(span, ((rec.full ?: span) as long)) + 15000L
 Closure rmSent = { String dev, String cmd ->
 List l = sentBy != null && rmApp ? sentBy(dev) : null
 l == null ? null : l.any { Map c -> c.app == "a:${rmApp}".toString() && c.cmd == cmd && (c.t as long) >= at - 5000L && (c.t as long) <= reach }
@@ -8735,7 +8737,7 @@ c == null ? 'the device itself or a person' : c.app == "a:${rmApp}".toString() ?
 }
 long longest = Math.max(span, ((rec.full ?: span) as long))
 Closure stillRunning = { long t -> (earlier ?: []).any { Object r -> r instanceof Map && ((Map) r).at instanceof Number && ((((Map) r).at as long) < at) && ((((Map) r).at as long) >= t - longest - 5000L) } }
-if (rec.rmPaused == true) return [v: 'c', st: [[s: 'cant', say: "Rule Machine's rule was paused, so it did nothing to compare with"]]]
+if (rec.rmPaused == true) return [v: 'c', rp: true, st: [[s: 'cant', say: "Rule Machine's rule was paused, so it did nothing to compare with"]]]
 Map refs = (doc.refs ?: [:])
 Map sim = simNew(shadowInventory(doc, rec), at - 2000L, zone)
 ((List) (rec.before ?: [])).each { Object c -> List x = c; if (x[2] != null) simSeed(sim, x[0] as String, x[1] as String, x[2], at - 60000L) }

@@ -4818,14 +4818,16 @@ if (quietM) s.qm = quietM
 stageAt?.call('light/colour')
 if (trigs.isEmpty()) s.g = blind ? s.ub : 'it has no trigger'
 else if (!checkable && !rs.any { Map r -> r.v in ['m', 'd'] }) s.g = 'nothing it does changes a device HAI can watch'
-int mm = rs.count { Map r -> r.v == 'm' && r.q != true && ((r.j ?: 0) as int) == SHADOW_JUDGE }
+boolean quietSeen = rs.any { Map r -> r.q == true }
+int mm = rs.count { Map r -> r.v == 'm' && r.q != true && (((r.j ?: 0) as int) == SHADOW_JUDGE || (!old && !quietSeen)) }
 s.gm = mm
-s.l = s.g ? 'grey' : s.d ? 'red' : ((mm >= SHADOW_GREEN_RUNS && s.miss == 0) || mm >= SHADOW_GREEN_ANYWAY) ? 'green' : 'amber'
+Map newest = rs ? rs[-1] : null
+if (!s.g && newest?.rp == true) s.g = 'Rule Machine\'s rule is paused, so there is nothing to compare it with. Resume it in Rule Machine, or promote it'
+s.l = s.g ? 'grey' : s.d ? 'red' : mm >= SHADOW_GREEN_RUNS ? 'green' : 'amber'
 return s
 }
 @Field static final int SHADOW_GREEN_RUNS = 3
-@Field static final int SHADOW_GREEN_ANYWAY = 10
-@Field static final int SHADOW_JUDGE = 10
+@Field static final int SHADOW_JUDGE = 11
 void coreWalkShadow(List actions, Closure visit) {
 if (visit == null) return
 (actions ?: []).each { Object o ->
@@ -4843,7 +4845,7 @@ if (v instanceof List) ((List) v).each { Object e -> if (e instanceof Map && ((M
 @Field static final String SHADOW_DONE_EVENT = 'haiShadowDone'
 @Field static final int SHADOW_RUNS = 20
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = '46e4fea959358494'
+@Field static final String RT_CHILD_BUILD = '8dd877237d65ee3c'
 @Field static final long RT_GRACE_MS = 30000L
 @Field static final long RT_WATCHDOG_EVERY_MS = 900000L
 @Field static final long RT_RECOVERY_MS = 120000L
