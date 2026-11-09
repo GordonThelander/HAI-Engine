@@ -4468,12 +4468,13 @@ Map rmActPrivateBoolean(Map ops, Map ruleCtx = null) {
 if (!(ops.value instanceof Boolean)) {
 return rmNo('RM_ACT_PB_VALUE', 'This action does not say what to set the private boolean to.')
 }
-if (ops.self == true || ops.rules == null || ((List) ops.rules).isEmpty()) {
+List others = (ops.rules instanceof List) ? ops.rules : []
+if (others.isEmpty()) {
 return [ok: true, steps: [[type: 'setRuleBoolean', rules: ['self'], value: ops.value]]]
 }
-Map gone = rmGoneRules((List) ops.rules, ruleCtx)
+Map gone = rmGoneRules(others, ruleCtx)
 if (gone != null) return gone
-List targets = ((List) ops.rules).collect { ('rm:' + (it as String)).toString() }
+List targets = (ops.self == true ? ['self'] : []) + others.collect { ('rm:' + (it as String)).toString() }
 return [ok: true, steps: [[type: 'setRuleBoolean', rules: targets, value: ops.value]]]
 }
 Map rmActMessage(Map ops) {
