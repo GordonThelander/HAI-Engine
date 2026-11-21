@@ -203,7 +203,7 @@ currentState: { Object dev, Object attr -> ruleCurrent(dev as String, attr as St
 currentFresh: { Object dev, Object attr -> ruleCurrent(dev as String, attr as String, true) },
 driver : { Object dev -> ruleDevice(dev as String)?.typeName?.toString() },
 command : { List a -> ruleCommand(a[0] as String, a[1] as String, a[2]) },
-listen : { Object dev, Object attr, Object every = false -> ruleListen(dev as String, attr as String, every == true) },
+listen : { Object dev, Object attr -> ruleListen(dev as String, attr as String) },
 unlistenAll : { Object u -> unsubscribe(); ruleShadowDropped() },
 timerAt : { List a -> runOnce(new Date(a[0] as long), a[1] as String, [data: a[2], overwrite: false]) },
 unscheduleHandler: { Object h -> unschedule(h as String) },
@@ -319,7 +319,7 @@ def ruleDevice(String dev) {
 String want = rtBareId(dev)
 return ((settings.ruleDevices ?: []) as List).find { it?.id?.toString() == want }
 }
-void ruleListen(String dev, String attr, boolean every = false) {
+void ruleListen(String dev, String attr) {
 if (dev == RT_LOCATION) {
 if (attr == 'mode') subscribe(location, 'mode', 'haiMode')
 if (attr == RT_INVOKE_EVENT) subscribe(location, ruleAddressed(RT_INVOKE_EVENT), 'haiInvoked')
@@ -336,8 +336,7 @@ return
 }
 def d = ruleDevice(dev)
 if (d == null) return
-if (every) subscribe(d, attr, 'haiEvent', [filterEvents: false])
-else subscribe(d, attr, 'haiEvent')
+subscribe(d, attr, 'haiEvent')
 }
 String ruleAddressed(String event) {
 String me = (state.rt instanceof Map) ? (((Map) state.rt).ruleId as String) : null
@@ -926,7 +925,8 @@ else if (a.type == 'runRule' && a.wait == true) s += n(a.timeoutSeconds)
 if (a.meterMs instanceof Number && a.refs instanceof List) ms += n(a.meterMs) * Math.max(0L, ((List) a.refs).size() - 1L)
 }
 long timed = s * 1000L + ms
-long full = timed + Math.max(5000L, (long) (timed / 4L)) + extra
+long slack = (ms > 0L || timed > 60000L) ? timed : Math.max(5000L, (long) (timed / 4L))
+long full = timed + slack + extra
 return [Math.min(Math.max(full, 10000L), SHADOW_CAP_MS), Math.min(full, 86400000L), open || full > SHADOW_CAP_MS]
 }
 boolean ruleShadowSaw(Map w, String dev, String attr, Object value, long at) {
@@ -4827,7 +4827,7 @@ s.l = s.g ? 'grey' : s.d ? 'red' : mm >= SHADOW_GREEN_RUNS ? 'green' : 'amber'
 return s
 }
 @Field static final int SHADOW_GREEN_RUNS = 3
-@Field static final int SHADOW_JUDGE = 11
+@Field static final int SHADOW_JUDGE = 12
 void coreWalkShadow(List actions, Closure visit) {
 if (visit == null) return
 (actions ?: []).each { Object o ->
@@ -4845,7 +4845,7 @@ if (v instanceof List) ((List) v).each { Object e -> if (e instanceof Map && ((M
 @Field static final String SHADOW_DONE_EVENT = 'haiShadowDone'
 @Field static final int SHADOW_RUNS = 20
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = '8dd877237d65ee3c'
+@Field static final String RT_CHILD_BUILD = 'e0061a51654b4e2a'
 @Field static final long RT_GRACE_MS = 30000L
 @Field static final long RT_WATCHDOG_EVERY_MS = 900000L
 @Field static final long RT_RECOVERY_MS = 120000L
@@ -5005,18 +5005,6 @@ if (ref.kind == 'variable' && ref.scope == 'rule' && ref.id instanceof String) {
 }
 }
 return inv
-}
-Set rtEveryReportSlots(Map doc) {
-Set out = [] as Set
-Map refs = (doc?.refs ?: [:])
-((List) (doc?.triggers ?: [])).each { Object t ->
-if (!(t instanceof Map)) return
-Map trig = t
-if (trig.disabled == true || trig.discipline != 'event' || !(trig.kind in ['deviceAttribute', 'threshold']) || !trig.attribute) return
-String dev = ((Map) refs.get(trig.ref))?.id as String
-if (dev != null) out << "${dev}|${trig.attribute}".toString()
-}
-return out
 }
 List rtSlots(Map doc) {
 Set out = [] as Set
@@ -5910,12 +5898,7 @@ rtCall(plat, 'unlistenAll', null)
 rtCall(plat, 'useVariables', rtHubVariableNames(doc))
 List slots = rtWantSlots(rt, doc)
 Closure sub = (Closure) plat.listen
-Set every = rtEveryReportSlots(doc)
-boolean takes = sub != null && sub.maximumNumberOfParameters >= 3
-slots.each { Object s ->
-List sl = s
-if (takes && every.contains(sl[0] + '|' + sl[1])) sub(sl[0], sl[1], true) else sub(sl[0], sl[1])
-}
+slots.each { Object s -> sub(((List) s)[0], ((List) s)[1]) }
 rt.subs = slots
 rt.cb = RT_CHILD_BUILD.take(8)
 rt.modeSeen = rtModeSubscribed(rt) ? rtCall(plat, 'mode', null) : null

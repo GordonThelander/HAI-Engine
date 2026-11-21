@@ -1341,6 +1341,10 @@ body.form-open { overflow: hidden; }
 <div id="loading" class="fatal" role="status">Checking for a delete in progress…</div>
 <div id="live" class="sr-only" aria-live="polite"></div>
 <script>
+function readyLight(l) {
+  return l === 'unset' ? 'amber' : l && l !== 'red' ? 'green' : l;
+}
+
 (function() {
   'use strict';
   function bootFailed(what, e) {
@@ -16341,7 +16345,7 @@ body.form-open { overflow: hidden; }
   }
   function hubActs(host, r, size) {
     var active = r.state === 'active';
-    var light = (S.shadowLights || {})[r.id];
+    var light = readyLight((S.shadowLights || {})[r.id]);
     var mig = (S.migrated || {})[r.id];
     if (mig === 'switched') {
       host.appendChild(h('button', {
@@ -16358,7 +16362,7 @@ body.form-open { overflow: hidden; }
         type: 'button',
         class: 'btn' + (light === 'green' ? ' primary' : '') + size,
         disabled: busy,
-        title: light === 'green' ? 'Every run matched Rule Machine. Pause the Rule Machine rule and start this one.' : 'Pause the Rule Machine rule and start this one. Its shadow check is not green yet, so HAI says why before it asks.',
+        title: light === 'green' ? 'Everything in it is proven in HAI. Pause the Rule Machine rule and start this one.' : 'Pause the Rule Machine rule and start this one. A shadow run differed from Rule Machine, so HAI says what before it asks.',
         onclick: function() {
           switchAsk(r, 'switchOver');
         }
@@ -16836,7 +16840,7 @@ body.form-open { overflow: hidden; }
       var name = info.rmName || r.name || r.id;
       var warn = [];
       if (op === 'switchOver') {
-        if (info.light === 'red') warn.push('A shadow run did not do what Rule Machine did: ' + (info.w || 'a run differed') + '. Switched, this rule would act the same way.'); else if (info.light !== 'green') warn.push('This rule has not been checked against Rule Machine enough to be sure it does the same.');
+        if (info.light === 'red') warn.push('A shadow run did not do what Rule Machine did: ' + (info.w || 'a run differed') + '. Switched, this rule would act the same way.');
         (info.pbLeft || []).forEach((function(n) {
           warn.push('Its private boolean is set by ' + n + ', which is still in Rule Machine. Switch that one too.');
         }));
@@ -20957,8 +20961,8 @@ body.form-open { overflow: hidden; }
     grey: 'Shadowing: HAI cannot check this one.'
   };
   var SHADOW_SHORT = {
-    green: 'matched, ready',
-    amber: 'watching',
+    green: 'ready',
+    amber: 'triggers not set up',
     red: 'a run did not match',
     grey: 'cannot check'
   };
@@ -21023,7 +21027,7 @@ body.form-open { overflow: hidden; }
       var li = h('li', {});
       var differs = draft && !sameAsHub(draft, r);
       var meta = word + (r.version ? ', version ' + r.version : '') + (differs ? ', your draft differs' : '');
-      var light = (S.shadowLights || {})[r.id];
+      var light = readyLight((S.shadowLights || {})[r.id]);
       if (light) meta += ' · Shadow check: ' + SHADOW_SHORT[light];
       li.appendChild(h('button', {
         type: 'button',

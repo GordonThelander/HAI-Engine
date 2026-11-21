@@ -5871,7 +5871,7 @@ s.l = s.g ? 'grey' : s.d ? 'red' : mm >= SHADOW_GREEN_RUNS ? 'green' : 'amber'
 return s
 }
 @Field static final int SHADOW_GREEN_RUNS = 3
-@Field static final int SHADOW_JUDGE = 11
+@Field static final int SHADOW_JUDGE = 12
 void coreWalkShadow(List actions, Closure visit) {
 if (visit == null) return
 (actions ?: []).each { Object o ->
@@ -8601,7 +8601,7 @@ int toChoose = ((List) imported.resolution).count { Map row -> row.status != BIN
 return [status: 200, body: [ok: true, rules: imported.rules, resolution: imported.resolution, summary: summary,
 toConfirm: toConfirm, toChoose: toChoose]]
 }
-@Field static final String CHECKER_BUILD = '2d66394aabfc6f43'
+@Field static final String CHECKER_BUILD = '28222f16db251b76'
 Map checkerDispatch(Map req) {
 String op = req?.op as String
 switch (op) {
@@ -8740,6 +8740,12 @@ Closure stillRunning = { long t -> (earlier ?: []).any { Object r -> r instanceo
 if (rec.rmPaused == true) return [v: 'c', rp: true, st: [[s: 'cant', say: "Rule Machine's rule was paused, so it did nothing to compare with"]]]
 Map refs = (doc.refs ?: [:])
 Map sim = simNew(shadowInventory(doc, rec), at - 2000L, zone)
+Closure rmReachedLater = { int ei ->
+boolean got = false
+((List) sim.effects).drop(ei + 1).each { Object fo -> Map f = fo
+if (!got && rmSent(f.device as String, f.command as String) == true) got = true }
+got
+}
 ((List) (rec.before ?: [])).each { Object c -> List x = c; if (x[2] != null) simSeed(sim, x[0] as String, x[1] as String, x[2], at - 60000L) }
 ((Map) (rec.vars ?: [:])).each { k, v -> ((Map) sim.variables).put(k, v instanceof Map ? v : [value: v]) }
 if (pb != null) ((Map) sim.variables).put(coreVarId(doc.id, PRIVATE_BOOLEAN_ID), [value: pb])
@@ -8792,7 +8798,7 @@ steps << [s: 'later', say: "${what}, after the watched time".toString()]; return
 }
 if (targets.isEmpty()) { ((List) quiet.get(e.command as String, [])) << name(dev); return }
 List bad = []
-boolean blind = false, replaced = false, attested = false
+boolean blind = false, replaced = false, attested = false, unfinished = false
 targets.each { Object to ->
 Map tg = to
 String k = "${dev}|${tg.attribute}".toString()
@@ -8810,12 +8816,14 @@ if (rmSent(dev, e.command as String) == true) { attested = true; return }
 if (got.isEmpty()) {
 Object then = was(k, dt)
 if (shadowNear(tg.attribute, then, tg.value)) return
+if (rmSent(dev, e.command as String) == false && !rmReachedLater(ei)) { unfinished = true; return }
 bad << "${name(dev)} ${attrWord(tg.attribute)}stayed ${then ?: 'unknown'}, HAI would have made it ${tg.value}".toString()
 } else {
 bad << "${name(dev)} ${attrWord(tg.attribute)}went to ${((List) got[-1])[2]}, HAI would have made it ${tg.value}".toString()
 }
 }
 steps << (bad ? [s: 'differs', say: bad.join('; ')] : blind ? [s: 'cant', say: "${what}, not watched".toString()]
+: unfinished ? [s: 'cant', say: "${what}: Rule Machine had not reached this step when the watch ended".toString()]
 : replaced ? [s: 'matched', say: "${what}, then changed again by the next step".toString()]
 : attested ? [s: 'matched', say: "${what} (Rule Machine sent it too)".toString()] : [s: 'matched', say: what])
 }

@@ -113,7 +113,7 @@ main.wrap { padding-top: 22px; padding-bottom: 60px; }
 .scene .way { margin-top: 20%; }
 
 .scene .back { grid-column: 1 / -1; margin-top: -4px; }
-.scene .road-back { stroke-width: 4; }
+.scene .road.road-back { stroke-width: 4; }
 .scene .arrowhead-back { fill: var(--rm); }
 .scene .back-dots .flow { fill: var(--hai); r: 4.5; }
 .scene .back-pill { fill: var(--hai-weak); stroke: color-mix(in srgb, var(--hai) 40%, transparent); stroke-width: 1.5; }
@@ -240,6 +240,7 @@ body.has-sel main.wrap { padding-bottom: 120px; }
   .selacts { margin-left: 0; width: 100%; justify-content: flex-start; }
   .selacts .btn { flex: 1 1 auto; }
 }
+.warnline { color: var(--warn); }
 .modal .pbwarn { margin: 0 0 10px; padding: 9px 12px; border-radius: var(--radius-sm); background: var(--warn-weak); color: var(--warn); font-weight: 560; }
 .foot { display: flex; gap: 12px; flex-wrap: wrap; justify-content: space-between; align-items: center; margin-top: 14px; font-size: 13.5px; color: var(--muted); }
 
@@ -458,7 +459,7 @@ function ago(iso) {
   return m < 60 ? m + ' minute' + (m === 1 ? '' : 's') : m < 2880 ? Math.round(m / 60) + ' hour' + (Math.round(m / 60) === 1 ? '' : 's') : Math.round(m / 1440) + ' days';
 }
 
-var TEST_RULE_NAMES = [ /^__/, /^_HAI /, /\(throwaway\)/i, /\(probe/i ];
+var TEST_RULE_NAMES = [ /^__/, /^_HAI /, /^_AM Gate /, /^_Test /, /^Disposable /i, /^Test \d+$/i, /\(throwaway\)/i, /\(probe/i ];
 
 var TEST_RULE_NO_ACTIONS = 'this rule has no actions in Rule Machine';
 
@@ -1283,34 +1284,48 @@ function look(r) {
       act: canOp(r, 'clone') ? [ 'Clone again', 'clone', 'primary' ] : null
     };
     if (warn(r, 'drift')) return {
-      g: 'manual',
+      g: 'trial',
       s: s,
-      say: 'Changed in Rule Machine since it was cloned, so the clone does what the rule used to. Delete the clone, then clone it again.',
-      act: [ 'Delete the clone', 'delete', 'quiet-danger' ]
+      kind: 'drift',
+      light: 'amber',
+      say: AUTO_FAIL[r.rmId] ? 'Changed in Rule Machine since it was cloned, and HAI could not update the clone: ' + AUTO_FAIL[r.rmId] + '.' : r.edited === true ? 'Changed in Rule Machine since it was cloned, and the clone was changed in the editor, so HAI asks first. Update the clone, then promote it.' : 'Changed in Rule Machine since it was cloned: updating the clone now.',
+      act: [ 'Update the clone', 'reclone', 'primary' ]
     };
     var hv = warn(r, 'variables');
     if (hv) return {
       g: 'trial',
       s: s,
       kind: 'variables',
-      say: first(hv.message),
-      light: shadowOf(r).l,
+      say: first(hv.message) + ' Approve it in HAI Engine, then promote.',
+      light: 'amber',
       act: LINKS.engine ? [ 'Open HAI Engine', 'engine', '' ] : null
     };
     var off = warn(r, 'disabled');
     if (off) return {
-      g: 'manual',
+      g: 'trial',
       s: s,
-      say: 'Cloned. Before it can be promoted, enable ' + (off.names || []).join(', ') + ' in Devices.',
+      kind: 'disabled',
+      light: 'amber',
+      say: 'Before it can be promoted, enable ' + (off.names || []).join(', ') + ' in Devices.',
       act: LINKS.devices ? [ 'Open Devices', 'devices', '' ] : null
     };
     if (!canOp(r, 'switchOver')) return {
-      g: 'manual',
+      g: 'trial',
       s: s,
+      kind: 'blocked',
+      light: 'amber',
       say: first(opWhy(r, 'switchOver') || 'This clone cannot be promoted yet.'),
       act: null
     };
     var sh = shadowOf(r);
+    if (sh.l === 'amber') return {
+      g: 'trial',
+      s: s,
+      kind: 'unset',
+      say: sh.say,
+      light: 'amber',
+      act: r.shadow && LINKS.engine ? [ 'Open HAI Engine', 'engine', '' ] : null
+    };
     return {
       g: 'trial',
       s: s,
@@ -1321,6 +1336,12 @@ function look(r) {
   }
   if (DRAFTED[String(ids)]) {
     var why = DRAFT_WHY[String(ids)];
+    if (why && /HAI Checker/.test(why)) return {
+      g: 'ready',
+      s: s,
+      say: 'HAI was being updated when this was last cloned, so the clone was not checked. Clone it again.',
+      act: [ 'Clone again', 'clone', 'primary' ]
+    };
     return {
       g: 'manual',
       s: s,
@@ -1375,6 +1396,14 @@ function look(r) {
     return w.blocking === true;
   }));
   var reason = opWhy(r, 'clone') || (r.verdictReasons || [])[0] || 'HAI cannot clone this rule yet.';
+  var devOnly = devicesOnly(r);
+  if (devOnly) return {
+    g: 'manual',
+    s: s,
+    kind: 'approve',
+    say: first(reason),
+    act: [ 'Approve ' + plural(devOnly, 'device', 'devices') + ' and clone', 'approve', 'primary' ]
+  };
   if (blocks.length) return {
     g: 'manual',
     s: s,
@@ -1392,13 +1421,26 @@ function look(r) {
   };
 }
 
+function devicesOnly(r) {
+  var blocks = (r.warnings || []).filter((function(w) {
+    return w.blocking === true;
+  }));
+  if (!blocks.length || blocks.some((function(w) {
+    return w.kind !== 'devices' || !(w.ids && w.ids.length);
+  }))) return 0;
+  if (r.conditions && r.conditions.ok === false || r.rebuild && r.rebuild.ok === false) return 0;
+  return blocks.reduce((function(n, w) {
+    return n + w.ids.length;
+  }), 0);
+}
+
 var GROUPS = [ [ 'ready', 'Available to clone' ], [ 'manual', 'Requires some manual intervention' ], [ 'risky', 'Risky rules that require your permission' ], [ 'trial', 'Currently being shadowed' ], [ 'hai', 'Running on HAI' ], [ 'staying', 'Staying in Rule Machine' ] ];
 
 var GSAY = {
   ready: 'A clone is made switched off, and HAI starts shadowing it. Rule Machine keeps running the rule, so nothing in your house changes.',
   manual: 'Each needs something from you first. The row says what, and its button takes you there.',
   risky: 'These could have serious consequences, such as rebooting the hub. Clone them only if you mean to.',
-  trial: 'HAI\'s clone stays switched off and changes nothing. Each time the rule is triggered, HAI works out what it would have done and checks that against what Rule Machine actually did. When enough runs match, the light goes green and you can promote it.',
+  trial: 'HAI\'s clone stays switched off and changes nothing. Each time the rule is triggered, HAI works out what it would have done and checks that against what Rule Machine actually did. It is ready to promote as soon as it is cloned; the comparison carries on beside it, and a run that differs turns its light red.',
   hai: 'Back to Rule Machine pauses the clone and starts the Rule Machine rule again.',
   staying: 'Empty rules have nothing to clone; the rest use something HAI cannot clone yet. Tell HAI about them and they can come later.'
 };
@@ -1420,7 +1462,7 @@ function dayAt(ms, own) {
   return own ? 'the ' + t + ' on ' + on : 'on ' + on + ' at ' + t;
 }
 
-function shadowOf(r) {
+function shadowRaw(r) {
   if (!r.shadow) return {
     l: 'amber',
     say: 'Not watching yet: HAI has not heard from this clone. Press Done on the HAI Engine page to start it. Rule Machine still runs it.',
@@ -1441,7 +1483,7 @@ function shadowOf(r) {
   var runs = n >= 20 ? 'The last 20 runs' : plural(n, 'run', 'runs') + (since ? ' in ' + since : '');
   if (say) {
     if (n) say += ' ' + runs + quietRuns + part + '.';
-  } else if (l === 'green') say = plural(gm, 'run', 'runs') + ' where it acted, all matched' + quietRuns + (last ? ', last ' + last + ' ago' : '') + part + (s.miss ? ', ' + plural(s.miss, 'trigger', 'triggers') + ' not seen yet' : '') + '.'; else if (s.nw) say = 'Not watching: HAI could not set up any of its triggers. Press Done on the HAI Engine page to try again. Rule Machine still runs it.'; else if (!n && !s.mt) say = (s.e && s.e.at ? '' : (s.o ? 'Watching: no runs since the check was corrected' : 'Watching: no runs yet') + (since ? ' in ' + since : '') + '. ') + 'Rule Machine still runs it.'; else if (!n) say = 'No runs yet. Rule Machine still runs it.'; else say = runs + quietRuns + (gm < 3 ? ', ' + plural(3 - gm, 'more run', 'more runs') + ' where it acts and matches to go green' : '') + (s.miss ? ', ' + plural(s.miss, 'trigger', 'triggers') + ' not seen yet' : '') + part + '.';
+  } else if (l === 'green') say = plural(gm, 'run', 'runs') + ' where it acted, all matched' + quietRuns + (last ? ', last ' + last + ' ago' : '') + part + (s.miss ? ', ' + plural(s.miss, 'trigger', 'triggers') + ' not seen yet' : '') + '.'; else if (s.nw) say = 'Not watching: HAI could not set up any of its triggers. Press Done on the HAI Engine page to try again. Rule Machine still runs it.'; else if (!n && !s.mt) say = (s.e && s.e.at ? '' : (s.o ? 'Watching: no runs since the check was corrected' : 'Watching: no runs yet') + (since ? ' in ' + since : '') + '. ') + 'Rule Machine still runs it.'; else if (!n) say = 'No runs yet. Rule Machine still runs it.'; else say = runs + quietRuns + (s.miss ? ', ' + plural(s.miss, 'trigger', 'triggers') + ' not seen yet' : '') + part + '.';
   if (s.u && l !== 'grey') say += ' ' + (s.u === 1 ? 'One trigger' : s.u + ' triggers') + ' can\'t be checked: ' + (s.ub || 'Rule Machine gives no event for it') + '.';
   var late = s.nt && !s.mt && !(s.last && Number(s.last) >= Number(s.nt)) && Date.now() - Number(s.nt) > Number(s.ws || 6e5) + 12e4;
   if (l !== 'grey' && (s.mt || late)) {
@@ -1456,6 +1498,27 @@ function shadowOf(r) {
   };
 }
 
+function shadowOf(r) {
+  var raw = shadowRaw(r);
+  if (raw.l === 'red') return raw;
+  if (!r.shadow) return {
+    l: 'amber',
+    say: 'Just cloned: waiting for the clone to set up its triggers. Reload in a minute; if this stays, press Done on the HAI Engine page.',
+    w: ''
+  };
+  if (r.shadow.nw) return {
+    l: 'amber',
+    say: 'Not ready: HAI could not set up its triggers on the hub. Press Done on the HAI Engine page, then reload this page.',
+    w: ''
+  };
+  var gm = r.shadow.gm || 0;
+  return {
+    l: 'green',
+    say: 'Ready to promote.' + (gm ? ' ' + plural(gm, 'run', 'runs') + ' where it acted matched Rule Machine.' : ''),
+    w: raw.w
+  };
+}
+
 function visible() {
   return ROWS.filter((function(r) {
     return SHOW_TESTS || !isTestRule(r);
@@ -1466,6 +1529,7 @@ function counts(rows) {
   var c = {
     ready: 0,
     manual: 0,
+    approve: 0,
     risky: 0,
     trial: 0,
     hai: 0,
@@ -1495,6 +1559,7 @@ function counts(rows) {
   rows.forEach((function(r) {
     var l = look(r);
     c[l.g]++;
+    if (l.kind === 'approve') c.approve++;
     var held = l.kind === 'variables' && l.s === 'trial';
     if (l.light === 'green' && !held) c.green++;
     if (l.s === 'rm') c.rm++; else if (l.s === 'trial') c.onTrial++; else c.onHai++;
@@ -1528,7 +1593,7 @@ var MANY = [ {
 }, {
   op: 'switchOver',
   ok: function(r) {
-    return stage(r) === 'trial' && canOp(r, 'switchOver');
+    return stage(r) === 'trial' && canOp(r, 'switchOver') && !warn(r, 'drift') && shadowOf(r).l === 'green';
   },
   bar: function(n) {
     return 'Promote ' + n;
@@ -1641,7 +1706,7 @@ function scene(c) {
     return '<svg class="' + cls + '" viewBox="' + box + '" aria-hidden="true">' + inner + '</svg>';
   };
   var defs = '<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><marker id="ah" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="arrowhead"/></marker>' + '<linearGradient id="g1" x1="0" x2="1"><stop offset="0" class="s-rm"/><stop offset="1" class="s-trial"/></linearGradient>' + '<linearGradient id="g2" x1="0" x2="1"><stop offset="0" class="s-trial"/><stop offset="1" class="s-hai"/></linearGradient>' + '<linearGradient id="g3" x1="1" x2="0"><stop offset="0" class="s-hai"/><stop offset=".5" class="s-trial"/><stop offset="1" class="s-rm"/></linearGradient>' + '<marker id="ahb" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="arrowhead-back"/></marker>' + '<radialGradient id="glow"><stop offset="0" class="s-hai" stop-opacity=".35"/><stop offset="1" class="s-hai" stop-opacity="0"/></radialGradient></defs></svg>';
-  return '<div class="scene" role="img" aria-label="' + c.rm + ' rules in Rule Machine, ' + c.onTrial + ' being shadowed in HAI, ' + c.onHai + ' running on HAI">' + defs + svg('55 0 240 262', 'pic', '<g class="st" data-open="rm" tabindex="0"><rect x="60" y="14" width="230" height="160" rx="22" class="pad rm-pad"/>' + card(98, 70, 'rm') + card(110, 58, 'rm') + card(122, 46, 'rm') + '<g transform="translate(246 46)"><g><circle r="17" class="gear"/><circle r="7" class="gear-hub"/>' + '<animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="9s" repeatCount="indefinite"/></g></g>' + flag(176, c.at.rm.manual) + label(175, c.rm, 'In Rule Machine', parts([ [ c.at.rm.ready, 'ready' ], [ c.at.rm.manual, 'to fix' ], [ c.at.rm.risky, 'risky' ], [ c.at.rm.staying, 'staying' ] ], 'Running as today'), 'rm') + '</g>') + svg('290 50 136 60', 'way', '<path id="p1" d="M296 96 C 340 60, 380 60, 418 96" class="road" stroke="url(#g1)" marker-end="url(#ah)"/>' + (flowing ? '<g class="dots rm-dots">' + dots('p1', 3) + '</g>' : '')) + svg('385 0 240 262', 'pic', '<g class="st" data-open="trial" tabindex="0"><rect x="390" y="14" width="230" height="160" rx="22" class="pad trial-pad"/>' + '<rect x="420" y="40" width="170" height="112" rx="16" class="hold"/>' + card(442, 70, 'trial') + card(466, 58, 'trial') + '<g transform="translate(578 46)"><circle r="17" class="pause"/><rect x="-6" y="-8" width="4" height="16" rx="1.5" class="pause-bar"/><rect x="2" y="-8" width="4" height="16" rx="1.5" class="pause-bar"/></g>' + flag(505, c.at.trial.manual) + label(505, c.onTrial, 'Being shadowed', parts([ [ c.green, 'ready to promote' ], [ c.at.trial.trial - c.green, 'watching' ], [ c.at.trial.manual, 'need you' ] ], 'Switched off; checked against Rule Machine'), 'trial') + '</g>') + svg('620 50 136 60', 'way', '<path id="p2" d="M626 96 C 670 60, 710 60, 748 96" class="road" stroke="url(#g2)" marker-end="url(#ah)"/>' + (flowing ? '<g class="dots trial-dots">' + dots('p2', 3) + '</g>' : '')) + svg('715 0 240 262', 'pic', '<g class="st" data-open="hai" tabindex="0"><rect x="720" y="14" width="230" height="160" rx="22" class="pad hai-pad"/>' + '<circle cx="835" cy="100" r="76" fill="url(#glow)"/>' + '<path d="M780 98 L835 52 L890 98" class="roof"/><rect x="792" y="94" width="86" height="64" rx="8" class="house"/>' + '<path d="M815 126 l14 14 l28 -30" class="tick"/>' + '<path d="M906 52 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3z" class="spark"/><path d="M766 64 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z" class="spark"/>' + flag(835, c.at.hai.manual) + label(835, c.onHai, 'Running on HAI', c.at.hai.manual ? parts([ [ c.at.hai.hai, 'running well' ], [ c.at.hai.manual, 'need you' ] ], '') : 'Rule Machine\'s rule paused', 'hai') + '</g>') + svg('0 0 1000 96', 'back', '<path id="p3" d="M879 14 C 866 66, 700 74, 500 74 S 134 66, 121 14" class="road road-back" stroke="url(#g3)" marker-end="url(#ahb)"/>' + (returning ? '<g class="dots back-dots">' + dots('p3', 4, 6) + '</g>' : '') + '<rect x="232" y="58" width="536" height="34" rx="17" class="back-pill"/>' + '<text x="500" y="80" text-anchor="middle" class="back-txt">↩ Revert back to Rule Machine with one click, at any time</text>') + '<p class="back-mini"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path d="M24 6 C 30 18, 22 26, 14 26 S 4 20, 6 9" class="road road-back" stroke="url(#g3)" marker-end="url(#ahb)"/></svg>' + '<span>Revert back to Rule Machine with one click, at any time</span></p>' + '</div>';
+  return '<div class="scene" role="img" aria-label="' + c.rm + ' rules in Rule Machine, ' + c.onTrial + ' being shadowed in HAI, ' + c.onHai + ' running on HAI">' + defs + svg('55 0 240 262', 'pic', '<g class="st" data-open="rm" tabindex="0"><rect x="60" y="14" width="230" height="160" rx="22" class="pad rm-pad"/>' + card(98, 70, 'rm') + card(110, 58, 'rm') + card(122, 46, 'rm') + '<g transform="translate(246 46)"><g><circle r="17" class="gear"/><circle r="7" class="gear-hub"/>' + '<animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="9s" repeatCount="indefinite"/></g></g>' + flag(176, c.at.rm.manual) + label(175, c.rm, 'In Rule Machine', parts([ [ c.at.rm.ready, 'ready' ], [ c.at.rm.manual, 'to fix' ], [ c.at.rm.risky, 'risky' ], [ c.at.rm.staying, 'staying' ] ], 'Running as today'), 'rm') + '</g>') + svg('290 50 136 60', 'way', '<path id="p1" d="M296 96 C 340 60, 380 60, 418 96" class="road" stroke="url(#g1)" marker-end="url(#ah)"/>' + (flowing ? '<g class="dots rm-dots">' + dots('p1', 3) + '</g>' : '')) + svg('385 0 240 262', 'pic', '<g class="st" data-open="trial" tabindex="0"><rect x="390" y="14" width="230" height="160" rx="22" class="pad trial-pad"/>' + '<rect x="420" y="40" width="170" height="112" rx="16" class="hold"/>' + card(442, 70, 'trial') + card(466, 58, 'trial') + '<g transform="translate(578 46)"><circle r="17" class="pause"/><rect x="-6" y="-8" width="4" height="16" rx="1.5" class="pause-bar"/><rect x="2" y="-8" width="4" height="16" rx="1.5" class="pause-bar"/></g>' + flag(505, c.at.trial.manual) + label(505, c.onTrial, 'Being shadowed', parts([ [ c.green, 'ready to promote' ], [ c.at.trial.trial - c.green, 'watching' ], [ c.at.trial.manual, 'need you' ] ], 'Switched off; checked against Rule Machine'), 'trial') + '</g>') + svg('620 50 136 60', 'way', '<path id="p2" d="M626 96 C 670 60, 710 60, 748 96" class="road" stroke="url(#g2)" marker-end="url(#ah)"/>' + (flowing ? '<g class="dots trial-dots">' + dots('p2', 3) + '</g>' : '')) + svg('715 0 240 262', 'pic', '<g class="st" data-open="hai" tabindex="0"><rect x="720" y="14" width="230" height="160" rx="22" class="pad hai-pad"/>' + '<circle cx="835" cy="100" r="76" fill="url(#glow)"/>' + '<path d="M780 98 L835 52 L890 98" class="roof"/><rect x="792" y="94" width="86" height="64" rx="8" class="house"/>' + '<path d="M815 126 l14 14 l28 -30" class="tick"/>' + '<path d="M906 52 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3z" class="spark"/><path d="M766 64 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z" class="spark"/>' + flag(835, c.at.hai.manual) + label(835, c.onHai, 'Running on HAI', c.at.hai.manual ? parts([ [ c.at.hai.hai, 'running well' ], [ c.at.hai.manual, 'need you' ] ], '') : 'Rule Machine\'s rule paused', 'hai') + '</g>') + svg('0 0 1000 96', 'back', '<path id="p3" d="M879 14 L 879 52 C 879 76, 690 82, 500 82 S 121 76, 121 52 L 121 14" class="road road-back" stroke="url(#g3)" marker-end="url(#ahb)"/>' + (returning ? '<g class="dots back-dots">' + dots('p3', 4, 6) + '</g>' : '') + '<rect x="232" y="58" width="536" height="34" rx="17" class="back-pill"/>' + '<text x="500" y="80" text-anchor="middle" class="back-txt">↩ Revert back to Rule Machine with one click, at any time</text>') + '<p class="back-mini"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path d="M24 6 C 30 18, 22 26, 14 26 S 4 20, 6 9" class="road road-back" stroke="url(#g3)" marker-end="url(#ahb)"/></svg>' + '<span>Revert back to Rule Machine with one click, at any time</span></p>' + '</div>';
 }
 
 function renderJourney(c) {
@@ -1661,12 +1726,22 @@ function renderJourney(c) {
   el.innerHTML = '<div class="info"><div class="info-top"><span class="info-ttl">Your move to HAI</span>' + '<span class="info-pct"><b>' + moved + '%</b>of ' + plural(total, 'rule', 'rules') + ' running on HAI</span></div>' + '<div class="seg">' + seg('hai', c.onHai, 'on HAI') + seg('trial', c.onTrial, 'shadowed') + seg('rm', c.rm, 'in Rule Machine') + '</div>' + '<p class="sum">' + plural(total, 'rule', 'rules') + ' = ' + c.rm + ' in Rule Machine + ' + c.onTrial + ' being shadowed + ' + c.onHai + ' on HAI' + (ROWS.filter(isTestRule).length && !SHOW_TESTS ? ' (HAI\'s own test rules not counted)' : '') + '</p>' + scene(c) + '</div>';
 }
 
+var AUTO_APPROVE = true;
+
 function nextStep(c) {
+  var n = nextStepFor(c);
+  if (n && !AUTO_APPROVE) {
+    n.extra = '<p class="also warnline">⚠️ <b>Approve new devices automatically is off</b> in HAI Engine, so devices added to the hub since are not approved' + (c.approve ? ' and ' + plural(c.approve, 'rule is', 'rules are') + ' waiting on them' : '') + '. ' + (LINKS.engine ? '<button type="button" class="link" data-act-top="engine">Turn it on</button>, or approve' : 'Turn it on in HAI Engine, or approve') + ' them rule by rule below.</p>' + (n.extra || '');
+  }
+  return n;
+}
+
+function nextStepFor(c) {
   var mins = function(n, each) {
     var m = Math.max(1, Math.round(n * each / 60));
     return plural(m, 'minute', 'minutes');
   };
-  var needs = c.manual ? '<p class="also"><button type="button" class="link" data-open="manual">' + plural(c.manual, 'rule needs', 'rules need') + ' some manual intervention</button> before ' + (c.manual === 1 ? 'it' : 'they') + ' can move.</p>' : '';
+  var needs = c.manual ? '<p class="also"><button type="button" class="link" data-open="manual">' + plural(c.manual, 'rule needs', 'rules need') + ' some manual intervention</button> before ' + (c.manual === 1 ? 'it' : 'they') + ' can move.' + (c.approve ? ' ' + plural(c.approve, 'rule only needs', 'rules only need') + ' devices approved: one press each.' : '') + '</p>' : '';
   if (c.ready) return {
     ico: '📋',
     ttl: plural(c.ready, 'rule is', 'rules are') + ' able to be cloned into HAI',
@@ -2257,6 +2332,133 @@ function runAll(op, rules) {
   next();
 }
 
+function recloneOne(r) {
+  if (WORKING) return;
+  ask({
+    title: 'Update the clone of “' + esc(r.rmName || r.rmId) + '”?',
+    yes: 'Update the clone',
+    text: 'HAI makes a fresh clone from the Rule Machine rule as it is now and removes the old one. Rule Machine keeps running the rule, so nothing in your house changes. Anything you changed in the old clone in the HAI editor is not kept.'
+  }, (function() {
+    recloneRun(r);
+  }));
+}
+
+var AUTO_UPDATING = false;
+
+var AUTO_TRIED = {}, AUTO_FAIL = {};
+
+function autoUpdateClones() {
+  if (WORKING || AUTO_UPDATING) return;
+  var due = ROWS.filter((function(r) {
+    return stage(r) === 'trial' && warn(r, 'drift') && r.edited !== true && !AUTO_TRIED[r.rmId];
+  }));
+  if (!due.length) return;
+  AUTO_UPDATING = true;
+  var done = [];
+  var send = function(body, tries) {
+    return q('/migration/api/apply', body).then((function(out) {
+      if (out && out.code === 'MIGRATION_PAGE_BUSY' && tries < 20) return new Promise((function(ok) {
+        setTimeout(ok, 1500);
+      })).then((function() {
+        return send(body, tries + 1);
+      }));
+      return out;
+    }));
+  };
+  var step = function() {
+    var r = due.shift();
+    if (!r) {
+      AUTO_UPDATING = false;
+      if (done.length) note('Updated ' + plural(done.length, 'clone', 'clones') + ' to match Rule Machine: ' + done.map(esc).join(', ') + '.', false);
+      load();
+      return;
+    }
+    AUTO_TRIED[r.rmId] = true;
+    send({
+      op: 'deleteClone',
+      rmId: r.rmId
+    }, 0).then((function(out) {
+      if (!out || out.ok !== true) {
+        AUTO_FAIL[r.rmId] = 'the old clone was not removed: ' + (out && out.message || 'no reason given');
+        return step();
+      }
+      return send({
+        op: 'clone',
+        rmId: r.rmId
+      }, 0).then((function(c) {
+        if (c && c.ok === true) done.push(r.rmName || r.rmId); else AUTO_FAIL[r.rmId] = 'the old clone was removed, but the new one was not made: ' + (c && c.message || 'no reason given');
+        step();
+      }));
+    })).catch((function() {
+      AUTO_FAIL[r.rmId] = 'the hub did not answer';
+      step();
+    }));
+  };
+  step();
+}
+
+function recloneRun(r) {
+  WORKING = true;
+  render();
+  var fail = function(m) {
+    WORKING = false;
+    note(m, true);
+    render();
+    load();
+  };
+  q('/migration/api/apply', {
+    op: 'deleteClone',
+    rmId: r.rmId
+  }).then((function(out) {
+    if (!out || out.ok !== true) return fail(out && out.message || 'HAI could not remove the old clone.');
+    return q('/migration/api/apply', {
+      op: 'clone',
+      rmId: r.rmId,
+      upgrades: upgList(r)
+    }).then((function(c) {
+      WORKING = false;
+      if (!c || c.ok !== true) return fail('The old clone was removed, but the new one was not made: ' + (c && c.message || 'no reason given') + ' Press Clone to try again.');
+      note('“' + (r.rmName || r.rmId) + '” is updated to match Rule Machine.', false);
+      render();
+      load();
+    }));
+  })).catch((function() {
+    fail('The hub did not answer. Reload the page to see where this rule is.');
+  }));
+}
+
+function approveAndClone(r) {
+  if (WORKING) return;
+  WORKING = true;
+  render();
+  q('/migration/api/apply', {
+    op: 'approveDevices',
+    rmId: r.rmId
+  }).then((function(out) {
+    WORKING = false;
+    if (!out || out.ok !== true) {
+      note(out && out.message || 'HAI could not approve those devices.', true);
+      render();
+      return;
+    }
+    var fresh = (out.state && out.state.rows || []).filter((function(x) {
+      return x.rmId === r.rmId;
+    }))[0];
+    if (fresh) ROWS = ROWS.map((function(x) {
+      return x.rmId === r.rmId ? fresh : x;
+    }));
+    var row = rowOf(r.rmId);
+    if (row && canClone(row)) return confirmRun('clone', [ row ]);
+    note('Devices approved. ' + (out.missing && out.missing.length ? 'Some are no longer on the hub. ' : '') + 'Reload the page if Clone is not offered yet.', false);
+    render();
+    load();
+  })).catch((function() {
+    WORKING = false;
+    note('The hub did not answer. Reload the page to see where this rule is.', true);
+    render();
+  }));
+}
+
 function rowOf(id) {
   return ROWS.filter((function(r) {
     return r.rmId === id;
@@ -2407,6 +2609,8 @@ function act(kind, id) {
   if (kind === 'back') return confirmRun('switchBack', [ r ]);
   if (kind === 'delete') return confirmRun('deleteClone', [ r ]);
   if (kind === 'fix') return openEditor(editorAt('rm:' + r.rmId));
+  if (kind === 'approve') return approveAndClone(r);
+  if (kind === 'reclone') return recloneOne(r);
   if (kind === 'engine') return window.open(LINKS.engine, '_blank', 'noopener');
   if (kind === 'devices') return window.open(LINKS.devices, '_blank', 'noopener');
   if (kind === 'scan') return assess();
@@ -2475,7 +2679,7 @@ function shadowTest(r) {
     title: 'Run for real and check?',
     danger: true,
     yes: 'Run it now',
-    text: 'Rule Machine runs “' + esc(r.rmName || r.rmId) + '” once, for real: its devices will change as if it had been triggered. HAI watches and checks what its clone would have done. The test counts for the rule’s actions; its trigger still needs one real run before the light can go green.'
+    text: 'Rule Machine runs “' + esc(r.rmName || r.rmId) + '” once, for real: its devices will change as if it had been triggered. HAI watches and checks what its clone would have done.'
   }, (function() {
     q('/migration/api/shadow', {
       rmId: r.rmId,
@@ -2548,7 +2752,7 @@ function tellHai(rules) {
 }
 
 function showHelp() {
-  var el = modal('<div class="help"><h2>How moving rules works</h2>' + '<div class="mini"><div class="rm">In Rule Machine</div><div class="trial">Being shadowed</div><div class="hai">Running on HAI</div></div>' + '<p>Each rule moves along this track, one step at a time, and only when you press.</p>' + '<h3>1. Clone</h3><p>HAI makes a clone that stays <b>switched off</b>. Rule Machine keeps running the rule, so nothing in your house changes. If the hub will not accept a clone as it is, it goes to the editor\'s Drafts, marked Needs fixing, with what to fix.</p>' + '<h3>2. Shadow</h3><p>Each time the rule is triggered, HAI works out what its clone would have done and checks that against what Rule Machine actually did. Green: at least 3 runs, all matched, every trigger seen. Amber: still watching. Red: a run differed. Grey: nothing in the rule can be checked (notifications, speech, web requests).</p>' + '<h3>3. Promote to HAI</h3><p>The Rule Machine rule is paused, HAI checks it really is, and only then starts the clone, with the Rule Machine rule\'s private boolean. Promote the green ones; HAI asks first when a light is not green.</p>' + '<h3>4. Back to Rule Machine, any time</h3><p>One click pauses the clone and starts the Rule Machine rule again. Your Rule Machine rules are never deleted.</p>' + '<h3>Technical</h3><p style="color:var(--muted);font-size:14px">A clone being shadowed is switched off and listens to its own triggers: devices, buttons, the mode, hub variables, HSM and the hub\'s own events, times, sun times and periodic schedules. A run by another rule or app, a Rule Machine rule\'s pause and a call to the rule\'s own address give no event HAI can hear, so those triggers are shown as can\'t be checked; a rule that reads its private boolean, which only Rule Machine holds, is checked both ways and marked partly checked. Every message between the clone, HAI Checker and this page is signed. When a trigger fires, it notes the state of the devices the rule uses, then watches the devices it would command until its own delays and waits have passed (at most 10 minutes), and HAI Checker works out, with the same simulator as the editor\'s Simulate tab, what the clone would have done. The last 20 runs of each clone are kept. Rules come from Automation Map\'s scan file in File Manager (the newest scan of either channel). Each clone is converted into an HAI rule document, checked by the same validator the editor uses, and installed as its own HAI Rule Container app, stopped. A clone the hub refuses (a device lacking a command, a missing variable) is kept as an editor draft. Switching pauses the Rule Machine rule through Rule Machine\'s own interface and confirms the pause before starting the clone; if the pause cannot be confirmed, Rule Machine stays in charge. A rule that reboots or shuts down the hub is cloned only after you say so. Cloning or deleting many rules runs as a job on the hub, a few rules per step, and this page only watches. A step in an HAI rule that acts on another rule (its private boolean, run, pause, resume, cancel) acts on that rule\'s HAI clone once it is switched over, and on the Rule Machine rule until then.</p>' + '<div class="acts"><button type="button" class="btn primary" id="helpClose">Got it</button></div></div>');
+  var el = modal('<div class="help"><h2>How moving rules works</h2>' + '<div class="mini"><div class="rm">In Rule Machine</div><div class="trial">Being shadowed</div><div class="hai">Running on HAI</div></div>' + '<p>Each rule moves along this track, one step at a time, and only when you press.</p>' + '<h3>1. Clone</h3><p>HAI makes a clone that stays <b>switched off</b>. Rule Machine keeps running the rule, so nothing in your house changes. If the hub will not accept a clone as it is, it goes to the editor\'s Drafts, marked Needs fixing, with what to fix.</p>' + '<h3>2. Shadow</h3><p>Each time the rule is triggered, HAI works out what its clone would have done and checks that against what Rule Machine actually did. Green: ready to promote. Everything in it is proven in HAI, so it does not wait for runs. Red: a run differed, and the row says what. Shadowing carries on beside a green clone and its runs are listed, but they are a record, not a gate.</p>' + '<h3>3. Promote to HAI</h3><p>The Rule Machine rule is paused, HAI checks it really is, and only then starts the clone, with the Rule Machine rule\'s private boolean. Promote the green ones; HAI asks first when a light is not green.</p>' + '<h3>4. Back to Rule Machine, any time</h3><p>One click pauses the clone and starts the Rule Machine rule again. Your Rule Machine rules are never deleted.</p>' + '<h3>Technical</h3><p style="color:var(--muted);font-size:14px">A clone being shadowed is switched off and listens to its own triggers: devices, buttons, the mode, hub variables, HSM and the hub\'s own events, times, sun times and periodic schedules. A run by another rule or app, a Rule Machine rule\'s pause and a call to the rule\'s own address give no event HAI can hear, so those triggers are shown as can\'t be checked; a rule that reads its private boolean, which only Rule Machine holds, is checked both ways and marked partly checked. Every message between the clone, HAI Checker and this page is signed. When a trigger fires, it notes the state of the devices the rule uses, then watches the devices it would command until its own delays and waits have passed (at most 10 minutes), and HAI Checker works out, with the same simulator as the editor\'s Simulate tab, what the clone would have done. The last 20 runs of each clone are kept. Rules come from Automation Map\'s scan file in File Manager (the newest scan of either channel). Each clone is converted into an HAI rule document, checked by the same validator the editor uses, and installed as its own HAI Rule Container app, stopped. A clone the hub refuses (a device lacking a command, a missing variable) is kept as an editor draft. Switching pauses the Rule Machine rule through Rule Machine\'s own interface and confirms the pause before starting the clone; if the pause cannot be confirmed, Rule Machine stays in charge. A rule that reboots or shuts down the hub is cloned only after you say so. Cloning or deleting many rules runs as a job on the hub, a few rules per step, and this page only watches. A step in an HAI rule that acts on another rule (its private boolean, run, pause, resume, cancel) acts on that rule\'s HAI clone once it is switched over, and on the Rule Machine rule until then.</p>' + '<div class="acts"><button type="button" class="btn primary" id="helpClose">Got it</button></div></div>');
   document.getElementById('helpClose').onclick = function() {
     modal(null);
   };
@@ -2560,6 +2764,7 @@ function showHelp() {
 document.addEventListener('click', (function(e) {
   var t = e.target.closest('button, [data-open]');
   if (!t) return;
+  if (t.hasAttribute('data-act-top')) return window.open(LINKS.engine, '_blank', 'noopener');
   if (t.hasAttribute('data-open')) return goTo(t.getAttribute('data-open'));
   if (t.hasAttribute('data-toggle')) {
     var g = t.getAttribute('data-toggle');
@@ -2696,6 +2901,8 @@ function show(out) {
     DRAFTED[String(k)] = true;
   }));
   DRAFT_WHY = out.draftWhy || {};
+  AUTO_APPROVE = out.autoApprove !== false;
+  setTimeout(autoUpdateClones, 0);
   ENV = String(out.environment || '').toUpperCase();
   if (ENV !== 'DEV') SHOW_TESTS = false;
   if (out.plan) PLAN = out.plan;

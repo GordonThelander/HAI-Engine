@@ -285,7 +285,7 @@ pbLeft: pbLeft, light: sh?.l, w: sh?.w])
 }
 Map haiShadowLights() {
 Map out = [:]
-((Map) (state.shadow ?: [:])).each { k, v -> if (v instanceof Map && ((Map) v).l) out.put(k as String, ((Map) v).l) }
+((Map) (state.shadow ?: [:])).each { k, v -> if (v instanceof Map && ((Map) v).l) out.put(k as String, ((Map) v).nw ? 'unset' : ((Map) v).l) }
 return out
 }
 void haiShadowForget(List ids) {
@@ -311,7 +311,7 @@ paragraph 'Enable OAuth for the HAI Migration app code, then press Done, to crea
 }
 }
 }
-@Field static final int EXPECTED_ENGINE_CONTRACT = 2
+@Field static final int EXPECTED_ENGINE_CONTRACT = 5
 Map migrationContractRefusal(Map facts) {
 Object c = facts?.contract
 if (c instanceof Number && ((Number) c).intValue() == EXPECTED_ENGINE_CONTRACT) return null
@@ -383,6 +383,12 @@ String rmId = wanted[0]
 Map row = ((List) gathered.rows).find { it.rmId == rmId }
 if (row == null) {
 return migrationRespond([ok: false, code: 'MIGRATION_NO_SUCH_RULE', message: 'This hub has no Rule Machine rule with that id any more.'])
+}
+if (op == 'approveDevices') {
+Map w = ((List) (row.warnings ?: [])).find { Object o -> ((Map) o).kind == 'devices' && ((Map) o).ids }
+if (w == null) return migrationRespond([ok: false, code: 'MIGRATION_NO_DEVICES', message: 'This rule has no devices waiting to be approved.'])
+Map got = parent.haiMigrationCall('approveDevices', [ids: w.ids])
+return migrationRespond((got ?: [ok: false]) + [state: migrationRowsAfter(wanted, reads)])
 }
 if (req.upgrades instanceof List) row = row + [upgrades: ((List) req.upgrades).collect { it as String }]
 if (req.by != null) row = row + [testedBy: (req.by as String)]
@@ -684,6 +690,26 @@ moved = true
 }
 if (moved) state.migRefused = kept
 }
+void migMarkEdited(List rows) {
+Map base = new LinkedHashMap((Map) (state.migBase ?: [:]))
+boolean moved = false
+rows.each { Object o ->
+Map r = o
+String k = r.rmId as String
+boolean copied = r.haiId != null && r.haiMissing != true
+if (!copied) { if (base.remove(k) != null) moved = true; return }
+boolean drift = ((List) (r.warnings ?: [])).any { ((Map) it).kind == 'drift' }
+Map b = base.get(k)
+if (!drift) {
+if (r.haiBytes != null && (b == null || b.bytes != r.haiBytes || b.haiId != (r.haiId as String))) {
+base.put(k, [haiId: r.haiId as String, bytes: r.haiBytes]); moved = true
+}
+return
+}
+r.edited = (b == null || r.haiBytes == null || b.haiId != (r.haiId as String)) ? null : (b.bytes != r.haiBytes)
+}
+if (moved) state.migBase = base
+}
 void migMarkRefused(List rows, boolean full) {
 Map kept = state.migRefused
 if (!kept) return
@@ -772,6 +798,7 @@ detail?.ok == true ? detail : null, facts.allowed, limits, checked,
 facts.stopped instanceof List ? facts.stopped : [],
 facts.disabled instanceof List ? facts.disabled : [], only)
 migMarkRefused((List) (st.rows ?: []), only == null)
+migMarkEdited((List) (st.rows ?: []))
 Map shadows = state.shadow instanceof Map ? state.shadow : [:]
 List stale = []
 ((List) (st.rows ?: [])).each { Object ro -> Map r = ro
@@ -786,6 +813,7 @@ stale.addAll(shadows.keySet().findAll { Object k -> !live.contains(k as String) 
 if (stale) haiShadowForget(stale)
 st.drafted = facts.drafted instanceof List ? facts.drafted : []
 st.draftWhy = facts.draftWhy instanceof Map ? facts.draftWhy : [:]
+st.autoApprove = facts.autoApprove != false
 st.environment = facts.environment
 if (state.migJob instanceof Map) st.job = [state: ((Map) state.migJob).state, op: ((Map) state.migJob).op]
 st.amAppId = ((Map) (decode?.instance ?: [:])).appId
@@ -1476,7 +1504,7 @@ return "the trigger \"${said}\"".toString()
 @Field static final int MIG_CONFIRM_TRIES = 3
 @Field static final long MIG_CONFIRM_GAP_MS = 250L
 @Field static final String MIGRATION_PAGE_FILE = 'hai-migration.html'
-@Field static final String MIGRATION_PAGE_SHA256 = 'cd87f2c0c8968de7ef3ddd0cdc19716fa10a5ca520faf1b87c7caae7f4cdb405'
+@Field static final String MIGRATION_PAGE_SHA256 = '89b7a2f57a8b58a403c0fa24c09bc16f9a8424d075ff2bc40cc8f202313423c1'
 @Field static final String MIG_PROV_OK = 'ok'
 @Field static final String MIG_PROV_PARTIAL = 'partial'
 @Field static final String MIG_PROV_ABSENT = 'absent'
@@ -1617,6 +1645,7 @@ rmUrl : migRmRuleUrl(rmId),
 haiId : haiId,
 haiName : hai == null ? null : (hai.name as String),
 haiState: hai == null ? null : (hai.state as String),
+haiBytes: hai == null ? null : hai.bytes,
 haiChildId: hai == null ? null : (hai.childId as String),
 haiMissing: haiId != null && hai == null,
 phase : (pair.phase ?: 'none') as String,
@@ -1726,7 +1755,7 @@ message: ("${repairNoted.take(4).join(', ')}${repairNoted.size() > 4 ? ' and oth
 if (dRule != null && allowed != null) {
 List unapproved = rmUnapprovedDevices(dRule, allowed)
 if (!unapproved.isEmpty()) {
-warnings << [kind: 'devices', names: unapproved, blocking: true,
+warnings << [kind: 'devices', names: unapproved, ids: rmUnapprovedDeviceIds(dRule, allowed), blocking: true,
 message: ("This rule uses ${unapproved.size()} device${unapproved.size() == 1 ? '' : 's'} HAI " +
 "is not allowed to use: ${unapproved.take(4).join(', ')}" +
 "${unapproved.size() > 4 ? ' and others' : ''}. Select ${unapproved.size() == 1 ? 'it' : 'them'} " +
@@ -4208,6 +4237,13 @@ return rmDevicesNamed(detailRule).findAll { Object k, Object v ->
 String id = k as String
 return (id ==~ /\d+/) && !ok.contains(id)
 }.values().toList().sort()
+}
+List rmUnapprovedDeviceIds(Map detailRule, Collection allowed) {
+if (allowed == null) return []
+Set ok = allowed.collect { String a = it as String; a.startsWith('dev:') ? a.substring(4) : a } as Set
+Map named = rmDevicesNamed(detailRule)
+return named.keySet().collect { it as String }.findAll { String id -> (id ==~ /\d+/) && !ok.contains(id) }
+.sort { String id -> named[id] as String }
 }
 String rmRendered(Map detailRule, Map node) {
 if (node == null) return 'always'

@@ -91,7 +91,7 @@ path('/endpoint/variables/:name/:value') { action: [GET: 'endpointVariableGet', 
 '/endpoint/variables/:name/:value' : 'endpoint'
 ]
 def installed() { haiApproveAllOnce(); haiInit() }
-def updated() { engineKeySweep(); haiWeatherApprove(); haiNoteDeclined(); haiLogsSchedule(); haiInit(); haiEverydayFollow(); if (state.haiApproveAll instanceof Map && state.haiApproveAll.seen != true) { Map m = new LinkedHashMap((Map) state.haiApproveAll); m.seen = true; state.haiApproveAll = m } }
+def updated() { engineKeySweep(); haiWeatherApprove(); haiNoteDeclined(); try { haiApproveNewDevices(false) } catch (Exception e) { log.warn "HAI Engine: new devices not checked: ${e.message}" }; haiLogsSchedule(); haiInit(); haiEverydayFollow(); if (state.haiApproveAll instanceof Map && state.haiApproveAll.seen != true) { Map m = new LinkedHashMap((Map) state.haiApproveAll); m.seen = true; state.haiApproveAll = m } }
 void haiApproveAllOnce() {
 if (state.haiApproveAll != null) return
 if (((List) (settings.runtimeAllowDevices ?: [])).size() > 0) { state.haiApproveAll = [skipped: true, at: now()]; return }
@@ -105,6 +105,25 @@ if (ids) app.updateSetting('runtimeAllowDevices', [type: 'capability', value: id
 state.haiApproveAll = [count: ids.size(), error: err, at: now()]
 if (ids) haiInfo "HAI Engine: new install, so all ${ids.size()} devices on the hub are approved; untick any under Approved devices"
 else log.warn "HAI Engine: new install, but the hub's device list could not be read (${err}), so no device is approved yet"
+}
+Map haiApproveNewDevices(boolean throttle) {
+if (settings.haiAutoApproveNew == false) return [ok: true, added: [], off: true]
+if (state.haiApproveAll == null) return [ok: true, added: []]
+if (throttle && state.haiNewDevicesAt instanceof Number && now() - (state.haiNewDevicesAt as long) < 60000L) return [ok: true, added: []]
+state.haiNewDevicesAt = now()
+List all = []
+try {
+httpGet([uri: 'http://127.0.0.1:8080/hub2/devicesList', timeout: 30]) { resp -> all = haiDeviceListIds(resp.data) }
+} catch (Exception e) { log.warn "HAI Engine: new devices were not checked; the hub's device list could not be read (${e.message})"; return [ok: false] }
+List have = ((settings.runtimeAllowDevices ?: []) as List).findAll { it != null }.collect { it.id.toString() }
+List declined = ((List) (state.haiDeclined ?: [])).collect { it as String }
+List added = all.collect { it as String }.findAll { !have.contains(it) && !declined.contains(it) }
+if (added) {
+app.updateSetting('runtimeAllowDevices', [type: 'capability', value: have + added])
+if (state.haiAllowSeen instanceof List) state.haiAllowSeen = ((List) state.haiAllowSeen) + added
+haiInfo "HAI Engine: ${added.size()} new device${added.size() == 1 ? '' : 's'} on the hub ${added.size() == 1 ? 'is' : 'are'} now approved (${added.take(10).join(', ')}${added.size() > 10 ? ', ...' : ''})"
+}
+return [ok: true, added: added]
 }
 List haiOtherEngines() {
 List out = []
@@ -160,6 +179,29 @@ app.updateSetting('runtimeAllowDevices', [type: 'capability', value: have + [id]
 haiInfo "HAI Engine: device ${id} joined the hub and is now an approved device (Approve new devices automatically is on)"
 }
 @Field static final long HAI_JOIN_NEW_MS = 900000L
+Map haiApproveDevices(List ids) {
+List want = ((ids ?: []) as List).collect { it as String }.findAll { it ==~ /[0-9]{1,12}/ }.unique()
+if (want.isEmpty() || want.size() > 50) return [ok: false, code: 'APPROVE_BAD_REQUEST', message: 'That press named no devices HAI could approve.']
+List have = ((settings.runtimeAllowDevices ?: []) as List).findAll { it != null }.collect { it.id.toString() }
+List added = [], missing = []
+want.findAll { !have.contains(it) }.each { String id ->
+Object data = null
+try {
+httpGet([uri: "http://127.0.0.1:8080/device/fullJson/${id}".toString(), contentType: 'application/json', timeout: 8]) { resp ->
+if (resp?.status == 200) data = resp.data
+}
+} catch (Exception e) { data = null }
+Map d = data instanceof Map ? (((Map) data).device instanceof Map ? ((Map) data).device : data) : null
+if (d != null && d.id?.toString() == id) added << id else missing << id
+}
+if (added) {
+app.updateSetting('runtimeAllowDevices', [type: 'capability', value: have + added])
+if (state.haiDeclined instanceof List) state.haiDeclined = ((List) state.haiDeclined).findAll { !added.contains(it as String) }
+haiInfo "HAI Engine: ${added.size()} device${added.size() == 1 ? '' : 's'} approved from HAI Migration (${added.join(', ')})"
+}
+if (missing && !added) return [ok: false, code: 'APPROVE_NO_DEVICE', message: 'The hub has none of those devices any more. Scan again.']
+return [ok: true, added: added, missing: missing]
+}
 String haiJoinRefusal(String id) {
 Object data = null
 try {
@@ -481,6 +523,7 @@ if (haiAllNew && haiAll.error) editorHelpParts(haiHelpText, 'all-devices-unread'
 input 'runtimeAllowDevices', 'capability.*', title: 'Devices', multiple: true, required: false, submitOnChange: true
 input 'haiAutoApproveNew', 'bool', title: 'Approve new devices automatically', defaultValue: true, submitOnChange: true
 pageHelp('devices-new').each { paragraph it }
+if (settings.haiAutoApproveNew == false) paragraph '<b>Off:</b> devices added to the hub from now on are not approved, so HAI rules cannot use them and HAI Migration will not clone a Rule Machine rule that uses one until you approve it.'
 }
 Map haiVarOptions = runtimeHubVariableOptions()
 List haiVarsChosen = settings.runtimeWritableVariables == null ? (haiVarOptions.keySet() as List) : settings.runtimeWritableVariables
@@ -676,7 +719,7 @@ Object last = state.runtimeAnnouncedAt
 String when = last == null ? 'not yet' : runtimeClock().call(last as long)
 return "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT}). ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
 }
-@Field static final String ENGINE_APP_VERSION = '0.5.159-dev'
+@Field static final String ENGINE_APP_VERSION = '0.5.167-dev'
 @Field static final int ENGINE_MAX_PROPOSALS = 20
 @Field static final java.util.concurrent.ConcurrentHashMap ENGINE_DRAFT_INV = new java.util.concurrent.ConcurrentHashMap()
 @Field static final int ENGINE_MAX_ATTRIBUTES = 64
@@ -1573,7 +1616,7 @@ headers: current ? ['Cache-Control': 'private, no-cache', 'ETag': tag] : ['Cache
 }
 @Field static final String HAI_REPORT_URL = 'https://github.com/GordonThelander/HAI-Engine/issues/new/choose'
 @Field static final String MIGRATION_CHILD_NAME = 'HAI Migration (Preview)'
-@Field static final int MIGRATION_CONTRACT = 2
+@Field static final int MIGRATION_CONTRACT = 5
 String haiMigrationPageUrl() {
 def m = haiMigrationChild()
 if (m == null) return null
@@ -1682,6 +1725,7 @@ return rtSignedData(haiRuleKey(), name, value, payload, now(), UUID.randomUUID()
 Map haiMigrationFacts(Boolean pairsOnly = false) {
 if (!pairsOnly && state.haiCodeVersion != ENGINE_APP_VERSION) runIn(1, 'haiCodeCheckSoon', [overwrite: true])
 if (pairsOnly) return [contract: MIGRATION_CONTRACT, pairs: haiMigrationPairs()]
+try { haiApproveNewDevices(true) } catch (Exception e) { log.warn "HAI Engine: new devices not checked: ${e.message}" }
 Map reg = (rtRegistry(runtimePlat()).rules ?: [:])
 Map lastRuns = [:]
 ((List) (((Map) (state.runtimeSummary ?: [:])).rules ?: [])).each { Object o ->
@@ -1691,7 +1735,8 @@ if (r.lastRunAt != null) lastRuns.put(r.id as String, [lastRunAt: r.lastRunAt, l
 Map haiRules = [:]
 reg.each { Object k, Object v ->
 Map e = v
-haiRules.put(k as String, [name: e.name as String, state: e.state as String, childId: e.childId as String] +
+Object bytes = (e.index instanceof Map) ? ((Map) e.index).bytes : null
+haiRules.put(k as String, [name: e.name as String, state: e.state as String, childId: e.childId as String, bytes: bytes] +
 ((Map) (lastRuns.get(k as String) ?: [:])))
 }
 rtCandidates(runtimePlat()).each { Object co ->
@@ -1716,7 +1761,10 @@ List disabled = listed.ok == true ? listed.disabled : []
 List drafted = []
 Map draftWhy = [:]
 try {
-((List) (filed('editorDrafts') ?: [])).each { Object o ->
+List drafts = (filed('editorDrafts') ?: [])
+List keep = drafts.findAll { Object o -> !(((Map) o).needsFixing == true && (((Map) o).fixReason as String)?.contains('HAI Checker')) }
+if (keep.size() != drafts.size()) { filedPut('editorDrafts', keep); haiInfo "HAI Engine: ${drafts.size() - keep.size()} draft(s) left from an Engine and Checker mid-update were cleared; those rules can be cloned again" }
+keep.each { Object o ->
 Map d = o
 String id = d.rule instanceof Map ? (((Map) d.rule).id as String) : null
 if (id == null || !id.startsWith('rm:')) return
@@ -1725,7 +1773,7 @@ if (!drafted.contains(k)) drafted << k
 if (d.fixReason instanceof String) draftWhy.put(k, d.fixReason)
 }
 } catch (Throwable t) { drafted = []; draftWhy = [:] }
-return [contract: MIGRATION_CONTRACT, pairs: haiMigrationPairs(), paused: paused, checked: checked, stopped: stopped, drafted: drafted, draftWhy: draftWhy, environment: HAI_ENVIRONMENT,
+return [contract: MIGRATION_CONTRACT, pairs: haiMigrationPairs(), paused: paused, checked: checked, stopped: stopped, drafted: drafted, draftWhy: draftWhy, autoApprove: settings.haiAutoApproveNew != false, environment: HAI_ENVIRONMENT,
 disabled: disabled, appsComplete: listed.ok == true,
 pausedWhy: listed.ok == true ? null : listed.why, haiRules: haiRules, allowed: allowed,
 limits: [writable: runtimeIdList(settings.runtimeWritableVariables), modeAllowed: settings.runtimeAllowSetMode == true,
@@ -1909,6 +1957,7 @@ try { inv = engineInventory(rtDeviceIds(doc), doc) } catch (Exception ex) { log.
 Map tried = checkerCall([op: 'dryRun', doc: doc, now: now(), zone: (location.timeZone ?: TimeZone.getTimeZone('UTC')).ID, inv: inv])
 return tried.checkerError ? [ok: false, message: tried.message as String] : tried
 },
+approveDevices: { Map c -> haiApproveDevices((List) c.ids) },
 activateStopped: { Map c ->
 Map pp = runtimePlat()
 Map cand = rtCandidate(pp, c.candidateId)
@@ -2169,6 +2218,7 @@ return null
 @Field static final int HAI_BACKUP_KEEP = 10
 def haiBackupDaily() {
 try { haiBackupMake(false) } catch (Exception e) { log.warn "HAI Engine: rule backup failed: ${e.message}" }
+try { haiApproveNewDevices(false) } catch (Exception e) { log.warn "HAI Engine: new devices not checked: ${e.message}" }
 }
 String haiBackupName(long at) {
 return "hai-backup-${new Date(at).format('yyyyMMdd', location.timeZone)}.json".toString()
@@ -5254,7 +5304,7 @@ return s.length() > max ? s.substring(0, max) + '...' : s
 @Field static final int EDITOR_MAX_ID_CHARS = 64
 @Field static final String EDITOR_EFFECTS = "Save draft keeps this rule here, in the editor, and changes nothing on the hub. Activate on hub (Update on hub for a rule already there) is the one that puts it live, and HAI checks it before it runs. Run rule runs the hub's version once, now."
 @Field static final String EDITOR_PAGE_FILE = 'hai-editor.html'
-@Field static final String EDITOR_PAGE_SHA256 = 'bb425899e9dc1a615d759ea90ec52a87cd3f5929d7fb929ef2b10b33a0f7ca8b'
+@Field static final String EDITOR_PAGE_SHA256 = 'a6e426ddbcee7beef883c49cda914dbf2c56ec163edc922d3dd48c58088e5810'
 @Field static final String EDITOR_SPECS_FILE = 'hai-editor-specs.json'
 @Field static final String EDITOR_SPECS_SHA256 = 'd24031d13143e19736db036db89e38ff3bf9c86a628f578a0666d89ad5f12f23'
 @Field static final int EDITOR_MAX_OTHER_COMMANDS = 200
@@ -5976,7 +6026,7 @@ return [status: 202, body: body, payload: out.payload]
 }
 @Field static final String RT_ENGINE = 'HAI-1'
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = '8dd877237d65ee3c'
+@Field static final String RT_CHILD_BUILD = 'e0061a51654b4e2a'
 @Field static final long RT_WATCHDOG_EVERY_MS = 900000L
 @Field static final long RT_RECOVERY_MS = 120000L
 @Field static final long RT_CLAIM_MS = 600000L
@@ -8499,4 +8549,4 @@ Map m = [ok: false, code: code, message: message]
 m.putAll(extra ?: [:])
 return m
 }
-@Field static final String CHECKER_BUILD = '2d66394aabfc6f43'
+@Field static final String CHECKER_BUILD = '28222f16db251b76'
