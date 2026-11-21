@@ -1,45 +1,45 @@
 {
-  "packageName": "HAI Engine (Preview)",
-  "author": "HAI",
-  "version": "0.5.167",
+  "packageName": "HAI Engine",
+  "author": "Gordon Thelander",
+  "version": "1.0.0",
   "minimumHEVersion": "2.4.0",
   "dateReleased": "2026-11-21",
-  "documentationLink": "https://github.com/GordonThelander/HAI-Engine/blob/preview/docs/user-guide.md",
+  "documentationLink": "https://github.com/GordonThelander/HAI-Engine/blob/release-candidate/docs/user-guide.md",
   "communityLink": "",
-  "releaseNotes": "HAI Engine (Preview) 0.5.167: a rule engine for Hubitat, an alternative to Rule Machine, with a rule editor in your browser.\n\nNew since 0.5.159: a rule no longer runs twice when a device repeats the same report. New devices are approved for HAI automatically, with a warning if that is turned off. Migration keeps cloned rules in the trial list until they are proven, updates unedited clones by itself when the Rule Machine rule changes, and no longer marks a copy red while Rule Machine is still working through slow, metered commands.\n\nThis is a preview for invited testers. Expect rough edges, and keep your Rule Machine rules until you trust the HAI copies.\n\nAn install or update takes 10 to 15 minutes while the hub compiles the apps. Leave the page open until it finishes; your rules keep running.\n\n* Rule editor: open it from the HAI Engine page. Build rules from triggers, conditions and actions in everyday words, check them, put them on the hub stopped, and start them when ready. Start from a pattern, or open the Showcase rule to see much of what HAI can do.\n* AI Rule Assistant (optional): describe a rule in plain words and it drafts one for you to review. It needs your own Claude API key and a spending limit, under AI token and cost management. Everything else works without it.\n* Each rule runs as its own small app on the hub, with its run history.\n* Backups: a backup of your rules every night, and Back up now at any time. Restore one rule or all.\n* HAI Migration (installed, off until you turn it on in HAI Engine): copies Rule Machine rules into HAI one at a time. One page: Assess sorts your rules into can clone, can't clone and empty; Clone makes paused copies; Cut over pauses the Rule Machine rule and starts its copy; Rollback reverses it. Needs Automation Map 2.4.48 or later, with a scan done.\n* Off until you switch them on: the MCP endpoint for AI assistants, and the web address for dashboards and shortcuts.\n\nAfter installing: Apps, Add user app, HAI Engine (Preview). Open the rule editor from its page, check Approved devices, and press Done.\n\nReport a problem or give feedback: More, Report a problem or give feedback in the editor, or the Issues tab of the HAI-Engine repository on GitHub. Report security problems privately, as SECURITY.md explains.",
+  "releaseNotes": "HAI Engine 1.0.0: a rule engine for Hubitat with a rule editor in your browser. Write new rules in everyday words, or copy your Rule Machine rules and prove each copy against the original before anything changes.\n\nAn install or update takes 10 to 15 minutes while the hub compiles the apps. Leave the page open until it finishes; your rules keep running.\n\n* Rule editor: open it from the HAI Engine page. Build rules from triggers, conditions and actions that read as sentences, drag lines to rearrange them, and add If / otherwise decisions. HAI checks the rule as you build it.\n* Try before it runs: simulate a rule step by step, or run a single line on the hub with Run this step. Rules go on the hub stopped and start when you say.\n* Patterns: start from a working rule (lights on movement, a bathroom fan, a door left open, a leak alert and more) instead of a blank page.\n* Each rule runs as its own small app on the hub, with its run history, so a rule that did not fire tells you why.\n* Backups: a backup of your rules every night, and Back up now at any time. Restore one rule or all.\n* HAI Migration (installed, off until you turn it on in HAI Engine): copies Rule Machine rules into HAI. Each copy runs in a trial beside Rule Machine and changes nothing; it turns green once its runs have matched Rule Machine's. Switch over pauses the Rule Machine rule and starts the copy; Switch back reverses it. Anything HAI cannot rebuild exactly, it names instead of guessing. Needs Automation Map 2.4.48 or later, with a scan done.\n* Local by default: the optional AI Rule Assistant drafts a rule from a sentence using your own Claude API key with a spending limit. The MCP endpoint for AI assistants and the web address for dashboards are off until you switch them on.\n* Removing HAI Engine deletes its files from File Manager; your rule backups stay so a reinstall can restore them.\n\nAfter installing: Apps, Add user app, HAI Engine. Open the rule editor from its page, check Approved devices, and press Done.\n\nReport a problem or give feedback: More, Report a problem or give feedback in the editor, or the Issues tab of the HAI-Engine repository on GitHub. Report security problems privately, as SECURITY.md explains.",
   "apps": [
     {
-      "id": "0d9f4c2a-7e31-4f0b-8c6e-2b5a9d1e3f40",
-      "name": "HAI Engine (Preview)",
+      "id": "8e2b6d40-1f73-4c95-b0a8-3d5f7e9b1c21",
+      "name": "HAI Engine",
       "namespace": "gordonthelander",
-      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/apps/hai_engine_app.groovy",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/apps/hai_engine_app.groovy",
       "required": true,
       "primary": true,
       "oauth": true
     },
     {
-      "id": "5a2e8b17-c9d4-4e63-a1f0-7c3b6d2e9a51",
-      "name": "HAI Rule Container (Preview)",
+      "id": "f1c3e5a7-9b2d-4f60-8e1a-5c7e9a1b3d42",
+      "name": "HAI Rule Container",
       "namespace": "gordonthelander",
-      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/apps/hai_rule_app.groovy",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/apps/hai_rule_app.groovy",
       "required": true,
       "primary": false,
       "oauth": false
     },
     {
-      "id": "9c71d3e5-2b8f-4a06-b4d9-e1f2a3c5b762",
-      "name": "HAI Migration (Preview)",
+      "id": "2a4c6e80-3d5f-4b71-9c0e-7a9c1e3f5b63",
+      "name": "HAI Migration",
       "namespace": "gordonthelander",
-      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/apps/hai_migration_app.groovy",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/apps/hai_migration_app.groovy",
       "required": true,
       "primary": false,
       "oauth": true
     },
     {
-      "id": "3e8a1f60-5d27-4c94-b0e3-8f1a6d2c4b73",
-      "name": "HAI Checker (Preview)",
+      "id": "6d8f0b2c-4e61-4a83-b5d7-9f1b3d5f7a84",
+      "name": "HAI Checker",
       "namespace": "gordonthelander",
-      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/apps/hai_checker_app.groovy",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/apps/hai_checker_app.groovy",
       "required": true,
       "primary": false,
       "oauth": false
@@ -47,39 +47,39 @@
   ],
   "files": [
     {
-      "id": "e4b1a7c3-6d20-4f58-9e1b-3a7c2d5f8e01",
+      "id": "0b2d4f6a-8c1e-4d3f-a5b7-1e3a5c7e9f05",
       "name": "hai-editor.html",
-      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/file-manager/hai-editor.html"
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/file-manager/hai-editor.html"
     },
     {
-      "id": "a3c5e7f9-1b2d-4e6a-8c0e-2f4a6c8e0b12",
+      "id": "5e7a9c1b-3d5f-4e72-8a9c-2b4d6f8a0c16",
       "name": "hai-migration.html",
-      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/file-manager/hai-migration.html"
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/file-manager/hai-migration.html"
     },
     {
-      "id": "7f1e3d5c-9b0a-4c2e-a6d8-4b2f0e8c6a23",
+      "id": "9a1c3e5f-7b2d-4f84-b6d8-3c5e7a9b1d27",
       "name": "hai-author-guide.txt",
-      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/file-manager/hai-author-guide.txt"
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/file-manager/hai-author-guide.txt"
     },
     {
-      "id": "2c4e6a8b-0d1f-4a3c-9e5b-7d9f1b3d5f34",
+      "id": "3f5b7d9a-1c4e-4a96-8b0d-4e6a8c0e2f38",
       "name": "hai-editor-specs.json",
-      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/file-manager/hai-editor-specs.json"
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/file-manager/hai-editor-specs.json"
     },
     {
-      "id": "d8f0b2a4-6c1e-4b3d-8f7a-9e1c3a5e7b45",
+      "id": "7b9d1f3a-5e2c-4b07-9d1f-5a7c9e1b3a49",
       "name": "hai-am-capabilities.json",
-      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/file-manager/hai-am-capabilities.json"
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/file-manager/hai-am-capabilities.json"
     },
     {
-      "id": "6b2d4f8a-1c3e-4a5b-9d7f-0e2c4a6b8d56",
+      "id": "c5e7a9b1-2d4f-4c18-a0e2-6b8d0f2a4c50",
       "name": "hai-help.html",
-      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/file-manager/hai-help.html"
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/file-manager/hai-help.html"
     },
     {
-      "id": "c1e3a5f7-2b4d-4c6e-8a0f-3d5b7e9a1c67",
+      "id": "1d3f5b7c-9e0a-4d29-b1f3-7c9e1a3b5d61",
       "name": "hai-toolkit.html",
-      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/file-manager/hai-toolkit.html"
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/file-manager/hai-toolkit.html"
     }
   ]
 }

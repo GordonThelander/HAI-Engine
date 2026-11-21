@@ -10,12 +10,12 @@ import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 
 definition(
-name: 'HAI Checker (Preview)',
+name: 'HAI Checker',
 namespace: 'gordonthelander',
-author: 'HAI',
+author: 'Gordon Thelander',
 description: 'Part of HAI Engine: checks and simulates rules for it. HAI Engine installs and updates it; there is nothing to set.',
 category: 'Automations',
-parent: 'gordonthelander:HAI Engine (Preview)',
+parent: 'gordonthelander:HAI Engine',
 iconUrl: '',
 iconX2Url: ''
 )
@@ -1088,8 +1088,8 @@ List basis = COMMAND_BASIS.get(op)
 return basis != null && have.containsAll(basis)
 }
 @Field static final List HAI_OWN_FILES = [
-'hai-(editor|migration|help|toolkit)[.]html', 'hai-editor-specs[.]json', 'hai-author-guide[.]txt', 'hai-am-(capabilities|state)[.]json',
-'hai-engine-[0-9]+-[a-z0-9_]+[.]json', 'hai-backup-[0-9]{8}[.]json', 'ham-decode(-detail)?(-dev)?[.]json',
+'hai-(editor|migration|help|toolkit)(-dev)?[.]html', 'hai-editor-specs(-dev)?[.]json', 'hai-author-guide(-dev)?[.]txt', 'hai-am-(capabilities|state)(-dev)?[.]json',
+'hai-engine-[0-9]+-[a-z0-9_]+[.]json', 'hai-backup-(dev-)?[0-9]{8}[.]json', 'ham-decode(-detail)?(-dev)?[.]json',
 ]
 String schemaFileProblem(Object name) {
 String n = name == null ? '' : name.toString()
@@ -8601,7 +8601,7 @@ int toChoose = ((List) imported.resolution).count { Map row -> row.status != BIN
 return [status: 200, body: [ok: true, rules: imported.rules, resolution: imported.resolution, summary: summary,
 toConfirm: toConfirm, toChoose: toChoose]]
 }
-@Field static final String CHECKER_BUILD = '28222f16db251b76'
+@Field static final String CHECKER_BUILD = '4c5a447fa1112325'
 Map checkerDispatch(Map req) {
 String op = req?.op as String
 switch (op) {

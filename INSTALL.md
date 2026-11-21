@@ -1,6 +1,6 @@
-# Installing the HAI preview, version 0.5.167-dev
+# Installing HAI, version 1.0.0
 
-HAI is a rule engine for Hubitat. This folder holds everything a preview tester needs. You do not need
+HAI is a rule engine for Hubitat. This folder holds everything you need. You do not need
 Python, a command line or a copy of the source code: only a web browser and your hub's own pages.
 
 What is in this folder:
@@ -13,16 +13,15 @@ What is in this folder:
 - `file-manager/` - seven files HAI's pages need, already named as the hub must hold them.
 - `VERSION` - the version these files belong to. Every file here must come from the same version.
 
-You need a Hubitat hub on firmware 2.4 or later. On a preview build the app names end in "(Preview)".
-
+You need a Hubitat hub on firmware 2.4 or later. 
 ## The easy way: Hubitat Package Manager
 
 If you have Hubitat Package Manager installed:
 
 1. Open **Hubitat Package Manager**, then **Package Manager Settings**.
 2. Under **Add a Custom Repository**, enter
-   `https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/repository.json` and press **Save**.
-3. Back on the main page, press **Install**, then **Browse by Tags** or **Search**, and choose **HAI Engine (Preview)**.
+   `https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/repository.json` and press **Save**.
+3. Back on the main page, press **Install**, then **Browse by Tags** or **Search**, and choose **HAI Engine**.
 4. Press **Next**. Package Manager installs all four apps, turns on OAuth and puts the seven files in File
    Manager. HAI Migration stays off until you turn it on from the HAI Engine page.
 5. Carry on at step 5 below (Add HAI Engine). Updates then come through Package Manager like any other package.
@@ -34,9 +33,9 @@ Without Package Manager, install by hand with steps 1 to 5.
 
 ## 1. Download
 
-1. Open the preview repository on GitHub and switch to the **preview** branch.
+1. Open the HAI-Engine repository on GitHub (the **main** branch).
 2. Press **Code**, then **Download ZIP**.
-3. Unzip it on your computer and open the folder `HAI-Engine-preview`.
+3. Unzip it on your computer and open the folder `HAI-Engine-main`.
 
 ## 2. Add the app code
 
@@ -95,9 +94,9 @@ and each draft costs a little.
 
 Everything else in HAI works without a key.
 
-## Updating to a new preview
+## Updating
 
-1. Download the new preview as in step 1.
+1. Download the new version as in step 1.
 2. In **Apps Code**, open each of the four apps, select all the old code, paste the new code over it, and press **Save**.
 3. Upload the seven files again in **File Manager**, replacing the old ones.
 

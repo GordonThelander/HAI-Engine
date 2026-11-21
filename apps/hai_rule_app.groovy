@@ -10,12 +10,12 @@ import java.time.ZoneId
 import java.time.Instant
 
 definition(
-name: 'HAI Rule Container (Preview)',
+name: 'HAI Rule Container',
 namespace: 'gordonthelander',
-author: 'HAI',
+author: 'Gordon Thelander',
 description: 'Dev only. One HAI rule: it owns its definition, its subscriptions, its schedules and its state.',
 category: 'Automations',
-parent: 'gordonthelander:HAI Engine (Preview)',
+parent: 'gordonthelander:HAI Engine',
 iconUrl: '',
 iconX2Url: '',
 singleThreaded: true
@@ -1756,8 +1756,8 @@ return v.toString()
 'adjustHeatingSetpoint': ['setHeatingSetpoint'], 'adjustCoolingSetpoint': ['setCoolingSetpoint'],
 ]
 @Field static final List HAI_OWN_FILES = [
-'hai-(editor|migration|help|toolkit)[.]html', 'hai-editor-specs[.]json', 'hai-author-guide[.]txt', 'hai-am-(capabilities|state)[.]json',
-'hai-engine-[0-9]+-[a-z0-9_]+[.]json', 'hai-backup-[0-9]{8}[.]json', 'ham-decode(-detail)?(-dev)?[.]json',
+'hai-(editor|migration|help|toolkit)(-dev)?[.]html', 'hai-editor-specs(-dev)?[.]json', 'hai-author-guide(-dev)?[.]txt', 'hai-am-(capabilities|state)(-dev)?[.]json',
+'hai-engine-[0-9]+-[a-z0-9_]+[.]json', 'hai-backup-(dev-)?[0-9]{8}[.]json', 'ham-decode(-detail)?(-dev)?[.]json',
 ]
 String schemaFileProblem(Object name) {
 String n = name == null ? '' : name.toString()
@@ -4845,7 +4845,7 @@ if (v instanceof List) ((List) v).each { Object e -> if (e instanceof Map && ((M
 @Field static final String SHADOW_DONE_EVENT = 'haiShadowDone'
 @Field static final int SHADOW_RUNS = 20
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = 'e0061a51654b4e2a'
+@Field static final String RT_CHILD_BUILD = '7b5510a3ec1424c3'
 @Field static final long RT_GRACE_MS = 30000L
 @Field static final long RT_WATCHDOG_EVERY_MS = 900000L
 @Field static final long RT_RECOVERY_MS = 120000L

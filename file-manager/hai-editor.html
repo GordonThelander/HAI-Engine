@@ -21123,7 +21123,7 @@ function readyLight(l) {
       S.specsFor = specFor;
       var version = /^\d+\.\d+/.exec(String(st.app || ''));
       var environment = String(st.environment || '').toUpperCase();
-      $('app-version').textContent = version ? 'v' + version[0] + (environment === 'DEV' ? ' (DEV)' : environment === 'PREPROD' ? ' (PreProd)' : environment === 'PREVIEW' ? ' (Preview)' : '') : '';
+      $('app-version').textContent = version ? 'v' + version[0] + (environment === 'DEV' ? ' (DEV)' : environment === 'PREPROD' ? ' (PreProd)' : '') : '';
       $('effects').textContent = st.effects || $('effects').textContent;
       renderSpend();
       renderHubList();

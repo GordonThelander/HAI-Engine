@@ -9,12 +9,12 @@ import java.time.ZoneId
 import java.time.Instant
 
 definition(
-name: 'HAI Migration (Preview)',
+name: 'HAI Migration',
 namespace: 'gordonthelander',
-author: 'HAI',
+author: 'Gordon Thelander',
 description: 'Copies Rule Machine 5.1 rules into HAI Engine, with switch over and switch back. Optional.',
 category: 'Automations',
-parent: 'gordonthelander:HAI Engine (Preview)',
+parent: 'gordonthelander:HAI Engine',
 iconUrl: '',
 iconX2Url: '',
 installOnOpen: true,
@@ -297,7 +297,7 @@ if (s.size() != before) state.shadow = s
 def migrationMainPage() {
 migrationInit()
 migrationAccessSync()
-dynamicPage(name: 'migrationMainPage', title: 'HAI Migration (Preview)', install: true, uninstall: true) {
+dynamicPage(name: 'migrationMainPage', title: 'HAI Migration', install: true, uninstall: true) {
 section('Rule Machine') {
 if (state.accessToken) {
 String editor = null
@@ -2244,11 +2244,11 @@ return migrationPageChecked(b)
 }
 String migrationPageChecked(byte[] b) {
 if (b == null) {
-return migrationPageProblem("The migration page (${MIGRATION_PAGE_FILE}) is not in the hub's File Manager. Deploying HAI Engine puts it there.")
+return migrationPageProblem("The migration page (${MIGRATION_PAGE_FILE}) is not in the hub's File Manager. Repair HAI in Hubitat Package Manager, or deploy the HAI Migration app, which puts it there.")
 }
 String h = java.security.MessageDigest.getInstance("SHA-256").digest(b).collect { String.format('%02x', it) }.join('')
 if (h != MIGRATION_PAGE_SHA256) {
-return migrationPageProblem("The migration page in the hub's File Manager is not the one this version of HAI Engine was built with. Deploy HAI Engine again.")
+return migrationPageProblem("The migration page in the hub's File Manager is from a different version of HAI than this HAI Migration app. They are updated together: repair HAI in Hubitat Package Manager, or deploy the HAI Migration app again.")
 }
 return new String(b, 'UTF-8')
 }

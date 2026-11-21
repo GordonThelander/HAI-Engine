@@ -10,11 +10,11 @@ import java.time.Instant
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 
-@Field static final String HAI_CHANNEL = 'preview'
+@Field static final String HAI_CHANNEL = 'production'
 definition(
-name: 'HAI Engine (Preview)',
+name: 'HAI Engine',
 namespace: 'gordonthelander',
-author: 'HAI',
+author: 'Gordon Thelander',
 description: 'Writes, checks, simulates and runs automation rules. One app; each rule gets its own child.',
 category: 'Automations',
 menu: 'Automations',
@@ -56,10 +56,10 @@ path('/endpoint/rules/:id/:op') { action: [GET: 'endpointRuleGet', POST: 'endpoi
 path('/endpoint/rules/:id/:op/:value') { action: [GET: 'endpointRuleGet', POST: 'endpointRulePost'] }
 path('/endpoint/variables/:name/:value') { action: [GET: 'endpointVariableGet', POST: 'endpointVariablePost'] }
 }
-@Field static final String HAI_ENVIRONMENT = 'PREVIEW'
+@Field static final String HAI_ENVIRONMENT = 'PRODUCTION'
 @Field static final String HAI_COMMUNITY_URL = ''
 @Field static final String AM_REPO_URL = 'https://github.com/GordonThelander/hubitat-automation-map'
-@Field static final String HAI_DOCS_URL = 'https://github.com/GordonThelander/HAI-Engine/blob/preview/docs'
+@Field static final String HAI_DOCS_URL = 'https://github.com/GordonThelander/HAI-Engine/blob/release-candidate/docs'
 @Field static final String HAI_ISSUES_URL = 'https://github.com/GordonThelander/HAI-Engine/issues/new/choose'
 @Field static final String CLAUDE_KEYS_URL = 'https://platform.claude.com/settings/keys'
 @Field static final Map HAI_ROUTE_AUDIENCE = [
@@ -476,7 +476,7 @@ editorHelpParts(haiHelpText, 'ai-off', haiHelpFill + [why: esc(haiAi.why as Stri
 }
 boolean haiNotYet = false
 try { haiNotYet = app.getInstallationState() != 'COMPLETE' } catch (Exception e) { haiNotYet = false }
-if (!state.accessToken) { try { createAccessToken() } catch (Exception e) { /* OAuth off: said below */ } }
+if (!state.accessToken) { try { createAccessToken() } catch (Exception e) { } }
 section('The rule editor') {
 if (state.accessToken) {
 href name: 'haiEditorHref', title: 'Open the rule editor', required: false,
@@ -719,7 +719,7 @@ Object last = state.runtimeAnnouncedAt
 String when = last == null ? 'not yet' : runtimeClock().call(last as long)
 return "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT}). ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
 }
-@Field static final String ENGINE_APP_VERSION = '0.5.167-dev'
+@Field static final String ENGINE_APP_VERSION = '1.0.0'
 @Field static final int ENGINE_MAX_PROPOSALS = 20
 @Field static final java.util.concurrent.ConcurrentHashMap ENGINE_DRAFT_INV = new java.util.concurrent.ConcurrentHashMap()
 @Field static final int ENGINE_MAX_ATTRIBUTES = 64
@@ -1615,7 +1615,7 @@ return render(status: 200, contentType: 'text/html', data: page,
 headers: current ? ['Cache-Control': 'private, no-cache', 'ETag': tag] : ['Cache-Control': 'no-store, must-revalidate'])
 }
 @Field static final String HAI_REPORT_URL = 'https://github.com/GordonThelander/HAI-Engine/issues/new/choose'
-@Field static final String MIGRATION_CHILD_NAME = 'HAI Migration (Preview)'
+@Field static final String MIGRATION_CHILD_NAME = 'HAI Migration'
 @Field static final int MIGRATION_CONTRACT = 5
 String haiMigrationPageUrl() {
 def m = haiMigrationChild()
@@ -1667,7 +1667,7 @@ return out
 def haiMigrationChild() {
 return getChildApps()?.find { it.name == MIGRATION_CHILD_NAME }
 }
-@Field static final String CHECKER_CHILD_NAME = 'HAI Checker (Preview)'
+@Field static final String CHECKER_CHILD_NAME = 'HAI Checker'
 def checkerChild(boolean fresh = false) {
 def c = null
 if (!fresh && state.haiCheckerId != null) {
@@ -2190,7 +2190,7 @@ return editorJson(status, groovy.json.JsonOutput.toJson(out))
 }
 @Field static final String HAI_BACKUP_CRON = '43 41 3 * * ?'
 @Field static final String HAI_UPDATE_CRON = '17 23 4 * * ?'
-@Field static final String HAI_VERSION_URL = 'https://raw.githubusercontent.com/GordonThelander/HAI-Engine/preview/VERSION'
+@Field static final String HAI_VERSION_URL = 'https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/VERSION'
 def haiUpdateCheck() {
 if (HAI_ENVIRONMENT != 'PREVIEW') return
 try { asynchttpGet('haiUpdateAnswer', [uri: HAI_VERSION_URL, contentType: 'text/plain', timeout: 20]) }
@@ -2220,8 +2220,12 @@ def haiBackupDaily() {
 try { haiBackupMake(false) } catch (Exception e) { log.warn "HAI Engine: rule backup failed: ${e.message}" }
 try { haiApproveNewDevices(false) } catch (Exception e) { log.warn "HAI Engine: new devices not checked: ${e.message}" }
 }
+@Field static final String BACKUP_PREFIX = 'hai-backup-'
+boolean haiIsBackupName(String n) {
+return n != null && n.startsWith(BACKUP_PREFIX) && n.substring(BACKUP_PREFIX.length()) ==~ /[0-9]{8}\.json/
+}
 String haiBackupName(long at) {
-return "hai-backup-${new Date(at).format('yyyyMMdd', location.timeZone)}.json".toString()
+return "${BACKUP_PREFIX}${new Date(at).format('yyyyMMdd', location.timeZone)}.json".toString()
 }
 Map haiBackupMake(boolean force) {
 Map pp = runtimePlat()
@@ -2322,9 +2326,9 @@ Object d = resp.data
 List files = d instanceof List ? d : (d instanceof Map && ((Map) d).files instanceof List ? ((Map) d).files : [])
 files.each { Object f ->
 String n = (f instanceof Map ? ((Map) f).name : f) as String
-if (!(n ==~ /hai-backup-[0-9]{8}\.json/) || have.contains(n)) return
+if (!haiIsBackupName(n) || have.contains(n)) return
 long at = 0L
-try { at = Date.parse('yyyyMMdd', n.substring(11, 19)).time } catch (Exception e) { at = 0L }
+try { at = Date.parse('yyyyMMdd', n.substring(BACKUP_PREFIX.length(), BACKUP_PREFIX.length() + 8)).time } catch (Exception e) { at = 0L }
 Object size = f instanceof Map ? ((Map) f).size : null
 idx << [name: n, at: at, bytes: size instanceof Number ? size : null, rules: null]
 }
@@ -2342,7 +2346,7 @@ return editorJson(200, groovy.json.JsonOutput.toJson(out))
 def editorBackupGet() {
 if (!haiAudienceOk('/editor/api/backup')) return haiRefuse('/editor/api/backup')
 String name = endpointParam(params?.name)
-if (!(name ==~ /hai-backup-[0-9]{8}\.json/) || !haiBackupList().any { it.name == name }) {
+if (!haiIsBackupName(name) || !haiBackupList().any { it.name == name }) {
 return editorJson(404, groovy.json.JsonOutput.toJson([ok: false, error: 'NO_SUCH_BACKUP', message: 'There is no backup with that name.']))
 }
 byte[] b = null
@@ -2774,7 +2778,7 @@ log.warn "HAI Engine editor: no check receipt (${e.message})"
 return null
 }
 }
-@Field static final String RUNTIME_CHILD_NAME = 'HAI Rule Container (Preview)'
+@Field static final String RUNTIME_CHILD_NAME = 'HAI Rule Container'
 def uninstalled() {
 unschedule()
 try {
@@ -2784,7 +2788,11 @@ if (ids) { RMUtils.sendAction(ids, 'resumeRule', app.label, '5.0'); haiInfo "HAI
 } catch (Exception e) { log.warn "HAI Engine: Rule Machine rules switched over to HAI could not be resumed (${e.message}); resume them in Rule Machine" }
 ENGINE_FILED.each { String n -> try { deleteHubFile(engineFiledFile(n)) } catch (Exception ignored) { } }
 getChildApps()?.each { deleteChildApp(it.id) }
+CHANNEL_FILES.each { String n -> try { deleteHubFile(n) } catch (Exception ignored) { } }
+haiInfo "HAI Engine: removed its File Manager files (${CHANNEL_FILES.join(', ')}); rule backups were kept"
 }
+@Field static final List CHANNEL_FILES = ['hai-editor.html', 'hai-editor-specs.json', 'hai-help.html', 'hai-toolkit.html',
+'hai-am-capabilities.json', 'hai-am-state.json', 'hai-author-guide.txt', 'hai-migration.html']
 void runtimeSyncVariableRegistration() {
 List want = runtimeIdList(settings.runtimeWritableVariables).unique()
 List had = runtimeIdList(state.runtimeRegisteredVars).unique()
@@ -5304,7 +5312,7 @@ return s.length() > max ? s.substring(0, max) + '...' : s
 @Field static final int EDITOR_MAX_ID_CHARS = 64
 @Field static final String EDITOR_EFFECTS = "Save draft keeps this rule here, in the editor, and changes nothing on the hub. Activate on hub (Update on hub for a rule already there) is the one that puts it live, and HAI checks it before it runs. Run rule runs the hub's version once, now."
 @Field static final String EDITOR_PAGE_FILE = 'hai-editor.html'
-@Field static final String EDITOR_PAGE_SHA256 = 'a6e426ddbcee7beef883c49cda914dbf2c56ec163edc922d3dd48c58088e5810'
+@Field static final String EDITOR_PAGE_SHA256 = 'a13aed3e0fb6043b9a7340f55ea718973532a3e446cbfa4a5032d80332037ee8'
 @Field static final String EDITOR_SPECS_FILE = 'hai-editor-specs.json'
 @Field static final String EDITOR_SPECS_SHA256 = 'd24031d13143e19736db036db89e38ff3bf9c86a628f578a0666d89ad5f12f23'
 @Field static final int EDITOR_MAX_OTHER_COMMANDS = 200
@@ -6026,7 +6034,7 @@ return [status: 202, body: body, payload: out.payload]
 }
 @Field static final String RT_ENGINE = 'HAI-1'
 @Field static final String RT_VERSION = 'HAI-1/m5b-0.2.0-dev'
-@Field static final String RT_CHILD_BUILD = 'e0061a51654b4e2a'
+@Field static final String RT_CHILD_BUILD = '7b5510a3ec1424c3'
 @Field static final long RT_WATCHDOG_EVERY_MS = 900000L
 @Field static final long RT_RECOVERY_MS = 120000L
 @Field static final long RT_CLAIM_MS = 600000L
@@ -8549,4 +8557,4 @@ Map m = [ok: false, code: code, message: message]
 m.putAll(extra ?: [:])
 return m
 }
-@Field static final String CHECKER_BUILD = '28222f16db251b76'
+@Field static final String CHECKER_BUILD = '4c5a447fa1112325'
