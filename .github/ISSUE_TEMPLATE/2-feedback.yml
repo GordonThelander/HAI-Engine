@@ -1,0 +1,11 @@
+name: Feedback or a suggestion
+description: Something confusing, missing, or that could be better.
+labels: [feedback]
+body:
+  - type: input
+    id: version
+    attributes: {label: HAI version}
+  - type: textarea
+    id: feedback
+    attributes: {label: Your feedback, description: What were you trying to do, and what would have made it easier?}
+    validations: {required: true}

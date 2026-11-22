@@ -1,0 +1,52 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  :root { --bg:#0F1A1F; --panel:#16252C; --line:#2C4450; --fg:#EAF2F5; --muted:#9DB3BC;
+          --hai:#2E9CC0; --ham:#4FA37D; --rm:#C98A3E; }
+  html,body { margin:0; width:1920px; height:1080px; background:radial-gradient(1200px 700px at 50% 40%, #1A2C34, var(--bg));
+              font-family:"Segoe UI", system-ui, sans-serif; color:var(--fg); overflow:hidden; }
+  h1 { position:absolute; top:42px; line-height:1.18; left:0; right:0; text-align:center; margin:0; font-size:46px; font-weight:650; letter-spacing:.3px; }
+  h1 span { color:var(--muted); font-weight:400; }
+  .box { position:absolute; width:440px; height:230px; border-radius:22px; background:var(--panel);
+         border:3px solid var(--line); box-shadow:0 18px 50px rgba(0,0,0,.45); padding:30px 34px; box-sizing:border-box; }
+  .box h2 { margin:0 0 12px; font-size:38px; font-weight:650; }
+  .box p { margin:0; font-size:26px; line-height:1.35; color:var(--muted); }
+  .hub { left:120px; top:420px; border-color:var(--rm); } .hub h2 { color:var(--rm); }
+  .am  { left:740px; top:230px; border-color:var(--ham); } .am h2 { color:var(--ham); }
+  .mig { left:740px; top:640px; border-color:var(--hai); } .mig h2 { color:var(--hai); }
+  .eng { left:1360px; top:420px; border-color:var(--hai); } .eng h2 { color:var(--hai); }
+  svg { position:absolute; inset:0; }
+  .lbl { font-size:25px; fill:var(--fg); }
+  .num { font-size:24px; font-weight:700; fill:#0F1A1F; }
+</style></head>
+<body>
+<h1>Hubitat Automation Intelligence (HAI)<br>and Hubitat Automation Map (HAM)</h1>
+
+<svg width="1920" height="1080">
+  <defs>
+    <marker id="aH" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#4FA37D"/></marker>
+    <marker id="aB" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#2E9CC0"/></marker>
+  </defs>
+  <!-- 1 AM scans the hub -->
+  <path d="M560 470 C 640 420, 660 360, 735 345" stroke="#4FA37D" stroke-width="5" fill="none" marker-end="url(#aH)"/>
+  <circle cx="610" cy="400" r="20" fill="#4FA37D"/><text x="610" y="408" class="num" text-anchor="middle">1</text>
+  <text x="470" y="360" class="lbl">Scans the hub</text>
+  <!-- 2 decode file -> migration -->
+  <path d="M960 460 L 960 632" stroke="#4FA37D" stroke-width="5" fill="none" marker-end="url(#aH)"/>
+  <circle cx="960" cy="545" r="20" fill="#4FA37D"/><text x="960" y="553" class="num" text-anchor="middle">2</text>
+  <text x="995" y="555" class="lbl">Decoded rules, as a file</text>
+  <!-- 3 migration -> engine -->
+  <path d="M1180 740 C 1260 730, 1290 690, 1355 620" stroke="#2E9CC0" stroke-width="5" fill="none" marker-end="url(#aB)"/>
+  <circle cx="1275" cy="715" r="20" fill="#2E9CC0"/><text x="1275" y="723" class="num" text-anchor="middle">3</text>
+  <text x="1230" y="790" class="lbl">Copies run in trial</text>
+  <!-- 4 engine -> AM -->
+  <path d="M1360 470 C 1290 400, 1260 360, 1185 345" stroke="#2E9CC0" stroke-width="5" fill="none" marker-end="url(#aB)"/>
+  <circle cx="1310" cy="400" r="20" fill="#2E9CC0"/><text x="1310" y="408" class="num" text-anchor="middle">4</text>
+  <text x="1270" y="360" class="lbl">Its rules, for the map</text>
+</svg>
+
+<div class="box hub"><h2>Your hub</h2><p>Devices, and your Rule&nbsp;Machine rules</p></div>
+<div class="box am"><h2>HAM</h2><p>Reads every rule. Maps what each one watches and controls.</p></div>
+<div class="box mig"><h2>HAI Migration</h2><p>Knows what each Rule&nbsp;Machine rule does, and copies it exactly.</p></div>
+<div class="box eng"><h2>HAI Engine</h2><p>Runs your HAI rules, each as its own app.</p></div>
+</body></html>

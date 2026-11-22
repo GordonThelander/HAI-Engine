@@ -1,0 +1,29 @@
+name: Something is wrong
+description: HAI did something wrong, did not do what it should, or showed an error.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes: {label: HAI version, description: "From the HAI Engine page or the VERSION file, e.g. 0.5.87-dev"}
+    validations: {required: true}
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where
+      options: [Rule editor, A rule running on the hub, HAI Engine page, AI Rule Assistant, Backups and restore, HAI Migration, Installing or updating, Something else]
+    validations: {required: true}
+  - type: textarea
+    id: did
+    attributes: {label: What you did, description: Step by step, as far as you can.}
+    validations: {required: true}
+  - type: textarea
+    id: expected
+    attributes: {label: What you expected}
+    validations: {required: true}
+  - type: textarea
+    id: saw
+    attributes: {label: What happened instead, description: "Any message shown, word for word. Screenshots help; please hide anything private (names, addresses)."}
+    validations: {required: true}
+  - type: input
+    id: hub
+    attributes: {label: Hub model and firmware, description: "e.g. C-8 Pro, 2.4.3.150"}
