@@ -1,0 +1,195 @@
+{
+ "note": "Spoken text of each scene, copied from SCRIPT-v2.md (HAI is spelled Hi and Hubitat Hub-it-tat in the spoken text only). Change a line here and in the script together; gen-voice-v2.mjs re-voices only the scenes whose text changed.",
+ "voice": {
+  "voice_id": "56bWURjYFHyYyVf490Dp",
+  "name": "Emma",
+  "model_id": "eleven_multilingual_v2",
+  "output_format": "mp3_44100_192",
+  "voice_settings": {
+   "stability": 0.45,
+   "similarity_boost": 0.8,
+   "style": 0.15,
+   "use_speaker_boost": true
+  }
+ },
+ "scenes": [
+  {
+   "id": "1",
+   "chapter": 1,
+   "text": "This is Hi, Hub-it-tat Automation Intelligence: a rule engine for Hub-it-tat, with a rule editor in your browser. You can write rules yourself, start from a ready-made pattern, or move your Rule Machine rules across safely. Here's how.",
+   "chapterTitle": "What it is"
+  },
+  {
+   "id": "2a",
+   "chapter": 2,
+   "text": "Let's write one by hand. Every rule has three parts: what starts it, what must be true, and what it does.",
+   "chapterTitle": "Write a rule yourself, no AI"
+  },
+  {
+   "id": "2b",
+   "chapter": 2,
+   "text": "Add a trigger. Pick the device, pick what it reports. The block reads back as a plain sentence: when Porch Door opens."
+  },
+  {
+   "id": "2c",
+   "chapter": 2,
+   "text": "Add a condition: only if nobody's in the hall."
+  },
+  {
+   "id": "2d",
+   "chapter": 2,
+   "text": "Then the actions. Turn Entry Light on, wait five minutes, turn it off. Each line reads as a sentence, so you can see what the rule does without opening anything."
+  },
+  {
+   "id": "2e",
+   "chapter": 2,
+   "text": "Hi checks the rule as you build it. Leave a line incomplete, and it tells you at once, in plain words."
+  },
+  {
+   "id": "2f",
+   "chapter": 2,
+   "text": "Lines can be rearranged by dragging. Pick one up, drop it where you want it, and the rule reads back the new order straight away."
+  },
+  {
+   "id": "2g",
+   "chapter": 2,
+   "text": "Actions can make their own decisions, too. Add an If: if Hall Motion is active, set the light to full; otherwise, thirty percent. Each branch sits indented under its condition, so you can see both paths at a glance."
+  },
+  {
+   "id": "2h",
+   "chapter": 2,
+   "text": "And you can drag existing lines into a branch, or out of one, the same way."
+  },
+  {
+   "id": "3a",
+   "chapter": 3,
+   "text": "You don't have to run the whole rule to try it. Open any line and choose Run this step. That one line runs on the hub, now, and you see the light come on.",
+   "chapterTitle": "Run one line on its own"
+  },
+  {
+   "id": "3b",
+   "chapter": 3,
+   "text": "It's offered only on lines that do something on their own. Waits, and risky commands like locks or sirens, are never run this way."
+  },
+  {
+   "id": "4",
+   "chapter": 4,
+   "text": "Before the rule touches anything, simulate it. Hi shows what it would do right now: the light comes on, and five minutes later it goes off.",
+   "chapterTitle": "See it before it runs"
+  },
+  {
+   "id": "5a",
+   "chapter": 5,
+   "text": "Or don't start from a blank page. Patterns are working rules you adapt: lights on movement, a bathroom fan, a door left open, a leak alert, and more.",
+   "chapterTitle": "Start from a pattern"
+  },
+  {
+   "id": "5b",
+   "chapter": 5,
+   "text": "Search, pick one, and it opens as a complete rule. The checker shows exactly what's left for you: here, just the fan and the humidity sensor."
+  },
+  {
+   "id": "5c",
+   "chapter": 5,
+   "text": "Choose them, and it's ready to go on the hub."
+  },
+  {
+   "id": "6",
+   "chapter": 6,
+   "text": "Each rule runs as its own small app on the hub. It goes on stopped, and starts when you say. Every run is recorded, so if a rule didn't do what you expected, it tells you why.",
+   "chapterTitle": "Runs on the hub, recorded"
+  },
+  {
+   "id": "7a",
+   "chapter": 7,
+   "text": "Hi works hand in hand with Ham, Hub-it-tat Automation Map. Here's how they fit together.",
+   "chapterTitle": "How it works with Automation Map"
+  },
+  {
+   "id": "7b",
+   "chapter": 7,
+   "text": "Ham scans your hub and decodes every Rule Machine rule into a file."
+  },
+  {
+   "id": "7c",
+   "chapter": 7,
+   "text": "Hi Migration reads that file. That's how it knows what each Rule Machine rule really does, before it copies it."
+  },
+  {
+   "id": "7d",
+   "chapter": 7,
+   "text": "And Hi tells Ham about its own rules, so the map shows both kinds together: what they watch, what they control, and where they overlap."
+  },
+  {
+   "id": "8a",
+   "chapter": 8,
+   "text": "Already on Rule Machine? Migration sorts your rules, and copies the ones it can rebuild exactly. Anything it can't rebuild, it names, instead of guessing.",
+   "chapterTitle": "Move your Rule Machine rules safely"
+  },
+  {
+   "id": "8b",
+   "chapter": 8,
+   "text": "Each copy starts in a trial. It changes nothing. Every time the rule fires, Hi works out what its copy would have done, and compares it with what Rule Machine actually did. Green means the copy is ready to take over, and beside it, how many of its runs have matched Rule Machine's."
+  },
+  {
+   "id": "8c",
+   "chapter": 8,
+   "text": "Promote it, and Rule Machine pauses while Hi takes over. Changed your mind? Back to Rule Machine, in one click."
+  },
+  {
+   "id": "9",
+   "chapter": 9,
+   "text": "Hi is free, and local: nothing leaves your hub unless you turn it on. Install it from Hub-it-tat Package Manager. The link is below.",
+   "chapterTitle": "Install"
+  }
+ ],
+ "diagram": {
+  "page": "hai-ham-diagram.html",
+  "scenes": [
+   "7a",
+   "7b",
+   "7c",
+   "7d"
+  ],
+  "until": {
+   "scene": "7d",
+   "phrase": "so the map shows"
+  },
+  "cues": [
+   {
+    "scene": "7b",
+    "phrase": "scans your hub",
+    "arrow": 1
+   },
+   {
+    "scene": "7b",
+    "phrase": "into a file",
+    "arrow": 2
+   },
+   {
+    "scene": "7c",
+    "phrase": "reads that file",
+    "arrow": 2
+   },
+   {
+    "scene": "7c",
+    "phrase": "before it copies it",
+    "arrow": 3
+   },
+   {
+    "scene": "7d",
+    "phrase": "tells Ham",
+    "arrow": 4
+   }
+  ]
+ },
+ "endcard": {
+  "seconds": 4.5,
+  "title": "HAI Engine",
+  "lines": [
+   "Free, and local to your Hubitat hub.",
+   "Install it from Hubitat Package Manager.",
+   "Link in the description."
+  ]
+ }
+}

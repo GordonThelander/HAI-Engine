@@ -1,0 +1,119 @@
+voice waits: 9, 6.3 s, longest 1.60 s; pointer: 54 moves, 46 clicks; faults in the take: 0
+take 395.3 s; 23 clean cuts removed (170.6 s); video 229.1 s; no speed-ups, no frozen frames
+scene 2b: the voice waits 0.49 s at the break before "pick what it reports"
+scene 2b: the voice waits 0.74 s at the break before "Pick the device"
+scene 2b: the voice waits 0.40 s at the break before "Add a trigger"
+scene 2c: the voice waits 1.60 s at the break before "nobody's in the hall"
+scene 2c: the voice waits 0.40 s at the break before "Add a condition"
+scene 2h: the voice waits 0.81 s at the break before "or out of one"
+scene 5b: the voice waits 0.46 s at the break before "Search"
+scene 5c: the voice waits 0.55 s at the break before "Choose them"
+scene 8c: the voice waits 0.82 s at the break before "Promote it"
+diagram: 22.2 s, 5 arrow cues at 1@8.9, 2@11.3, 2@14.0, 3@17.6, 4@20.4; arrow boxes measured: 470x333x265x137 | 940x460x309x172 | 1180x620x244x176 | 1185x333x312x137
+
+SENTENCES (frame = check-frames/NN-scene.jpg, taken mid-sentence; compare it with the words)
+01-1.jpg  0:00.6-0:07.8  "This is Hi, Hub-it-tat Automation Intelligence: a rule engine for Hub-it-tat, with a rule editor in your browser."
+02-1.jpg  0:08.4-0:13.7  "You can write rules yourself, start from a ready-made pattern, or move your Rule Machine rules across safely."
+03-1.jpg  0:14.2-0:15.0  "Here's how."
+04-2a.jpg  0:16.2-0:17.5  "Let's write one by hand."  | actions: New rule @0:16.6
+05-2a.jpg  0:17.9-0:23.0  "Every rule has three parts: what starts it, what must be true, and what it does."
+06-2b.jpg  0:24.7-0:25.4  "Add a trigger."  | actions: + Add a trigger @0:24.4, A device reports a value @0:25.2
+07-2b.jpg  0:26.3-0:28.6  "Pick the device, pick what it reports."  | actions: Porch Door @0:26.7, Becomes @0:27.4, open @0:28.0
+08-2b.jpg  0:29.2-0:33.0  "The block reads back as a plain sentence: when Porch Door opens."  | actions: Done @0:29.4
+09-2c.jpg  0:34.8-0:38.8  "Add a condition: only if nobody's in the hall."  | actions: + Add a condition @0:34.6, A device is in a state @0:35.3, Search devices @0:36.0, Hall Motion @0:36.9, Value @0:37.9
+10-2d.jpg  0:40.0-0:40.8  "Then the actions."
+11-2d.jpg  0:41.5-0:45.2  "Turn Entry Light on, wait five minutes, turn it off."  | actions: + Add a step @0:41.4, turn on @0:42.6
+12-2d.jpg  0:45.9-0:50.2  "Each line reads as a sentence, so you can see what the rule does without opening anything."
+13-2e.jpg  0:51.7-0:53.4  "Hi checks the rule as you build it."  | actions: the line "Turn off Entry Light" @0:53.0
+14-2e.jpg  0:53.5-0:56.7  "Leave a line incomplete, and it tells you at once, in plain words."  | actions: untick Entry Light @0:54.1
+15-2f.jpg  0:58.8-1:00.6  "Lines can be rearranged by dragging."  | actions: down @1:00.4
+16-2f.jpg  1:00.8-1:05.0  "Pick one up, drop it where you want it, and the rule reads back the new order straight away."  | actions: down @1:02.8
+17-2g.jpg  1:06.2-1:08.3  "Actions can make their own decisions, too."
+18-2g.jpg  1:08.9-1:14.7  "Add an If: if Hall Motion is active, set the light to full; otherwise, thirty percent."  | actions: New IF block @1:09.2
+19-2g.jpg  1:15.4-1:20.4  "Each branch sits indented under its condition, so you can see both paths at a glance."
+20-2h.jpg  1:21.8-1:26.9  "And you can drag existing lines into a branch, or out of one, the same way."  | actions: down @1:22.9, down @1:24.8
+21-3a.jpg  1:28.0-1:30.6  "You don't have to run the whole rule to try it."
+22-3a.jpg  1:30.9-1:33.0  "Open any line and choose Run this step."  | actions: ⋯ of the first line @1:30.7, Run this step @1:32.0
+23-3a.jpg  1:33.5-1:36.8  "That one line runs on the hub, now, and you see the light come on."
+24-3b.jpg  1:38.0-1:40.6  "It's offered only on lines that do something on their own."  | actions: ⋯ of the off line @1:38.2, Run this step @1:38.8, ⋯ of the wait @1:40.3
+25-3b.jpg  1:40.8-1:45.2  "Waits, and risky commands like locks or sirens, are never run this way."
+26-4.jpg  1:46.4-1:49.4  "Before the rule touches anything, simulate it."  | actions: Simulate @1:48.0
+27-4.jpg  1:49.7-1:54.4  "Hi shows what it would do right now: the light comes on, and five minutes later it goes off."
+28-5a.jpg  1:55.6-1:57.2  "Or don't start from a blank page."  | actions: New rule @1:56.5
+29-5a.jpg  1:57.4-2:05.5  "Patterns are working rules you adapt: lights on movement, a bathroom fan, a door left open, a leak alert, and more."  | actions: Start from a pattern @1:57.2
+30-5b.jpg  2:07.2-2:10.7  "Search, pick one, and it opens as a complete rule."  | actions: Bathroom fan @2:07.6
+31-5b.jpg  2:11.3-2:16.5  "The checker shows exactly what's left for you: here, just the fan and the humidity sensor."
+32-5c.jpg  2:18.5-2:20.4  "Choose them, and it's ready to go on the hub."  | actions: Search devices @2:18.8, Bathroom Humidity @2:19.7
+33-6.jpg  2:21.7-2:24.2  "Each rule runs as its own small app on the hub."  | actions: Activate on hub @2:22.4
+34-6.jpg  2:24.5-2:26.6  "It goes on stopped, and starts when you say."  | actions: Stopped / Start @2:25.3, Porch Door: Open @2:26.3
+35-6.jpg  2:27.1-2:30.9  "Every run is recorded, so if a rule didn't do what you expected, it tells you why."
+36-7a.jpg  2:32.2-2:35.7  "Hi works hand in hand with Ham, Hub-it-tat Automation Map."
+37-7a.jpg  2:35.9-2:37.0  "Here's how they fit together."
+38-7b.jpg  2:40.6-2:44.0  "Ham scans your hub and decodes every Rule Machine rule into a file."
+39-7c.jpg  2:45.3-2:46.8  "Hi Migration reads that file."
+40-7c.jpg  2:47.0-2:50.8  "That's how it knows what each Rule Machine rule really does, before it copies it."
+41-7d.jpg  2:51.9-3:00.4  "And Hi tells Ham about its own rules, so the map shows both kinds together: what they watch, what they control, and where they overlap."
+42-8a.jpg  3:01.9-3:06.8  "Already on Rule Machine? Migration sorts your rules, and copies the ones it can rebuild exactly."  | actions: Clone @3:05.2, Clone (confirm) @3:05.8
+43-8a.jpg  3:07.4-3:10.4  "Anything it can't rebuild, it names, instead of guessing."
+44-8b.jpg  3:11.7-3:13.2  "Each copy starts in a trial."
+45-8b.jpg  3:13.2-3:14.2  "It changes nothing."
+46-8b.jpg  3:14.6-3:21.5  "Every time the rule fires, Hi works out what its copy would have done, and compares it with what Rule Machine actually did."
+47-8b.jpg  3:21.9-3:26.6  "Green means the copy is ready to take over, and beside it, how many of its runs have matched Rule Machine's."
+48-8c.jpg  3:29.0-3:31.9  "Promote it, and Rule Machine pauses while Hi takes over."  | actions: Promote to HAI (confirm) @3:29.2
+49-8c.jpg  3:32.1-3:35.3  "Changed your mind? Back to Rule Machine, in one click."  | actions: Back to Rule Machine @3:33.1, Back to Rule Machine (confirm) @3:33.7
+50-9.jpg  3:36.5-3:40.2  "Hi is free, and local: nothing leaves your hub unless you turn it on."
+51-9.jpg  3:40.3-3:42.3  "Install it from Hub-it-tat Package Manager."
+52-9.jpg  3:42.6-3:43.5  "The link is below."
+
+ACTIONS against their words (the move starts "lead" seconds before the word; |delta| over 0.3 s is flagged)
+      scene 1: "Here's how" word at 0:14.2, move starts +0.01 s from its planned start
+      scene 2a: "write one by hand" word at 0:16.5, move starts +0.13 s from its planned start
+      scene 2b: "Add a trigger" word at 0:24.7, move starts +0.00 s from its planned start
+      scene 2b: "Pick the device" word at 0:26.3, move starts +0.00 s from its planned start
+      scene 2b: "pick what it reports" word at 0:27.7, move starts -0.00 s from its planned start
+      scene 2b: "The block reads back" word at 0:29.2, move starts +0.00 s from its planned start
+      scene 2c: "Add a condition" word at 0:34.8, move starts +0.00 s from its planned start
+      scene 2c: "nobody's in the hall" word at 0:37.8, move starts -0.00 s from its planned start
+      scene 2d: "Turn Entry Light on" word at 0:41.5, move starts -0.00 s from its planned start
+      scene 2d: "wait five minutes" word at 0:43.1, move starts +0.06 s from its planned start
+      scene 2d: "turn it off" word at 0:44.3, move starts +0.01 s from its planned start
+      scene 2e: "Leave a line incomplete" word at 0:53.5, move starts +0.00 s from its planned start
+      scene 2e: "in plain words" word at 0:55.8, move starts +0.00 s from its planned start
+      scene 2f: "Pick one up" word at 1:00.8, move starts +0.00 s from its planned start
+      scene 2f: "reads back the new order" word at 1:03.3, move starts +0.00 s from its planned start
+      scene 2g: "Add an If" word at 1:08.9, move starts +0.01 s from its planned start
+      scene 2g: "if Hall Motion is active" word at 1:10.0, move starts +0.00 s from its planned start
+      scene 2g: "set the light to full" word at 1:11.7, move starts +0.00 s from its planned start
+      scene 2g: "thirty percent" word at 1:13.9, move starts +0.00 s from its planned start
+      scene 2h: "into a branch" word at 1:23.3, move starts +0.01 s from its planned start
+      scene 2h: "or out of one" word at 1:25.1, move starts +0.00 s from its planned start
+      scene 3a: "Open any line" word at 1:30.9, move starts +0.01 s from its planned start
+      scene 3a: "Run this step" word at 1:32.3, move starts +0.01 s from its planned start
+      scene 3a: "you see the light come on" word at 1:35.5, move starts +0.00 s from its planned start
+      scene 3b: "offered only on lines" word at 1:38.2, move starts +0.17 s from its planned start
+      scene 3b: "on their own" word at 1:39.8, move starts +0.01 s from its planned start
+      scene 3b: "Waits" word at 1:40.8, move starts -0.00 s from its planned start
+      scene 4: "simulate it" word at 1:48.4, move starts +0.00 s from its planned start
+      scene 5a: "blank page" word at 1:56.5, move starts +0.01 s from its planned start
+      scene 5a: "Patterns are working rules" word at 1:57.4, move starts +0.06 s from its planned start
+      scene 5a: "lights on movement" word at 1:59.7, move starts -0.00 s from its planned start
+      scene 5b: "Search" word at 2:07.2, move starts +0.00 s from its planned start
+      scene 5b: "pick one" word at 2:08.0, move starts +0.04 s from its planned start
+      scene 5b: "The checker shows" word at 2:11.3, move starts +0.01 s from its planned start
+      scene 5c: "Choose them" word at 2:18.5, move starts -0.00 s from its planned start
+      scene 6: "its own small app" word at 2:22.6, move starts +0.01 s from its planned start
+      scene 6: "starts when you say" word at 2:25.6, move starts +0.01 s from its planned start
+      scene 6: "Every run is recorded" word at 2:27.1, move starts +0.00 s from its planned start
+      scene 7b: "scans your hub" word at 2:40.9, move starts +0.01 s from its planned start
+      scene 7b: "into a file" word at 2:43.2, move starts +0.00 s from its planned start
+      scene 7c: "reads that file" word at 2:46.0, move starts +0.01 s from its planned start
+      scene 7c: "before it copies it" word at 2:49.5, move starts +0.01 s from its planned start
+      scene 7d: "tells Ham" word at 2:52.4, move starts +0.01 s from its planned start
+      scene 7d: "so the map shows" word at 2:54.1, move starts +0.01 s from its planned start
+      scene 8a: "copies the ones it can rebuild" word at 3:05.0, move starts +0.00 s from its planned start
+      scene 8a: "Anything it can't rebuild" word at 3:07.4, move starts +0.01 s from its planned start
+      scene 8b: "starts in a trial" word at 3:12.3, move starts +0.09 s from its planned start
+      scene 8b: "Green means" word at 3:21.9, move starts +0.01 s from its planned start
+      scene 8c: "Promote it" word at 3:29.0, move starts +0.00 s from its planned start
+      scene 8c: "Back to Rule Machine" word at 3:33.4, move starts +0.00 s from its planned start
+CHECK scene 2e: "Done" at 0:58.2, 1.2 s after the line ended (on screen with no words)
