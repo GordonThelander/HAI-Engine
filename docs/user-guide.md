@@ -37,51 +37,60 @@ For a one-page picture of Automation Map, the HAI Engine and the optional migrat
 
 ## Installing HAI
 
-HAI is a preview, published on the `preview` branch of the HAI-Engine repository on GitHub, with an
-`INSTALL.md` that gives these same steps. You need a Hubitat hub on firmware 2.4 or later and a web browser;
-nothing else. Install through Hubitat Package Manager or by hand; on a preview build the app names end in
-"(Preview)". Optional AI
-drafting sends rule-authoring context to Anthropic, as described under
-[Drafting with AI and privacy](#drafting-with-ai-and-privacy).
+You need a Hubitat hub on firmware 2.4 or later and a web browser; nothing else. HAI is published in the
+HAI-Engine repository on GitHub. Optional AI drafting sends rule-authoring context to Anthropic, as described
+under [Drafting with AI and privacy](#drafting-with-ai-and-privacy).
 
-The folder holds three pieces of app code in `apps/` and five files in `file-manager/`:
+HAI is four pieces of app code and seven files in File Manager:
 
 | App code | What it is |
 |---|---|
-| `hai_engine_app.groovy` | **HAI Engine**: the editor, and the part that runs your rules |
-| `hai_rule_app.groovy` | **HAI Rule Container**: one per rule. You never add it yourself; HAI does |
-| `hai_migration_app.groovy` | **HAI Migration**, optional: moves Rule Machine rules, see [Moving from Rule Machine](#moving-from-rule-machine) |
+| **HAI Engine** | The editor, and the part that runs your rules. The only one you add yourself |
+| **HAI Rule Container** | One per rule. HAI adds them |
+| **HAI Checker** | Checks and simulates rules for HAI Engine. HAI adds it; there is nothing to set in it |
+| **HAI Migration** | Optional: moves Rule Machine rules, see [Moving from Rule Machine](#moving-from-rule-machine). Off until you turn it on |
 
-1. **Download.** Open the preview repository on GitHub, press **Code**, then **Download ZIP**, and unzip it.
-2. **Add the app code.** On your hub open **Apps Code**, press **New App**, paste the whole of one `.groovy`
-   file and press **Save**. Do this for each of the three files.
-3. **Turn on OAuth for HAI Engine.** On its Apps Code page press **OAuth**, enable it, and save. The editor
-   cannot open without it. Do the same for HAI Migration if you added it. The rule container needs none.
-4. **Upload the five files** in **Settings → File Manager**, keeping their names exactly as they are:
-   `hai-editor.html`, `hai-migration.html`, `hai-author-guide.txt`, `hai-editor-specs.json` and
-   `hai-am-capabilities.json`. The editor page, the Rule Machine page, the drafting guide and the editor's
-   tables live there so that the apps stay inside Hubitat's size limit. HAI checks each file against the
-   app code it came with and refuses one from another version.
-5. **Add HAI Engine.** **Apps → Add User App**, choose **HAI Engine**, look through **Approved devices**
-   (below), and press **Done**. It appears under Apps.
-6. **Optional: Rule Machine rules.** Install Automation Map 2.4.36 or later and let it scan, then press
+The seven files (the editor page, the Migration page, the help and Toolkit pages, the editor's tables, the
+drafting guide and the capability list) live in File Manager so the apps stay inside Hubitat's size limit.
+Each app checks its files against the version it was built with and refuses one from another version.
+
+### With Hubitat Package Manager (recommended)
+
+1. Open **Hubitat Package Manager**, press **Install**, and either **Search** for **HAI Engine**, or choose
+   **From a URL** and paste
+   `https://raw.githubusercontent.com/GordonThelander/HAI-Engine/main/packageManifest.json`.
+2. Leave **Configure the installed package after installation completes** switched on, and press **Next**.
+3. Wait **10 to 15 minutes** while the hub compiles the four apps. Leave the page open; your existing rules keep
+   running. Package Manager puts all seven files in File Manager and turns on OAuth for you.
+4. Press **Next** at the end. HAI Engine opens: look through **Approved devices** (below) and press **Done**.
+5. **Optional: Rule Machine rules.** Install Automation Map 2.4.48 or later and let it scan, then press
    **Turn on HAI Migration** on the HAI Engine page.
-7. **Optional: the AI Rule Assistant.** Add your Claude API key under **AI token and cost management** on the
+6. **Optional: the AI Rule Assistant.** Add your Claude API key under **AI token and cost management** on the
    HAI Engine page. Everything else works without it.
 
-There is nothing to pair: the editor and the part that runs rules are the same app.
+If Package Manager goes back to its main menu instead of opening HAI Engine, add it yourself: **Apps → Add
+User App → HAI Engine**.
 
-**To update:** paste the new code over the old on each Apps Code page, press **Save**, and upload the five
-files again. Your rules, their history and your settings are untouched.
+**To update:** Package Manager offers new versions under **Update**. Your rules, their history and your
+settings are untouched.
 
-**To uninstall:** remove HAI Engine from Apps, which removes its rules and HAI Migration with it. Then delete
-the three app codes in Apps Code and the five `hai-` files in File Manager. Rule backups stay in File Manager
-until you delete them.
+### By hand
 
-**For developers:** a working copy of the repository deploys with `engine/deploy-hub.ps1` (one target per
-app, with the library lists the apps are built from) and uploads the five files with
-`engine/upload-editor-page.ps1`. `python engine/make-dist.py` writes the three apps to `dist/`, and
-`python tools/make_preview_package.py` builds the preview folder from them.
+1. Download the HAI-Engine repository from GitHub (**Code → Download ZIP**) and unzip it.
+2. In **Apps Code**, press **New App**, paste one file from `apps/`, and **Save**. Do this for all four.
+3. Turn on **OAuth** for **HAI Engine** and **HAI Migration** (on each one's Apps Code page: **OAuth**, enable,
+   save). The others need none.
+4. Upload the seven files from `file-manager/` in **Settings → File Manager**, keeping their names exactly.
+5. **Apps → Add User App → HAI Engine**, look through **Approved devices**, and press **Done**.
+
+To update by hand, paste the new code over the old on each Apps Code page and upload the seven files again.
+
+### Removing HAI
+
+Remove **HAI Engine** from Apps. That removes its rules and its Checker and Migration apps, resumes any Rule
+Machine rule you had switched over to HAI, and deletes HAI's files from File Manager. Your rule backups
+(`hai-backup-<date>.json`) stay, so a reinstall can restore them; delete them in File Manager if you don't want
+them. Then uninstall the package in Package Manager, or delete the four app codes in Apps Code.
 
 ## Getting started
 
@@ -95,7 +104,7 @@ The **HAI Engine** page has these sections:
 
 | Section | What it holds |
 |---|---|
-| **The rule editor** | **Open the rule editor**, where you write, check, simulate and run rules, and a line saying where to get help or report a problem (its links are still to come) |
+| **The rule editor** | **Open the rule editor**, where you write, check, simulate and run rules, and a line with links to get help or report a problem |
 | **Rule Machine** | **Rule Machine Migration Facility**, when the optional HAI Migration app is installed: discover, select, assess and controlled migration of RM rules, with rollback option. Without it, the section says so and offers **Turn on HAI Migration**. See [Moving from Rule Machine](#moving-from-rule-machine) |
 | **Approved devices** | The one permission HAI asks for. Once devices are chosen it is collapsed, with the count in its heading ("Approved devices: (37)"); click the heading to open it |
 | **Mode and approved hub variables** | The heading shows whether rules may change the mode and how many hub variables they may change ("Mode [ON] and approved hub variables (12)"). Inside: **Allow rules to change the mode**, which lists your hub's modes, then **Approved hub variables** |
@@ -124,6 +133,11 @@ Before your first rule, open **HAI Engine** and choose:
   rules must not set. Rules can read and start from any hub variable without this.
 
 ## The editor
+
+**Start from a pattern** instead of a blank page: press **New rule**, then **Start from a pattern**. Patterns are
+working rules in groups (Showcase, Lights, Comfort, Security and alerts, Presence, Buttons, Advanced), with a
+search box. Pick one and it opens complete; the editor points at what is left for you, usually just the
+devices. Open the **Showcase rule** to see much of what HAI can do in one place.
 
 **The rule reads as plain lines,** like Rule Machine's rule page, under three headings in the order
 they happen: **Starts when**, **Only if** and **Then, in order**. Two more appear when a rule uses them:
@@ -1002,8 +1016,8 @@ and **Staying in Rule Machine**. Each row has one button for its next step, and 
   left out, as Rule Machine leaves them out. A clone the hub will not accept goes to the editor's **Drafts**,
   marked **Needs fixing**.
 - **Shadowing** starts by itself. Each time the rule is triggered, HAI works out what the clone would have
-  done and checks it against what Rule Machine did. A light shows the result: green, at least 3 runs, all
-  matched, every trigger seen; amber, still watching; red, a run differed; grey, it cannot be checked. **See
+  done and checks it against what Rule Machine did. A clone is green, ready to promote, as soon as it is
+  made, because everything in it is already proven in HAI; it turns red only if a run differs. **See
   every run** lists the runs; **Run for real and check** runs the Rule Machine rule once, for real, to check the actions
   sooner.
 - **Promote to HAI** pauses the Rule Machine rule, checks that it really has paused, and only then starts
@@ -1185,4 +1199,5 @@ the clone, and **Back to Rule Machine** reverses it with one click. See
 **11. Getting help.** When a rule did not do what you expected, start with
 [Troubleshooting](#troubleshooting) and the [refusals you are likely to meet](#refusals-you-are-likely-to-meet-and-what-to-do).
 **Turn diagnostics on for an hour**, on the HAI Engine page, records more detail for a report. Report a
-problem where you got the preview, with the version from its `VERSION` file.
+problem with **More → Report a problem or give feedback** in the editor, or on the HAI-Engine repository's Issues
+page on GitHub, with the version shown at the top of the HAI Engine page.
