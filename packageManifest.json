@@ -1,0 +1,85 @@
+{
+  "packageName": "HAI Engine",
+  "author": "Gordon Thelander",
+  "version": "1.0.0",
+  "minimumHEVersion": "2.4.0",
+  "dateReleased": "2026-11-22",
+  "documentationLink": "https://github.com/GordonThelander/HAI-Engine/blob/main/docs/user-guide.md",
+  "communityLink": "https://community.hubitat.com/t/release-hubitat-automation-map/165524",
+  "releaseNotes": "HAI Engine 1.0.0: a rule engine for Hubitat with a rule editor in your browser. Write new rules in everyday words, or copy your Rule Machine rules and prove each copy against the original before anything changes.\n\nAn install or update takes 10 to 15 minutes while the hub compiles the apps. Leave the page open until it finishes; your rules keep running.\n\n* Rule editor: open it from the HAI Engine page. Build rules from triggers, conditions and actions that read as sentences, drag lines to rearrange them, and add If / otherwise decisions. HAI checks the rule as you build it.\n* Try before it runs: simulate a rule step by step, or run a single line on the hub with Run this step. Rules go on the hub stopped and start when you say.\n* Patterns: start from a working rule (lights on movement, a bathroom fan, a door left open, a leak alert and more) instead of a blank page.\n* Each rule runs as its own small app on the hub, with its run history, so a rule that did not fire tells you why.\n* Backups: a backup of your rules every night, and Back up now at any time. Restore one rule or all.\n* HAI Migration (installed, off until you turn it on in HAI Engine): copies Rule Machine rules into HAI. Each copy runs in a trial beside Rule Machine and changes nothing; it turns green once its runs have matched Rule Machine's. Switch over pauses the Rule Machine rule and starts the copy; Switch back reverses it. Anything HAI cannot rebuild exactly, it names instead of guessing. Needs Automation Map 2.4.48 or later, with a scan done.\n* Local by default: the optional AI Rule Assistant drafts a rule from a sentence using your own Claude API key with a spending limit. The MCP endpoint for AI assistants and the web address for dashboards are off until you switch them on.\n* Removing HAI Engine deletes its files from File Manager; your rule backups stay so a reinstall can restore them.\n\nAfter installing: Apps, Add user app, HAI Engine. Open the rule editor from its page, check Approved devices, and press Done.\n\nReport a problem or give feedback: More, Report a problem or give feedback in the editor, or the Issues tab of the HAI-Engine repository on GitHub. Report security problems privately, as SECURITY.md explains.",
+  "apps": [
+    {
+      "id": "8e2b6d40-1f73-4c95-b0a8-3d5f7e9b1c21",
+      "name": "HAI Engine",
+      "namespace": "gordonthelander",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/main/apps/hai_engine_app.groovy",
+      "required": true,
+      "primary": true,
+      "oauth": true
+    },
+    {
+      "id": "f1c3e5a7-9b2d-4f60-8e1a-5c7e9a1b3d42",
+      "name": "HAI Rule Container",
+      "namespace": "gordonthelander",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/main/apps/hai_rule_app.groovy",
+      "required": true,
+      "primary": false,
+      "oauth": false
+    },
+    {
+      "id": "2a4c6e80-3d5f-4b71-9c0e-7a9c1e3f5b63",
+      "name": "HAI Migration",
+      "namespace": "gordonthelander",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/main/apps/hai_migration_app.groovy",
+      "required": true,
+      "primary": false,
+      "oauth": true
+    },
+    {
+      "id": "6d8f0b2c-4e61-4a83-b5d7-9f1b3d5f7a84",
+      "name": "HAI Checker",
+      "namespace": "gordonthelander",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/main/apps/hai_checker_app.groovy",
+      "required": true,
+      "primary": false,
+      "oauth": false
+    }
+  ],
+  "files": [
+    {
+      "id": "0b2d4f6a-8c1e-4d3f-a5b7-1e3a5c7e9f05",
+      "name": "hai-editor.html",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/main/file-manager/hai-editor.html"
+    },
+    {
+      "id": "5e7a9c1b-3d5f-4e72-8a9c-2b4d6f8a0c16",
+      "name": "hai-migration.html",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/main/file-manager/hai-migration.html"
+    },
+    {
+      "id": "9a1c3e5f-7b2d-4f84-b6d8-3c5e7a9b1d27",
+      "name": "hai-author-guide.txt",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/main/file-manager/hai-author-guide.txt"
+    },
+    {
+      "id": "3f5b7d9a-1c4e-4a96-8b0d-4e6a8c0e2f38",
+      "name": "hai-editor-specs.json",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/main/file-manager/hai-editor-specs.json"
+    },
+    {
+      "id": "7b9d1f3a-5e2c-4b07-9d1f-5a7c9e1b3a49",
+      "name": "hai-am-capabilities.json",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/main/file-manager/hai-am-capabilities.json"
+    },
+    {
+      "id": "c5e7a9b1-2d4f-4c18-a0e2-6b8d0f2a4c50",
+      "name": "hai-help.html",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/main/file-manager/hai-help.html"
+    },
+    {
+      "id": "1d3f5b7c-9e0a-4d29-b1f3-7c9e1a3b5d61",
+      "name": "hai-toolkit.html",
+      "location": "https://raw.githubusercontent.com/GordonThelander/HAI-Engine/main/file-manager/hai-toolkit.html"
+    }
+  ]
+}
