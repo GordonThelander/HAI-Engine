@@ -2843,7 +2843,7 @@ function load() {
   LOADING = !FIRST;
   if (!FIRST) document.getElementById('updating').hidden = false;
   var slow = FIRST ? setTimeout((function() {
-    if (FIRST) document.getElementById('rows').innerHTML = '<li class="empty"><span class="spin" style="display:inline-block" aria-hidden="true"></span><br>Still reading your rules. Large hubs can take up to a minute.</li>';
+    if (FIRST) document.getElementById('groups').innerHTML = '<div class="grp staying"><div class="empty"><span class="spin" style="display:inline-block" aria-hidden="true"></span><br>Still reading your rules. Large hubs can take up to a minute.</div></div>';
   }), 2e4) : null;
   q('/migration/api/state').then((function(out) {
     clearTimeout(slow);
@@ -2852,7 +2852,7 @@ function load() {
     if (!out || out.ok !== true) {
       note('<b>Your rules could not be read.</b> ' + esc(out && out.message || 'The hub did not say why.'), true);
       document.getElementById('updating').hidden = true;
-      if (FIRST) document.getElementById('rows').innerHTML = '<li class="empty">Nothing to show until your rules can be read.</li>';
+      if (FIRST) document.getElementById('groups').innerHTML = '<div class="grp staying"><div class="empty">Nothing to show until your rules can be read.</div></div>';
       return;
     }
     var wasFirst = FIRST;

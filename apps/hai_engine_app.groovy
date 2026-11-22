@@ -451,7 +451,7 @@ Map haiHelpFill = [docs: HAI_DOCS_URL, issues: HAI_ISSUES_URL, amRepo: AM_REPO_U
 keys: CLAUDE_KEYS_URL, keysShort: CLAUDE_KEYS_URL.replace('https://', '')]
 Closure pageHelp = { String part -> editorHelpParts(haiHelpText, part, haiHelpFill) }
 String haiOpen = haiPageOpenSection()
-dynamicPage(name: 'haiMainPage', title: "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT})", install: !haiOthers, uninstall: true) {
+dynamicPage(name: 'haiMainPage', title: "HAI Engine ${haiVersion()}${haiEnvLabel()}", install: !haiOthers, uninstall: true) {
 if (haiHelpText == null) {
 section() {
 paragraph "<b style='color:#b00020'>Some of this page's explanations are missing.</b> ${HELP_PAGE_FILE} in the File Manager is missing or is not the copy this version of HAI Engine was built with. Update HAI again to put it back."
@@ -717,7 +717,7 @@ Map reg = (rtRegistry(runtimePlat()).rules ?: [:])
 int live = reg.values().count { it instanceof Map && ((Map) it).index != null } as int
 Object last = state.runtimeAnnouncedAt
 String when = last == null ? 'not yet' : runtimeClock().call(last as long)
-return "HAI Engine ${haiVersion()} (${HAI_ENVIRONMENT}). ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
+return "HAI Engine ${haiVersion()}${haiEnvLabel()}. ${live} rule${live == 1 ? '' : 's'} on this hub. Last summary: ${when}."
 }
 @Field static final String ENGINE_APP_VERSION = '1.0.0'
 @Field static final int ENGINE_MAX_PROPOSALS = 20
@@ -2778,6 +2778,9 @@ log.warn "HAI Engine editor: no check receipt (${e.message})"
 return null
 }
 }
+String haiEnvLabel() {
+return HAI_ENVIRONMENT == 'PRODUCTION' ? '' : " (${HAI_ENVIRONMENT})".toString()
+}
 @Field static final String RUNTIME_CHILD_NAME = 'HAI Rule Container'
 def uninstalled() {
 unschedule()
@@ -3408,7 +3411,7 @@ Map reg = rtRegistry(pp)
 List rows = ((Map) reg.rules).values().findAll { it.state != 'removed' }
 .collect { Object o -> Map e = o; [e.ruleId, e.state, e.epoch, e.ruleHash].collect { it == null ? '' : it.toString() } }
 .sort { it[0] }
-return jsonHash(amScrubNulls([revision: reg.revision, rules: rows, capabilities: AM_CAPS_SHA256,
+return jsonHash(amScrubNulls([file: AM_STATE_FILE, revision: reg.revision, rules: rows, capabilities: AM_CAPS_SHA256,
 paused: ((List) (state.runtimePaused ?: [])).sort()]))
 }
 Map runtimeAmStateDoc(Map pp) {

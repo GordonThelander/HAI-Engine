@@ -1504,7 +1504,7 @@ return "the trigger \"${said}\"".toString()
 @Field static final int MIG_CONFIRM_TRIES = 3
 @Field static final long MIG_CONFIRM_GAP_MS = 250L
 @Field static final String MIGRATION_PAGE_FILE = 'hai-migration.html'
-@Field static final String MIGRATION_PAGE_SHA256 = '89b7a2f57a8b58a403c0fa24c09bc16f9a8424d075ff2bc40cc8f202313423c1'
+@Field static final String MIGRATION_PAGE_SHA256 = '397064acf90a3781a469678cc9029aab12f7b9b46713d7e6a3a7530206ba55ce'
 @Field static final String MIG_PROV_OK = 'ok'
 @Field static final String MIG_PROV_PARTIAL = 'partial'
 @Field static final String MIG_PROV_ABSENT = 'absent'

@@ -22,7 +22,7 @@ If you have Hubitat Package Manager installed:
 2. Under **Add a Custom Repository**, enter
    `https://raw.githubusercontent.com/GordonThelander/HAI-Engine/release-candidate/repository.json` and press **Save**.
 3. Back on the main page, press **Install**, then **Browse by Tags** or **Search**, and choose **HAI Engine**.
-4. Press **Next**. Package Manager installs all four apps, turns on OAuth and puts the seven files in File
+4. Leave **Configure the installed package after installation completes** switched on and press **Next**. Package Manager installs all four apps, turns on OAuth and puts the seven files in File
    Manager. HAI Migration stays off until you turn it on from the HAI Engine page.
 5. Carry on at step 5 below (Add HAI Engine). Updates then come through Package Manager like any other package.
 
